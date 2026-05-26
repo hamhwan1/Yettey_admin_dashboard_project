@@ -1,5 +1,5 @@
-import IntelligenceDashboard from "@/components/intelligence/IntelligenceDashboard"
+import SubscriptionIntelligenceDashboard from "@/components/intelligence/SubscriptionIntelligenceDashboard"
 
 export default function SubscriptionIntelligencePage() {
-  return <IntelligenceDashboard dashboardKey="subscriptions" />
+  return <SubscriptionIntelligenceDashboard />
 }

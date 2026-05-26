@@ -15,6 +15,7 @@ import {
   Search,
   Settings,
   Sparkles,
+  BadgeDollarSign,
   UserPlus,
   UserRound,
   Users,
@@ -92,6 +93,11 @@ export const sidebarNavigation: Record<TopMenuKey, SidebarItem[]> = {
       title: "Signups",
       href: "/dashboard/intelligence/signups",
       icon: UserPlus,
+    },
+    {
+      title: "Paid Users",
+      href: "/dashboard/intelligence/subscriptions",
+      icon: BadgeDollarSign,
     },
     {
       title: "Revenue",
