@@ -22,6 +22,7 @@ import {
   type ServiceFilter,
 } from "./dashboard-data"
 import FunnelCard from "./FunnelCard"
+import InsightCards from "./InsightCards"
 
 type AcquisitionChannel = (typeof acquisitionChannels)[number]
 type TopFeature = (typeof topFeatures)[number]
@@ -203,6 +204,8 @@ export default function DashboardOverviewClient() {
         )}
       </div>
 
+      <InsightCards />
+
       <div className="mb-8">
         <DashboardCharts />
       </div>
@@ -228,7 +231,9 @@ export default function DashboardOverviewClient() {
           page={channelPage}
           totalPages={4}
           onPageChange={setChannelPage}
-          onRowClick={(item) => setDrawer({ type: "channel", item })}
+          onRowClick={(item) => {
+            window.location.href = `/dashboard/intelligence/acquisition/${slugify(item.channel)}`
+          }}
         />
       </div>
 
@@ -249,7 +254,9 @@ export default function DashboardOverviewClient() {
           page={featurePage}
           totalPages={3}
           onPageChange={setFeaturePage}
-          onRowClick={(item) => setDrawer({ type: "feature", item })}
+          onRowClick={(item) => {
+            window.location.href = `/dashboard/intelligence/features/${slugify(item.featureName)}`
+          }}
         />
       </div>
 
@@ -261,6 +268,10 @@ export default function DashboardOverviewClient() {
       <DashboardDrawer drawer={drawer} onClose={() => setDrawer(null)} />
     </DashboardLayout>
   )
+}
+
+function slugify(value: string) {
+  return value.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
 }
 
 function FilterGroup({
