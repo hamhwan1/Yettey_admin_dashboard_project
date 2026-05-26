@@ -29,6 +29,7 @@ type RevenuePageProps = {
 type DrawerState =
   | { type: "payment"; item: RevenueDailyRow }
   | { type: "plan"; item: { plan: string; revenue: number; activePaidUsers: number } }
+  | { type: "metric"; item: { label: string; value: string; detail: string } }
   | { type: "failed"; rows: RevenueDailyRow[] }
   | { type: "cancelled"; rows: RevenueDailyRow[] }
   | null
@@ -72,6 +73,9 @@ export default function RevenuePage({ service }: RevenuePageProps) {
   const summary = getRevenueSummary(rows)
   const planBreakdown = getPlanBreakdown(rows)
   const pageTitle = service === "Overall" ? "Revenue Analytics" : `${service} Revenue`
+  const openMetric = (label: string, value: string, detail: string) => {
+    setDrawer({ type: "metric", item: { label, value, detail } })
+  }
 
   const columns: DataTableColumn<RevenueDailyRow>[] = [
     { key: "date", header: "Date", render: (row) => row.date },
@@ -202,51 +206,144 @@ export default function RevenuePage({ service }: RevenuePageProps) {
       </section>
 
       <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Total Revenue"
-          value={formatCurrency(summary.totalRevenue)}
-          detail="Net revenue after refunds"
-        />
-        <StatCard
-          label="New Paid Users"
-          value={formatNumber(summary.newPaidUsers)}
-          detail="New paid conversions"
-        />
-        <StatCard
-          label="Active Paid Users"
-          value={formatNumber(summary.activePaidUsers)}
-          detail="Basis for net paid users"
-        />
         <button
-          className="text-left"
+          className="h-full text-left"
+          onClick={() =>
+            openMetric(
+              "Total Revenue",
+              formatCurrency(summary.totalRevenue),
+              "Net revenue after refunds"
+            )
+          }
+        >
+          <StatCard
+            label="Total Revenue"
+            value={formatCurrency(summary.totalRevenue)}
+            detail="Net revenue after refunds"
+            insight="Revenue trend is separated into gross, refunds, and net movement."
+            ctaLabel="View revenue detail"
+            interactive
+          />
+        </button>
+        <button
+          className="h-full text-left"
+          onClick={() =>
+            openMetric(
+              "New Paid Users",
+              formatNumber(summary.newPaidUsers),
+              "New paid conversions"
+            )
+          }
+        >
+          <StatCard
+            label="New Paid Users"
+            value={formatNumber(summary.newPaidUsers)}
+            detail="New paid conversions"
+            insight="New paid users are the leading indicator for plan-level growth."
+            ctaLabel="View paid conversion detail"
+            interactive
+          />
+        </button>
+        <button
+          className="h-full text-left"
+          onClick={() =>
+            openMetric(
+              "Active Paid Users",
+              formatNumber(summary.activePaidUsers),
+              "Basis for net paid users"
+            )
+          }
+        >
+          <StatCard
+            label="Active Paid Users"
+            value={formatNumber(summary.activePaidUsers)}
+            detail="Basis for net paid users"
+            insight="Active paid users are the source of truth for net paid users."
+            ctaLabel="Open paid user detail"
+            interactive
+          />
+        </button>
+        <button
+          className="h-full text-left"
           onClick={() => setDrawer({ type: "cancelled", rows })}
         >
           <StatCard
             label="Cancelled Subscribers"
             value={formatNumber(summary.cancelledSubscribers)}
             detail="Open cancellation list"
+            insight="Cancellations are tracked separately from inactive free users."
+            ctaLabel="View cancellation list"
+            interactive
           />
         </button>
-        <StatCard
-          label="Churn Rate"
-          value={`${summary.churnRate.toFixed(1)}%`}
-          detail="Cancelled / active paid users"
-        />
-        <StatCard
-          label="Net Paid Users"
-          value={formatNumber(summary.netPaidUsers)}
-          detail="Equals active paid users"
-        />
-        <StatCard
-          label="ARPU"
-          value={formatCurrency(summary.arpu)}
-          detail="Net revenue per active paid user"
-        />
-        <button className="text-left" onClick={() => setDrawer({ type: "failed", rows })}>
+        <button
+          className="h-full text-left"
+          onClick={() =>
+            openMetric(
+              "Churn Rate",
+              `${summary.churnRate.toFixed(1)}%`,
+              "Cancelled / active paid users"
+            )
+          }
+        >
+          <StatCard
+            label="Churn Rate"
+            value={`${summary.churnRate.toFixed(1)}%`}
+            detail="Cancelled / active paid users"
+            insight="Churn should be interpreted alongside failed payments and refunds."
+            ctaLabel="Open churn detail"
+            interactive
+          />
+        </button>
+        <button
+          className="h-full text-left"
+          onClick={() =>
+            openMetric(
+              "Net Paid Users",
+              formatNumber(summary.netPaidUsers),
+              "Equals active paid users"
+            )
+          }
+        >
+          <StatCard
+            label="Net Paid Users"
+            value={formatNumber(summary.netPaidUsers)}
+            detail="Equals active paid users"
+            insight="Net paid users are counted from active paid subscriptions."
+            ctaLabel="View net paid user detail"
+            interactive
+          />
+        </button>
+        <button
+          className="h-full text-left"
+          onClick={() =>
+            openMetric(
+              "ARPU",
+              formatCurrency(summary.arpu),
+              "Net revenue per active paid user"
+            )
+          }
+        >
+          <StatCard
+            label="ARPU"
+            value={formatCurrency(summary.arpu)}
+            detail="Net revenue per active paid user"
+            insight="ARPU helps compare plan quality and expansion potential."
+            ctaLabel="Open ARPU detail"
+            interactive
+          />
+        </button>
+        <button
+          className="h-full text-left"
+          onClick={() => setDrawer({ type: "failed", rows })}
+        >
           <StatCard
             label="Failed Payments"
             value={formatNumber(summary.failedPayments)}
             detail="Open failed payment list"
+            insight="Failed payments are an operational risk for revenue recovery."
+            ctaLabel="View failed payments"
+            interactive
           />
         </button>
       </div>
@@ -315,17 +412,20 @@ function RevenueDrawer({
           ? `${drawer.item.service} ${drawer.item.plan} Payment`
           : drawer?.type === "plan"
             ? `${drawer.item.plan} Revenue`
-            : drawer?.type === "failed"
-              ? "Failed Payments"
-              : drawer?.type === "cancelled"
-                ? "Cancelled Subscribers"
-                : "Revenue Detail"
+            : drawer?.type === "metric"
+              ? drawer.item.label
+              : drawer?.type === "failed"
+                ? "Failed Payments"
+                : drawer?.type === "cancelled"
+                  ? "Cancelled Subscribers"
+                  : "Revenue Detail"
       }
       description="Interactive mock drawer for API-backed details later."
       onClose={onClose}
     >
       {drawer?.type === "payment" ? <KeyValueGrid item={drawer.item} /> : null}
       {drawer?.type === "plan" ? <KeyValueGrid item={drawer.item} /> : null}
+      {drawer?.type === "metric" ? <KeyValueGrid item={drawer.item} /> : null}
       {drawer?.type === "failed" || drawer?.type === "cancelled" ? (
         <div className="space-y-3">
           {drawer.rows.slice(0, 5).map((row) => (

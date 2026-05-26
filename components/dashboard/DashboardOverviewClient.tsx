@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { useMemo, useState } from "react"
 
 import DataTable, { type DataTableColumn } from "@/components/admin/DataTable"
@@ -184,24 +183,17 @@ export default function DashboardOverviewClient() {
       </section>
 
       <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {kpis.map((metric) =>
-          metric.href ? (
-            <Link key={metric.label} href={metric.href}>
-              <StatCard
-                label={metric.label}
-                value={metric.value}
-                detail={metric.detail}
-              />
-            </Link>
-          ) : (
-            <StatCard
-              key={metric.label}
-              label={metric.label}
-              value={metric.value}
-              detail={metric.detail}
-            />
-          )
-        )}
+        {kpis.map((metric) => (
+          <StatCard
+            key={metric.label}
+            label={metric.label}
+            value={metric.value}
+            detail={metric.detail}
+            insight={metric.insight}
+            href={metric.href}
+            ctaLabel={metric.ctaLabel}
+          />
+        ))}
       </div>
 
       <div className="mb-8">

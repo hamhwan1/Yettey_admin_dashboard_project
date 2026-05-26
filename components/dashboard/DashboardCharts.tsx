@@ -1,6 +1,8 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useState } from "react"
+import { ArrowRight } from "lucide-react"
 import {
   Bar,
   BarChart,
@@ -18,19 +20,35 @@ import { growthTrend, retentionTrend } from "./dashboard-data"
 function ChartShell({
   title,
   description,
+  href,
+  ctaLabel,
   children,
 }: {
   title: string
   description: string
+  href: string
+  ctaLabel: string
   children: React.ReactNode
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+    <section className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-[0_2px_4px_rgba(15,23,42,0.08),0_16px_32px_rgba(15,23,42,0.08)]">
       <div className="mb-6">
-        <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+          <span className="rounded-full border border-slate-200 bg-slate-50 p-1.5 text-slate-400 transition group-hover:border-violet-200 group-hover:bg-violet-50 group-hover:text-violet-600">
+            <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
+          </span>
+        </div>
         <p className="mt-1 text-sm text-slate-500">{description}</p>
       </div>
       <div className="h-72">{children}</div>
+      <Link
+        href={href}
+        className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-semibold text-violet-600 transition hover:text-violet-700"
+      >
+        <span>{ctaLabel}</span>
+        <ArrowRight className="size-4 transition group-hover:translate-x-1" />
+      </Link>
     </section>
   )
 }
@@ -65,6 +83,8 @@ export function DashboardCharts() {
       <ChartShell
         title="User Growth Trend"
         description="Visitors, signups, returning users, and paid conversions."
+        href="/dashboard/intelligence/visitors"
+        ctaLabel="View growth analytics"
       >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={growthTrend}>
@@ -103,6 +123,8 @@ export function DashboardCharts() {
       <ChartShell
         title="Retention"
         description="D1, D7, D30 retention and returning user trend."
+        href="/dashboard/intelligence/retention"
+        ctaLabel="View retention intelligence"
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={retentionTrend}>

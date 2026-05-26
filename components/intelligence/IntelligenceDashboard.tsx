@@ -311,33 +311,54 @@ function MetricDeltaCard({
   value,
   delta,
   detail,
+  href,
+  ctaLabel,
 }: {
   label: string
   value: string
   delta: string
   detail: string
+  href: string
+  ctaLabel: string
 }) {
   const isPositive = delta.startsWith("+")
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_10px_24px_rgba(15,23,42,0.04)]">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-slate-500">{label}</p>
-        <span
-          className={cn(
-            "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold",
-            isPositive ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-500"
-          )}
-        >
-          {isPositive ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
-          {delta}
-        </span>
+    <Link
+      href={href}
+      className="group block h-full rounded-2xl focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2"
+    >
+      <div className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_10px_24px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-[0_2px_4px_rgba(15,23,42,0.08),0_16px_32px_rgba(15,23,42,0.08)]">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-medium text-slate-500">{label}</p>
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold",
+              isPositive
+                ? "bg-emerald-50 text-emerald-600"
+                : "bg-rose-50 text-rose-500"
+            )}
+          >
+            {isPositive ? (
+              <TrendingUp className="size-3" />
+            ) : (
+              <TrendingDown className="size-3" />
+            )}
+            {delta}
+          </span>
+        </div>
+        <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
+          {value}
+        </p>
+        <p className="mt-2 text-sm text-slate-500">{detail}</p>
+        <div className="mt-auto pt-5">
+          <div className="flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-semibold text-violet-600">
+            <span>{ctaLabel}</span>
+            <ArrowRight className="size-4 transition group-hover:translate-x-1" />
+          </div>
+        </div>
       </div>
-      <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
-        {value}
-      </p>
-      <p className="mt-2 text-sm text-slate-500">{detail}</p>
-    </div>
+    </Link>
   )
 }
 
@@ -357,7 +378,43 @@ function buildMetricCards(
     value,
     delta: deltas[dashboardKey][index] ?? "+0%",
     detail: "Compared with selected baseline period",
+    href: getMetricHref(dashboardKey, label),
+    ctaLabel: getMetricCta(label),
   }))
+}
+
+function getMetricHref(dashboardKey: DashboardKey, label: string) {
+  const slug = slugify(label)
+
+  if (dashboardKey === "visitors") {
+    if (label === "Best Source") {
+      return "/dashboard/intelligence/acquisition/referral"
+    }
+
+    if (label === "Weakest Source") {
+      return "/dashboard/intelligence/acquisition/paid-ads"
+    }
+
+    return `/dashboard/intelligence/visitors?metric=${slug}`
+  }
+
+  if (dashboardKey === "subscriptions") {
+    return `/dashboard/intelligence/subscriptions?metric=${slug}`
+  }
+
+  if (dashboardKey === "ai-operations") {
+    return `/dashboard/intelligence/ai-operations?metric=${slug}`
+  }
+
+  if (label === "Best Retention Driver") {
+    return "/dashboard/intelligence/funnel?stage=First%20Export"
+  }
+
+  return `/dashboard/intelligence/retention?metric=${slug}`
+}
+
+function getMetricCta(label: string) {
+  return `View ${label.toLowerCase()} details`
 }
 
 function buildDecisionRows(dashboardKey: DashboardKey, focusLabel?: string) {

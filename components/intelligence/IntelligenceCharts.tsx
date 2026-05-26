@@ -1,6 +1,8 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useState } from "react"
+import { ArrowRight } from "lucide-react"
 import {
   Area,
   AreaChart,
@@ -82,19 +84,35 @@ const aiOps = [
 function ChartCard({
   title,
   description,
+  href,
+  ctaLabel,
   children,
 }: {
   title: string
   description: string
+  href: string
+  ctaLabel: string
   children: React.ReactNode
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+    <section className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-[0_2px_4px_rgba(15,23,42,0.08),0_16px_32px_rgba(15,23,42,0.08)]">
       <div className="mb-6">
-        <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+          <span className="rounded-full border border-slate-200 bg-slate-50 p-1.5 text-slate-400 transition group-hover:border-violet-200 group-hover:bg-violet-50 group-hover:text-violet-600">
+            <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
+          </span>
+        </div>
         <p className="mt-1 text-sm text-slate-500">{description}</p>
       </div>
       <div className="h-72">{children}</div>
+      <Link
+        href={href}
+        className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-semibold text-violet-600 transition hover:text-violet-700"
+      >
+        <span>{ctaLabel}</span>
+        <ArrowRight className="size-4 transition group-hover:translate-x-1" />
+      </Link>
     </section>
   )
 }
@@ -123,7 +141,12 @@ export default function IntelligenceCharts() {
 
   return (
     <div className="grid gap-6 xl:grid-cols-2">
-      <ChartCard title="Visitor Trend Chart" description="Visitors, signups, and paid users over the selected period.">
+      <ChartCard
+        title="Visitor Trend Chart"
+        description="Visitors, signups, and paid users over the selected period."
+        href="/dashboard/intelligence/visitors"
+        ctaLabel="View visitor analytics"
+      >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={visitorTrend}>
             <CartesianGrid stroke="#eef2f7" vertical={false} />
@@ -137,7 +160,12 @@ export default function IntelligenceCharts() {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Revenue Trend Chart" description="Revenue, new paid users, active paid users, and ARPU trend.">
+      <ChartCard
+        title="Revenue Trend Chart"
+        description="Revenue, new paid users, active paid users, and ARPU trend."
+        href="/dashboard/revenue"
+        ctaLabel="Open revenue intelligence"
+      >
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={revenueTrend}>
             <CartesianGrid stroke="#eef2f7" vertical={false} />
@@ -152,7 +180,12 @@ export default function IntelligenceCharts() {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Traffic Source Quality Chart" description="Signup conversion, paid conversion, and retention by acquisition channel.">
+      <ChartCard
+        title="Traffic Source Quality Chart"
+        description="Signup conversion, paid conversion, and retention by acquisition channel."
+        href="/dashboard/intelligence/acquisition"
+        ctaLabel="View acquisition intelligence"
+      >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={sourceQuality}>
             <CartesianGrid stroke="#eef2f7" vertical={false} />
@@ -166,7 +199,12 @@ export default function IntelligenceCharts() {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Funnel Drop-off Chart" description="Conversion, drop-off, and average completion time by stage.">
+      <ChartCard
+        title="Funnel Drop-off Chart"
+        description="Conversion, drop-off, and average completion time by stage."
+        href="/dashboard/intelligence/funnel"
+        ctaLabel="Open funnel analytics"
+      >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={funnelDropoff}>
             <CartesianGrid stroke="#eef2f7" vertical={false} />
@@ -180,7 +218,12 @@ export default function IntelligenceCharts() {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Retention Curve" description="D1, D7, D30 retention by channel and feature cohort.">
+      <ChartCard
+        title="Retention Curve"
+        description="D1, D7, D30 retention by channel and feature cohort."
+        href="/dashboard/intelligence/retention"
+        ctaLabel="View retention intelligence"
+      >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={retentionCurve}>
             <CartesianGrid stroke="#eef2f7" vertical={false} />
@@ -195,7 +238,12 @@ export default function IntelligenceCharts() {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Product Intelligence Chart" description="Usage, conversion impact, retention impact, and credit usage by feature.">
+      <ChartCard
+        title="Product Intelligence Chart"
+        description="Usage, conversion impact, retention impact, and credit usage by feature."
+        href="/dashboard/intelligence/features"
+        ctaLabel="View feature intelligence"
+      >
         <ResponsiveContainer width="100%" height="100%">
           <RadarChart data={productIntelligence}>
             <PolarGrid />
@@ -210,7 +258,12 @@ export default function IntelligenceCharts() {
       </ChartCard>
 
       <section className="xl:col-span-2">
-        <ChartCard title="AI Operations Chart" description="Queue latency, processing time, fail ratio, retry ratio, GPU utilization, and credit consumption.">
+        <ChartCard
+          title="AI Operations Chart"
+          description="Queue latency, processing time, fail ratio, retry ratio, GPU utilization, and credit consumption."
+          href="/dashboard/intelligence/ai-operations"
+          ctaLabel="View AI operations"
+        >
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={aiOps}>
               <CartesianGrid stroke="#eef2f7" vertical={false} />

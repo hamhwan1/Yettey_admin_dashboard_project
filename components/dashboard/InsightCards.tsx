@@ -23,7 +23,7 @@ export default function InsightCards() {
           <Link
             key={insight.title}
             href={insight.href}
-            className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-[0_2px_4px_rgba(15,23,42,0.08),0_16px_32px_rgba(15,23,42,0.07)]"
+            className="group flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-[0_2px_4px_rgba(15,23,42,0.08),0_16px_32px_rgba(15,23,42,0.07)]"
           >
             <div className="flex items-center justify-between gap-3">
               <StatusBadge tone={insight.impact === "High" ? "danger" : "neutral"}>
@@ -40,6 +40,12 @@ export default function InsightCards() {
             <p className="mt-4 text-sm font-semibold leading-6 text-slate-700">
               {insight.recommendation}
             </p>
+            <div className="mt-auto pt-5">
+              <div className="flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-semibold text-violet-600">
+                <span>View intelligence detail</span>
+                <ArrowRight className="size-4 transition group-hover:translate-x-1" />
+              </div>
+            </div>
           </Link>
         ))}
       </div>
