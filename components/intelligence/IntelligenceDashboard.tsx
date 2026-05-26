@@ -1,10 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
+import { useMemo } from "react"
 import { ArrowRight, TrendingDown, TrendingUp } from "lucide-react"
 
 import DataTable, { type DataTableColumn } from "@/components/admin/DataTable"
+import DateRangeControl from "@/components/admin/DateRangeControl"
+import ExportActions from "@/components/admin/ExportActions"
 import PageHeader from "@/components/admin/PageHeader"
 import StatusBadge from "@/components/admin/StatusBadge"
 import DashboardLayout from "@/components/layout/DashboardLayout"
@@ -14,6 +16,11 @@ import {
   intelligenceDashboards,
   topFeatures,
 } from "@/components/dashboard/dashboard-data"
+import {
+  getCompareModeLabel,
+  getDateRangeLabel,
+  useDashboardDateRange,
+} from "@/lib/dashboard-date-store"
 import { cn } from "@/lib/utils"
 import IntelligenceCharts from "./IntelligenceCharts"
 
@@ -24,14 +31,6 @@ type IntelligenceDashboardProps = {
   focusLabel?: string
   focusType?: "Channel" | "Feature" | "Funnel Stage"
 }
-
-const periods = ["Last 7 Days", "Last 30 Days", "Last 90 Days", "1Y", "Custom Range"]
-const compareModes = [
-  "This week vs last week",
-  "This month vs previous month",
-  "Before release vs after release",
-  "Before campaign vs after campaign",
-]
 
 const decisionColumns: DataTableColumn<{
   signal: string
@@ -122,13 +121,88 @@ export default function IntelligenceDashboard({
   focusLabel,
   focusType,
 }: IntelligenceDashboardProps) {
-  const [period, setPeriod] = useState("Last 30 Days")
-  const [compareMode, setCompareMode] = useState("This month vs previous month")
+  const { startDate, endDate, compareMode } = useDashboardDateRange()
   const dashboard = intelligenceDashboards[dashboardKey]
   const focusPrefix = focusLabel ? `${focusType}: ${focusLabel}` : undefined
   const decisionRows = buildDecisionRows(dashboardKey, focusLabel)
   const riskRows = buildRiskRows(dashboardKey)
   const metrics = buildMetricCards(dashboardKey, dashboard.metrics)
+  const exportPayload = useMemo(
+    () => ({
+      title: `${dashboard.title} Report`,
+      subtitle: dashboard.description,
+      filename: `${slugify(dashboard.title)}-report`,
+      filters: {
+        Focus: focusPrefix ?? "All intelligence",
+        "Date range": getDateRangeLabel(startDate, endDate),
+        Compare: getCompareModeLabel(compareMode),
+      },
+      kpis: metrics.map((metric) => ({
+        label: metric.label,
+        value: metric.value,
+        detail: `${metric.delta} / ${metric.detail}`,
+      })),
+      charts: [
+        {
+          title: "Acquisition Quality",
+          points: acquisitionChannels.map((channel) => ({
+            label: channel.channel,
+            value: channel.paidUsers,
+            secondary: channel.conversionRate,
+          })),
+        },
+        {
+          title: "Product Intelligence",
+          points: topFeatures.map((feature) => ({
+            label: feature.featureName,
+            value: feature.usageCount,
+            secondary: `${feature.conversionImpact} impact`,
+          })),
+        },
+      ],
+      datasets: [
+        {
+          name: "KPI Summary",
+          rows: metrics.map((metric) => ({
+            Metric: metric.label,
+            Value: metric.value,
+            Delta: metric.delta,
+            Detail: metric.detail,
+          })),
+        },
+        {
+          name: "Decision Signals",
+          rows: decisionRows.map((row) => ({
+            Signal: row.signal,
+            "Likely Cause": row.cause,
+            "Recommended Action": row.action,
+            Priority: row.priority,
+          })),
+        },
+        {
+          name: "Risk Alerts",
+          rows: riskRows.map((row) => ({
+            Alert: row.alert,
+            Severity: row.severity,
+            Trend: row.trend,
+            Owner: row.owner,
+            "Next Action": row.nextAction,
+          })),
+        },
+      ],
+    }),
+    [
+      compareMode,
+      dashboard.description,
+      dashboard.title,
+      decisionRows,
+      endDate,
+      focusPrefix,
+      metrics,
+      riskRows,
+      startDate,
+    ]
+  )
 
   return (
     <DashboardLayout>
@@ -141,33 +215,11 @@ export default function IntelligenceDashboard({
         eyebrow={focusPrefix}
         title={dashboard.title}
         description={dashboard.description}
+        actions={<ExportActions payload={exportPayload} />}
       />
 
       <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <div className="grid gap-6 xl:grid-cols-[1.1fr_1.4fr]">
-          <FilterGroup label="Period">
-            {periods.map((item) => (
-              <button
-                key={item}
-                className={filterClass(period === item)}
-                onClick={() => setPeriod(item)}
-              >
-                {item}
-              </button>
-            ))}
-          </FilterGroup>
-          <FilterGroup label="Compare Mode">
-            {compareModes.map((item) => (
-              <button
-                key={item}
-                className={filterClass(compareMode === item)}
-                onClick={() => setCompareMode(item)}
-              >
-                {item}
-              </button>
-            ))}
-          </FilterGroup>
-        </div>
+        <DateRangeControl />
       </section>
 
       <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -277,32 +329,6 @@ export default function IntelligenceDashboard({
         </div>
       </section>
     </DashboardLayout>
-  )
-}
-
-function FilterGroup({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
-  return (
-    <div>
-      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-        {label}
-      </p>
-      <div className="flex flex-wrap gap-2">{children}</div>
-    </div>
-  )
-}
-
-function filterClass(active: boolean) {
-  return cn(
-    "h-9 rounded-lg px-3 text-sm font-semibold transition hover:bg-slate-100 hover:text-slate-950",
-    active
-      ? "bg-violet-600 text-white shadow-sm shadow-violet-600/20 hover:bg-violet-600 hover:text-white"
-      : "text-slate-600"
   )
 }
 

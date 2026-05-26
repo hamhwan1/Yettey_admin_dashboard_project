@@ -3,20 +3,31 @@
 import { useMemo, useState } from "react"
 
 import DataTable, { type DataTableColumn } from "@/components/admin/DataTable"
+import DateRangeControl from "@/components/admin/DateRangeControl"
+import ExportActions from "@/components/admin/ExportActions"
 import PageHeader from "@/components/admin/PageHeader"
 import SideDrawer from "@/components/admin/SideDrawer"
 import StatCard from "@/components/admin/StatCard"
 import StatusBadge from "@/components/admin/StatusBadge"
 import DashboardLayout from "@/components/layout/DashboardLayout"
+import {
+  getCompareModeLabel,
+  getDateRangeLabel,
+  getPeriodMultiplier,
+  useDashboardDateRange,
+} from "@/lib/dashboard-date-store"
 import { cn } from "@/lib/utils"
 import ActivityPanels from "./ActivityPanels"
 import { DashboardCharts } from "./DashboardCharts"
 import {
   acquisitionChannels,
+  aiJobStatus,
   alerts,
   formatNumber,
+  growthTrend,
   overviewKpis,
   recentActivity,
+  retentionTrend,
   topFeatures,
   type ServiceFilter,
 } from "./dashboard-data"
@@ -33,18 +44,17 @@ type DrawerState =
   | null
 
 const services: ServiceFilter[] = ["Overall", "Yettey", "VPICK"]
-const periods = ["30D", "90D", "1Y", "Custom"]
 
 export default function DashboardOverviewClient() {
   const [service, setService] = useState<ServiceFilter>("Overall")
-  const [period, setPeriod] = useState("30D")
   const [channelPage, setChannelPage] = useState(1)
   const [featurePage, setFeaturePage] = useState(1)
   const [drawer, setDrawer] = useState<DrawerState>(null)
+  const { period, startDate, endDate, compareMode, resetDateRange } =
+    useDashboardDateRange()
 
   const serviceMultiplier = service === "Overall" ? 1 : service === "Yettey" ? 0.62 : 0.38
-  const periodMultiplier =
-    period === "30D" ? 1 : period === "90D" ? 2.7 : period === "1Y" ? 9.8 : 1.4
+  const periodMultiplier = getPeriodMultiplier(period)
 
   const kpis = useMemo(
     () =>
@@ -63,6 +73,90 @@ export default function DashboardOverviewClient() {
 
   const filteredFeatures = topFeatures.filter(
     (feature) => service === "Overall" || feature.service === service
+  )
+  const exportPayload = useMemo(
+    () => ({
+      title: "Dashboard Overview Report",
+      subtitle:
+        "Operating summary for growth, acquisition, retention, revenue, credit usage, AI operations, and alerts.",
+      filename: "dashboard-overview-report",
+      filters: {
+        Service: service,
+        "Date range": getDateRangeLabel(startDate, endDate),
+        Compare: getCompareModeLabel(compareMode),
+      },
+      kpis: kpis.map((metric) => ({
+        label: metric.label,
+        value: metric.value,
+        detail: metric.detail,
+      })),
+      charts: [
+        {
+          title: "User Growth Trend",
+          points: growthTrend.map((item) => ({
+            label: item.date,
+            value: item.visitors,
+            secondary: `${item.signups} signups`,
+          })),
+        },
+        {
+          title: "Retention Trend",
+          points: retentionTrend.map((item) => ({
+            label: item.date,
+            value: item.returningUsers,
+            secondary: `D30 ${item.d30}%`,
+          })),
+        },
+        {
+          title: "AI Job Status",
+          points: aiJobStatus.map((item) => ({
+            label: item.label,
+            value: Number(item.value.replace(/[^0-9.]/g, "")),
+            secondary: item.detail,
+          })),
+        },
+      ],
+      datasets: [
+        {
+          name: "Acquisition Channels",
+          rows: acquisitionChannels.map((channel) => ({
+            Channel: channel.channel,
+            Visitors: Math.round(channel.visitors * periodMultiplier),
+            Signups: Math.round(channel.signups * periodMultiplier),
+            "Paid Users": Math.round(channel.paidUsers * periodMultiplier),
+            "Conversion Rate": channel.conversionRate,
+          })),
+        },
+        {
+          name: "Feature Usage",
+          rows: filteredFeatures.map((feature) => ({
+            "Feature Name": feature.featureName,
+            Service: feature.service,
+            Users: feature.users,
+            "Usage Count": feature.usageCount,
+            "Credit Used": feature.creditUsed,
+            "Conversion Impact": feature.conversionImpact,
+          })),
+        },
+        {
+          name: "Alert Logs",
+          rows: alerts.map((alert) => ({
+            Alert: alert.title,
+            Value: alert.value,
+            Severity: alert.severity,
+          })),
+        },
+      ],
+    }),
+    [
+      compareMode,
+      endDate,
+      filteredFeatures,
+      kpis,
+      periodMultiplier,
+      service,
+      startDate,
+    ]
   )
 
   const acquisitionColumns: DataTableColumn<AcquisitionChannel>[] = [
@@ -142,10 +236,11 @@ export default function DashboardOverviewClient() {
         eyebrow="Dashboards"
         title="Overview"
         description="Interactive mock overview for service health, marketing acquisition, conversion, retention, revenue, credit usage, and AI operations."
+        actions={<ExportActions payload={exportPayload} />}
       />
 
       <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="mb-6">
           <FilterGroup label="Service">
             {services.map((item) => (
               <button
@@ -157,23 +252,13 @@ export default function DashboardOverviewClient() {
               </button>
             ))}
           </FilterGroup>
-          <FilterGroup label="Period">
-            {periods.map((item) => (
-              <button
-                key={item}
-                className={filterClass(period === item)}
-                onClick={() => setPeriod(item)}
-              >
-                {item}
-              </button>
-            ))}
-          </FilterGroup>
         </div>
+        <DateRangeControl />
         <button
           className="mt-5 rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-950"
           onClick={() => {
             setService("Overall")
-            setPeriod("30D")
+            resetDateRange()
             setChannelPage(1)
             setFeaturePage(1)
           }}

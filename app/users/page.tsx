@@ -5,11 +5,18 @@ import { useMemo, useState } from "react"
 
 import AdminButton from "@/components/admin/AdminButton"
 import DataTable, { type DataTableColumn } from "@/components/admin/DataTable"
+import DateRangeControl from "@/components/admin/DateRangeControl"
+import ExportActions from "@/components/admin/ExportActions"
 import PageHeader from "@/components/admin/PageHeader"
 import SideDrawer from "@/components/admin/SideDrawer"
 import StatCard from "@/components/admin/StatCard"
 import StatusBadge from "@/components/admin/StatusBadge"
 import DashboardLayout from "@/components/layout/DashboardLayout"
+import {
+  getCompareModeLabel,
+  getDateRangeLabel,
+  useDashboardDateRange,
+} from "@/lib/dashboard-date-store"
 import { cn } from "@/lib/utils"
 
 const users = [
@@ -138,6 +145,8 @@ export default function UsersPage() {
   const [plan, setPlan] = useState("All Plans")
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<User | null>(null)
+  const { startDate, endDate, compareMode, resetDateRange } =
+    useDashboardDateRange()
   const filtered = useMemo(
     () =>
       users.filter(
@@ -148,6 +157,40 @@ export default function UsersPage() {
       ),
     [plan, status, userType]
   )
+  const exportPayload = useMemo(
+    () => ({
+      title: "Users Report",
+      subtitle:
+        "Filtered user table export for service, status, plan, signup, and activity review.",
+      filename: "users-report",
+      filters: {
+        "User Type": userType,
+        Status: status,
+        Plan: plan,
+        "Date range": getDateRangeLabel(startDate, endDate),
+        Compare: getCompareModeLabel(compareMode),
+      },
+      kpis: stats.map((stat) => ({
+        label: stat.label,
+        value: stat.value,
+      })),
+      datasets: [
+        {
+          name: "User Tables",
+          rows: filtered.map((user) => ({
+            Email: user.email,
+            Name: user.name,
+            "User Type": user.userType,
+            Status: user.status,
+            Plan: user.plan,
+            Created: user.created,
+            "Last Active": user.lastActive,
+          })),
+        },
+      ],
+    }),
+    [compareMode, endDate, filtered, plan, startDate, status, userType]
+  )
 
   return (
     <DashboardLayout>
@@ -156,10 +199,13 @@ export default function UsersPage() {
         title="Users"
         description="Manage all platform users, their roles, and subscription statuses."
         actions={
-          <AdminButton>
-            <Plus className="size-4" />
-            User creation
-          </AdminButton>
+          <div className="flex flex-wrap gap-2">
+            <ExportActions payload={exportPayload} />
+            <AdminButton>
+              <Plus className="size-4" />
+              User creation
+            </AdminButton>
+          </div>
         }
       />
 
@@ -170,7 +216,7 @@ export default function UsersPage() {
       </div>
 
       <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <div className="grid gap-6 xl:grid-cols-3">
+        <div className="mb-6 grid gap-6 xl:grid-cols-3">
           <FilterGroup label="User Type">
             {["All Services", "Yettey", "Vpick"].map((item) => (
               <button key={item} className={filterClass(userType === item)} onClick={() => { setUserType(item); setPage(1) }}>
@@ -193,7 +239,8 @@ export default function UsersPage() {
             ))}
           </FilterGroup>
         </div>
-        <button className="mt-5 rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-950" onClick={() => { setUserType("All Services"); setStatus("Active"); setPlan("All Plans"); setPage(1) }}>
+        <DateRangeControl />
+        <button className="mt-5 rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-950" onClick={() => { setUserType("All Services"); setStatus("Active"); setPlan("All Plans"); resetDateRange(); setPage(1) }}>
           Reset All
         </button>
       </section>

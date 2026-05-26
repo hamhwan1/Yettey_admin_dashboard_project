@@ -4,10 +4,18 @@ import Link from "next/link"
 import { useMemo, useState } from "react"
 
 import DataTable, { type DataTableColumn } from "@/components/admin/DataTable"
+import DateRangeControl from "@/components/admin/DateRangeControl"
+import ExportActions from "@/components/admin/ExportActions"
 import PageHeader from "@/components/admin/PageHeader"
 import SideDrawer from "@/components/admin/SideDrawer"
 import StatCard from "@/components/admin/StatCard"
 import DashboardLayout from "@/components/layout/DashboardLayout"
+import {
+  getCompareModeLabel,
+  getDateRangeLabel,
+  getPeriodMultiplier,
+  useDashboardDateRange,
+} from "@/lib/dashboard-date-store"
 import { cn } from "@/lib/utils"
 import RevenueCharts from "./RevenueCharts"
 import {
@@ -40,16 +48,15 @@ const serviceFilters: { label: string; value: RevenueService; href: string }[] =
   { label: "VPICK", value: "VPICK", href: "/dashboard/revenue/vpick" },
 ]
 
-const periodFilters = ["30D", "90D", "1Y", "Custom"]
 const planFilters = ["All", "Free", "Starter", "Growth", "Pro", "Enterprise"]
 
 export default function RevenuePage({ service }: RevenuePageProps) {
-  const [period, setPeriod] = useState("30D")
   const [plan, setPlan] = useState("All")
   const [page, setPage] = useState(1)
   const [drawer, setDrawer] = useState<DrawerState>(null)
-  const periodMultiplier =
-    period === "30D" ? 1 : period === "90D" ? 2.8 : period === "1Y" ? 10.2 : 1.5
+  const { period, startDate, endDate, compareMode, resetDateRange } =
+    useDashboardDateRange()
+  const periodMultiplier = getPeriodMultiplier(period)
 
   const rows = useMemo(() => {
     const source = getRevenueRows(service).filter(
@@ -73,6 +80,116 @@ export default function RevenuePage({ service }: RevenuePageProps) {
   const summary = getRevenueSummary(rows)
   const planBreakdown = getPlanBreakdown(rows)
   const pageTitle = service === "Overall" ? "Revenue Analytics" : `${service} Revenue`
+  const exportPayload = useMemo(
+    () => ({
+      title: `${pageTitle} Report`,
+      subtitle:
+        "Revenue, paid user movement, cancellation, refund, net revenue, and failed payment report.",
+      filename: `${service.toLowerCase()}-revenue-report`,
+      filters: {
+        Service: service,
+        Plan: plan,
+        "Date range": getDateRangeLabel(startDate, endDate),
+        Compare: getCompareModeLabel(compareMode),
+      },
+      kpis: [
+        {
+          label: "Total Revenue",
+          value: formatCurrency(summary.totalRevenue),
+          detail: "Net revenue after refunds",
+        },
+        {
+          label: "New Paid Users",
+          value: formatNumber(summary.newPaidUsers),
+          detail: "New paid conversions",
+        },
+        {
+          label: "Active Paid Users",
+          value: formatNumber(summary.activePaidUsers),
+          detail: "Basis for net paid users",
+        },
+        {
+          label: "Cancelled Subscribers",
+          value: formatNumber(summary.cancelledSubscribers),
+          detail: "Separate cancellation count",
+        },
+        {
+          label: "Churn Rate",
+          value: `${summary.churnRate.toFixed(1)}%`,
+          detail: "Cancelled / active paid users",
+        },
+        {
+          label: "Net Paid Users",
+          value: formatNumber(summary.netPaidUsers),
+          detail: "Equals active paid users",
+        },
+        {
+          label: "ARPU",
+          value: formatCurrency(summary.arpu),
+          detail: "Net revenue per active paid user",
+        },
+        {
+          label: "Failed Payments",
+          value: formatNumber(summary.failedPayments),
+          detail: "Payment recovery queue",
+        },
+      ],
+      charts: [
+        {
+          title: "Revenue by Plan",
+          points: planBreakdown.map((item) => ({
+            label: item.plan,
+            value: item.revenue,
+            secondary: `${item.activePaidUsers} active users`,
+          })),
+        },
+        {
+          title: "Daily Net Revenue",
+          points: rows.map((row) => ({
+            label: row.date,
+            value: row.netRevenue,
+            secondary: `${row.failedPayments} failed payments`,
+          })),
+        },
+      ],
+      datasets: [
+        {
+          name: "Plan-level Payment Table",
+          rows: rows.map((row) => ({
+            Date: row.date,
+            Service: row.service,
+            Plan: row.plan,
+            "New Paid Users": row.newPaidUsers,
+            "Active Paid Users": row.activePaidUsers,
+            "Cancelled Subscribers": row.cancelledSubscribers,
+            "Gross Revenue": row.grossRevenue,
+            Refunds: row.refunds,
+            "Net Revenue": row.netRevenue,
+            "Failed Payments": row.failedPayments,
+          })),
+        },
+        {
+          name: "Revenue by Plan",
+          rows: planBreakdown.map((item) => ({
+            Plan: item.plan,
+            Revenue: item.revenue,
+            "Active Paid Users": item.activePaidUsers,
+          })),
+        },
+      ],
+    }),
+    [
+      compareMode,
+      endDate,
+      pageTitle,
+      plan,
+      planBreakdown,
+      rows,
+      service,
+      startDate,
+      summary,
+    ]
+  )
   const openMetric = (label: string, value: string, detail: string) => {
     setDrawer({ type: "metric", item: { label, value, detail } })
   }
@@ -149,10 +266,11 @@ export default function RevenuePage({ service }: RevenuePageProps) {
         ]}
         title={pageTitle}
         description="Interactive mock analysis for service revenue, paid user movement, cancellations, refunds, and failed payments."
+        actions={<ExportActions payload={exportPayload} />}
       />
 
       <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <div className="grid gap-6 xl:grid-cols-[1fr_1fr_1.4fr]">
+        <div className="mb-6 grid gap-6 xl:grid-cols-[1fr_1.4fr]">
           <FilterGroup label="Service">
             {serviceFilters.map((item) => (
               <Link
@@ -162,20 +280,6 @@ export default function RevenuePage({ service }: RevenuePageProps) {
               >
                 {item.label}
               </Link>
-            ))}
-          </FilterGroup>
-          <FilterGroup label="Period">
-            {periodFilters.map((item) => (
-              <button
-                key={item}
-                className={filterClass(period === item)}
-                onClick={() => {
-                  setPeriod(item)
-                  setPage(1)
-                }}
-              >
-                {item}
-              </button>
             ))}
           </FilterGroup>
           <FilterGroup label="Plan">
@@ -193,10 +297,11 @@ export default function RevenuePage({ service }: RevenuePageProps) {
             ))}
           </FilterGroup>
         </div>
+        <DateRangeControl />
         <button
           className="mt-5 rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-950"
           onClick={() => {
-            setPeriod("30D")
+            resetDateRange()
             setPlan("All")
             setPage(1)
           }}

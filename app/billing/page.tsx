@@ -4,11 +4,18 @@ import { Plus } from "lucide-react"
 
 import AdminButton from "@/components/admin/AdminButton"
 import DataTable, { type DataTableColumn } from "@/components/admin/DataTable"
+import DateRangeControl from "@/components/admin/DateRangeControl"
 import { FilterBar, FilterField } from "@/components/admin/FilterBar"
+import ExportActions from "@/components/admin/ExportActions"
 import PageHeader from "@/components/admin/PageHeader"
 import StatCard from "@/components/admin/StatCard"
 import StatusBadge from "@/components/admin/StatusBadge"
 import DashboardLayout from "@/components/layout/DashboardLayout"
+import {
+  getCompareModeLabel,
+  getDateRangeLabel,
+  useDashboardDateRange,
+} from "@/lib/dashboard-date-store"
 
 const subscriptions = [
   {
@@ -89,6 +96,43 @@ const columns: DataTableColumn<Subscription>[] = [
 ]
 
 export default function BillingOverviewPage() {
+  const { startDate, endDate, compareMode } = useDashboardDateRange()
+  const exportPayload = {
+    title: "Billing Overview Report",
+    subtitle:
+      "Subscription, revenue, billing health, renewal, and failed payment report.",
+    filename: "billing-overview-report",
+    filters: {
+      Product: "All Products",
+      Status: "Active",
+      Plan: "All Plans",
+      "Date range": getDateRangeLabel(startDate, endDate),
+      Compare: getCompareModeLabel(compareMode),
+    },
+    kpis: [
+      { label: "MRR", value: "$24.5K", detail: "+12.9% this month" },
+      {
+        label: "Active Subscriptions",
+        value: "1,284",
+        detail: "Mock subscription count",
+      },
+      { label: "Failed Payments", value: "18", detail: "Needs follow-up" },
+    ],
+    datasets: [
+      {
+        name: "Billing Data",
+        rows: subscriptions.map((subscription) => ({
+          Account: subscription.account,
+          Product: subscription.product,
+          Plan: subscription.plan,
+          Status: subscription.status,
+          Amount: subscription.amount,
+          Renewal: subscription.renewal,
+        })),
+      },
+    ],
+  }
+
   return (
     <DashboardLayout>
       <PageHeader
@@ -96,10 +140,13 @@ export default function BillingOverviewPage() {
         title="Billing Overview"
         description="Review revenue, subscription movement, billing health, and plan performance across Yettey and Vpick."
         actions={
-          <AdminButton variant="primary">
-            <Plus className="size-4" />
-            Create invoice
-          </AdminButton>
+          <div className="flex flex-wrap gap-2">
+            <ExportActions payload={exportPayload} />
+            <AdminButton variant="primary">
+              <Plus className="size-4" />
+              Create invoice
+            </AdminButton>
+          </div>
         }
       />
 
@@ -119,6 +166,10 @@ export default function BillingOverviewPage() {
         <FilterField label="Plan" value="All Plans" />
         <FilterField label="Renewal" value="2024-05-01 ~ 2024-05-31" calendar />
       </FilterBar>
+
+      <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+        <DateRangeControl />
+      </section>
 
       <DataTable
         columns={columns}
