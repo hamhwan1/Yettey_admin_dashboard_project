@@ -1,5 +1,313 @@
 export type ServiceFilter = "Overall" | "Yettey" | "VPICK"
 
+export type ExecutiveKpi = {
+  label: string
+  baseValue: number
+  format: "number" | "compactCurrency" | "currency" | "percent" | "retention"
+  retention?: {
+    d1: number
+    d7: number
+    d30: number
+  }
+  delta: string
+  deltaTone: "positive" | "negative" | "neutral"
+  status: "Healthy" | "Watch" | "Risk"
+  href: string
+  ctaLabel: string
+  sparkline: number[]
+}
+
+export const executiveKpis: ExecutiveKpi[] = [
+  {
+    label: "Total Visitors",
+    baseValue: 842390,
+    format: "number",
+    delta: "+18.4%",
+    deltaTone: "positive",
+    status: "Healthy",
+    href: "/dashboard/intelligence/visitors",
+    ctaLabel: "View visitors",
+    sparkline: [42, 48, 51, 57, 63, 68, 74],
+  },
+  {
+    label: "Signups",
+    baseValue: 48210,
+    format: "number",
+    delta: "+5.7%",
+    deltaTone: "positive",
+    status: "Healthy",
+    href: "/dashboard/intelligence/signups",
+    ctaLabel: "View signups",
+    sparkline: [28, 32, 35, 39, 43, 46, 52],
+  },
+  {
+    label: "Paid Users",
+    baseValue: 52480,
+    format: "number",
+    delta: "+9.4%",
+    deltaTone: "positive",
+    status: "Healthy",
+    href: "/dashboard/intelligence/subscriptions",
+    ctaLabel: "Open subscriptions",
+    sparkline: [30, 34, 38, 41, 45, 49, 55],
+  },
+  {
+    label: "MRR",
+    baseValue: 286400,
+    format: "compactCurrency",
+    delta: "+22.0%",
+    deltaTone: "positive",
+    status: "Healthy",
+    href: "/dashboard/revenue",
+    ctaLabel: "Open revenue",
+    sparkline: [34, 36, 42, 48, 54, 61, 69],
+  },
+  {
+    label: "ARPU / ARPPU",
+    baseValue: 54.6,
+    format: "currency",
+    delta: "+4.8%",
+    deltaTone: "positive",
+    status: "Watch",
+    href: "/dashboard/revenue",
+    ctaLabel: "View ARPU",
+    sparkline: [44, 43, 45, 48, 47, 50, 52],
+  },
+  {
+    label: "Churn Rate",
+    baseValue: 3.8,
+    format: "percent",
+    delta: "-0.7%",
+    deltaTone: "positive",
+    status: "Watch",
+    href: "/dashboard/intelligence/subscriptions?metric=churn",
+    ctaLabel: "View churn",
+    sparkline: [62, 58, 55, 57, 51, 48, 44],
+  },
+  {
+    label: "Retention",
+    baseValue: 34,
+    format: "retention",
+    retention: {
+      d1: 74,
+      d7: 51,
+      d30: 34,
+    },
+    delta: "+3.2%",
+    deltaTone: "positive",
+    status: "Healthy",
+    href: "/dashboard/intelligence/retention",
+    ctaLabel: "View retention",
+    sparkline: [38, 41, 43, 45, 48, 50, 53],
+  },
+]
+
+export const executiveFunnel = [
+  {
+    stage: "Visitors",
+    value: 842390,
+    conversion: "100%",
+    description: "All sessions",
+  },
+  {
+    stage: "Signups",
+    value: 48210,
+    conversion: "5.7%",
+    description: "Visitor to signup",
+  },
+  {
+    stage: "Active Users",
+    value: 36480,
+    conversion: "75.7%",
+    description: "Signup to activated user",
+  },
+  {
+    stage: "Paid Users",
+    value: 12480,
+    conversion: "34.2%",
+    description: "Activated to paid",
+  },
+]
+
+export const executiveMrrTrend = [
+  { period: "W1", mrr: 212400, paidUsers: 42100, arpu: 50.4 },
+  { period: "W2", mrr: 226800, paidUsers: 43820, arpu: 51.8 },
+  { period: "W3", mrr: 241600, paidUsers: 46240, arpu: 52.3 },
+  { period: "W4", mrr: 258900, paidUsers: 48720, arpu: 53.1 },
+  { period: "W5", mrr: 272200, paidUsers: 50980, arpu: 53.4 },
+  { period: "W6", mrr: 286400, paidUsers: 52480, arpu: 54.6 },
+]
+
+export const executiveRetentionCohort = [
+  { cohort: "D1", overall: 74, yettey: 76, vpick: 69 },
+  { cohort: "D7", overall: 51, yettey: 54, vpick: 46 },
+  { cohort: "D30", overall: 34, yettey: 37, vpick: 29 },
+]
+
+export const productHealth = [
+  {
+    product: "Yettey",
+    status: "Leading",
+    summary: "Stronger collaboration usage, storage depth, and subscription renewal.",
+    href: "/dashboard/revenue/yettey",
+    metrics: [
+      { label: "DAM Usage", value: "68.4K assets", delta: "+14%" },
+      { label: "AI Image Generation", value: "182.4K jobs", delta: "+18%" },
+      { label: "Storage Usage", value: "12.8 TB", delta: "+9%" },
+      { label: "Team Collaboration", value: "3.1 seats avg", delta: "+6%" },
+      { label: "Project Creation", value: "14.2K", delta: "+11%" },
+    ],
+  },
+  {
+    product: "VPICK",
+    status: "Scaling",
+    summary: "High intent in upload flows, with processing time and credit pressure to watch.",
+    href: "/dashboard/revenue/vpick",
+    metrics: [
+      { label: "Video Analysis Count", value: "48.6K", delta: "+21%" },
+      { label: "Shortform Generation", value: "26.8K", delta: "+17%" },
+      { label: "Credit Consumption", value: "2.4M", delta: "+24%" },
+      { label: "Avg Processing Time", value: "2m 18s", delta: "-14s" },
+      { label: "Upload Conversion", value: "42.6%", delta: "+5%" },
+    ],
+  },
+]
+
+export const analyticsBlocks = {
+  userGrowth: {
+    title: "User Growth",
+    subtitle: "Visitor, signup, paid conversion, and retention movement.",
+    href: "/dashboard/intelligence/visitors",
+    status: "Healthy",
+    summary: [
+      { label: "Visitors", value: 842390, format: "number", delta: "+18.4%" },
+      { label: "Signups", value: 48210, format: "number", delta: "+5.7%" },
+      { label: "Conversion Rate", value: 5.7, format: "percent", delta: "+0.6%" },
+      { label: "Retention D30", value: 34, format: "percent", delta: "+3.2%" },
+    ],
+    trend: [
+      { period: "05-01", visitors: 18400, signups: 980, paidUsers: 260, returning: 4200 },
+      { period: "05-05", visitors: 22600, signups: 1260, paidUsers: 330, returning: 5100 },
+      { period: "05-10", visitors: 24800, signups: 1480, paidUsers: 390, returning: 6200 },
+      { period: "05-15", visitors: 29200, signups: 1760, paidUsers: 470, returning: 7100 },
+      { period: "05-20", visitors: 31800, signups: 1980, paidUsers: 540, returning: 7800 },
+      { period: "05-25", visitors: 35400, signups: 2240, paidUsers: 610, returning: 8600 },
+      { period: "05-30", visitors: 38200, signups: 2510, paidUsers: 690, returning: 9400 },
+    ],
+    breakdown: [
+      { label: "New Users", value: 48210, share: 24 },
+      { label: "Returning Users", value: 156840, share: 76 },
+    ],
+    related: [
+      {
+        label: "Paid Conversion",
+        value: "34.2%",
+        detail: "Activated user to paid user",
+        share: 34,
+      },
+      {
+        label: "Signup Quality",
+        value: "5.7%",
+        detail: "Visitor to signup conversion",
+        share: 57,
+      },
+    ],
+  },
+  revenue: {
+    title: "Revenue",
+    subtitle: "Recurring revenue, paid user base, ARPU, churn, and plan mix.",
+    href: "/dashboard/revenue",
+    status: "Healthy",
+    summary: [
+      { label: "MRR", value: 286400, format: "compactCurrency", delta: "+22.0%" },
+      { label: "Paid Users", value: 52480, format: "number", delta: "+9.4%" },
+      { label: "ARPU", value: 54.6, format: "currency", delta: "+4.8%" },
+      { label: "Churn", value: 3.8, format: "percent", delta: "-0.7%" },
+    ],
+    trend: [
+      { period: "W1", mrr: 212400, paidUsers: 42100, arpu: 50.4 },
+      { period: "W2", mrr: 226800, paidUsers: 43820, arpu: 51.8 },
+      { period: "W3", mrr: 241600, paidUsers: 46240, arpu: 52.3 },
+      { period: "W4", mrr: 258900, paidUsers: 48720, arpu: 53.1 },
+      { period: "W5", mrr: 272200, paidUsers: 50980, arpu: 53.4 },
+      { period: "W6", mrr: 286400, paidUsers: 52480, arpu: 54.6 },
+    ],
+    plans: [
+      { plan: "Starter", subscribers: 18400, share: 35 },
+      { plan: "Growth", subscribers: 16820, share: 32 },
+      { plan: "Pro", subscribers: 9140, share: 17 },
+      { plan: "VPICK Basic", subscribers: 4860, share: 9 },
+      { plan: "VPICK Pro", subscribers: 3260, share: 7 },
+    ],
+    related: [
+      {
+        label: "New Payments",
+        value: "6,940",
+        detail: "+12.8% vs previous period",
+        share: 64,
+      },
+      {
+        label: "Upgrade Users",
+        value: "1,284",
+        detail: "Starter/Basic to Growth/Pro",
+        share: 48,
+      },
+    ],
+  },
+  yettey: {
+    title: "Yettey",
+    subtitle: "DAM activity, image generation, storage, teams, and project creation.",
+    href: "/dashboard/revenue/yettey",
+    status: "Leading",
+    summary: [
+      { label: "Storage", value: "12.8 TB", delta: "+9%" },
+      { label: "AI Generation", value: "182.4K", delta: "+18%" },
+      { label: "Active Teams", value: "3.1 seats avg", delta: "+6%" },
+      { label: "Projects", value: "14.2K", delta: "+11%" },
+    ],
+    trend: [
+      { period: "W1", storage: 9.8, generations: 112, teams: 2.4, projects: 8.4 },
+      { period: "W2", storage: 10.4, generations: 126, teams: 2.6, projects: 9.6 },
+      { period: "W3", storage: 11.1, generations: 142, teams: 2.8, projects: 10.8 },
+      { period: "W4", storage: 11.8, generations: 158, teams: 2.9, projects: 12.1 },
+      { period: "W5", storage: 12.2, generations: 171, teams: 3.0, projects: 13.2 },
+      { period: "W6", storage: 12.8, generations: 182, teams: 3.1, projects: 14.2 },
+    ],
+    breakdown: [
+      { label: "DAM Usage", value: "68.4K assets", share: 38 },
+      { label: "AI Generation", value: "182.4K jobs", share: 34 },
+      { label: "Collaboration", value: "3.1 seats avg", share: 16 },
+      { label: "Projects", value: "14.2K", share: 12 },
+    ],
+  },
+  vpick: {
+    title: "VPICK",
+    subtitle: "Video analysis, shortform generation, credit usage, and processing time.",
+    href: "/dashboard/revenue/vpick",
+    status: "Scaling",
+    summary: [
+      { label: "Video Analysis", value: "48.6K", delta: "+21%" },
+      { label: "Shortform Gen.", value: "26.8K", delta: "+17%" },
+      { label: "Credit Usage", value: "2.4M", delta: "+24%" },
+      { label: "Processing Time", value: "2m 18s", delta: "-14s" },
+    ],
+    trend: [
+      { period: "W1", analysis: 29.4, shortform: 14.2, credits: 1.4, processing: 172 },
+      { period: "W2", analysis: 33.8, shortform: 16.8, credits: 1.6, processing: 166 },
+      { period: "W3", analysis: 37.2, shortform: 19.1, credits: 1.8, processing: 158 },
+      { period: "W4", analysis: 41.4, shortform: 22.3, credits: 2.0, processing: 151 },
+      { period: "W5", analysis: 45.1, shortform: 24.8, credits: 2.2, processing: 143 },
+      { period: "W6", analysis: 48.6, shortform: 26.8, credits: 2.4, processing: 138 },
+    ],
+    breakdown: [
+      { label: "Video Analysis", value: "48.6K", share: 42 },
+      { label: "Shortform Generation", value: "26.8K", share: 28 },
+      { label: "Credit Usage", value: "2.4M", share: 20 },
+      { label: "Upload Conversion", value: "42.6%", share: 10 },
+    ],
+  },
+} as const
+
 export const overviewKpis = [
   {
     label: "Total Visitors",

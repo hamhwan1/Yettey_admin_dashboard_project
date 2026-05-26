@@ -11,7 +11,11 @@ import {
 } from "@/lib/dashboard-date-store"
 import { cn } from "@/lib/utils"
 
-export default function DateRangeControl() {
+export default function DateRangeControl({
+  compact = false,
+}: {
+  compact?: boolean
+}) {
   const {
     period,
     compareMode,
@@ -21,6 +25,70 @@ export default function DateRangeControl() {
     setCustomRange,
     setCompareMode,
   } = useDashboardDateRange()
+
+  if (compact) {
+    return (
+      <div className="space-y-4">
+        <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+              Period
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {periodOptions.map((option) => (
+                <button
+                  key={option.value}
+                  className={filterClass(period === option.value)}
+                  onClick={() => setPreset(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+              Compare
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {compareOptions.map((option) => (
+                <button
+                  key={option.value}
+                  className={filterClass(compareMode === option.value)}
+                  onClick={() => setCompareMode(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {period === "Custom" ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            <DateInput
+              label="Start date"
+              value={startDate}
+              onChange={(value) => setCustomRange(value, endDate)}
+            />
+            <DateInput
+              label="End date"
+              value={endDate}
+              onChange={(value) => setCustomRange(startDate, value)}
+            />
+          </div>
+        ) : null}
+
+        <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+          <CalendarDays className="size-4 text-violet-600" />
+          <span>{getDateRangeLabel(startDate, endDate)}</span>
+          <span className="text-slate-400">/</span>
+          <span>{getCompareModeLabel(compareMode)}</span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr_1fr]">
