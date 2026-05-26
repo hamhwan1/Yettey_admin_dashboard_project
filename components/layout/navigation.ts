@@ -15,6 +15,7 @@ import {
   Search,
   Settings,
   Sparkles,
+  UserPlus,
   UserRound,
   Users,
 } from "lucide-react"
@@ -86,6 +87,11 @@ export const sidebarNavigation: Record<TopMenuKey, SidebarItem[]> = {
       title: "Overview",
       href: "/dashboard",
       icon: LayoutDashboard,
+    },
+    {
+      title: "Signups",
+      href: "/dashboard/intelligence/signups",
+      icon: UserPlus,
     },
     {
       title: "Revenue",

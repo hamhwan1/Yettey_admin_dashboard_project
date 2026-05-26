@@ -14,8 +14,8 @@ export const overviewKpis = [
     value: "48,210",
     detail: "5.7% visitor signup rate",
     insight: "Signup lift is strongest when first-project templates are visible.",
-    href: "/dashboard/intelligence/visitors?metric=signups",
-    ctaLabel: "Open signup funnel",
+    href: "/dashboard/intelligence/signups",
+    ctaLabel: "View signup intelligence",
   },
   {
     label: "Returning Users",
