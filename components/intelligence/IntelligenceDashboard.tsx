@@ -1,8 +1,11 @@
 "use client"
 
+import Link from "next/link"
+import { useState } from "react"
+import { ArrowRight, TrendingDown, TrendingUp } from "lucide-react"
+
 import DataTable, { type DataTableColumn } from "@/components/admin/DataTable"
 import PageHeader from "@/components/admin/PageHeader"
-import StatCard from "@/components/admin/StatCard"
 import StatusBadge from "@/components/admin/StatusBadge"
 import DashboardLayout from "@/components/layout/DashboardLayout"
 import {
@@ -11,6 +14,8 @@ import {
   intelligenceDashboards,
   topFeatures,
 } from "@/components/dashboard/dashboard-data"
+import { cn } from "@/lib/utils"
+import IntelligenceCharts from "./IntelligenceCharts"
 
 type DashboardKey = keyof typeof intelligenceDashboards
 
@@ -20,7 +25,20 @@ type IntelligenceDashboardProps = {
   focusType?: "Channel" | "Feature" | "Funnel Stage"
 }
 
-const decisionColumns: DataTableColumn<{ signal: string; cause: string; action: string; priority: string }>[] = [
+const periods = ["Last 7 Days", "Last 30 Days", "Last 90 Days", "1Y", "Custom Range"]
+const compareModes = [
+  "This week vs last week",
+  "This month vs previous month",
+  "Before release vs after release",
+  "Before campaign vs after campaign",
+]
+
+const decisionColumns: DataTableColumn<{
+  signal: string
+  cause: string
+  action: string
+  priority: string
+}>[] = [
   {
     key: "signal",
     header: "Signal",
@@ -47,101 +65,299 @@ const decisionColumns: DataTableColumn<{ signal: string; cause: string; action: 
   },
 ]
 
+const riskColumns: DataTableColumn<{
+  alert: string
+  severity: string
+  trend: string
+  owner: string
+  nextAction: string
+}>[] = [
+  {
+    key: "alert",
+    header: "Alert / Risk",
+    render: (row) => <span className="font-semibold">{row.alert}</span>,
+  },
+  {
+    key: "severity",
+    header: "Severity",
+    render: (row) => (
+      <StatusBadge tone={row.severity === "High" ? "danger" : "neutral"}>
+        {row.severity}
+      </StatusBadge>
+    ),
+  },
+  {
+    key: "trend",
+    header: "Trend",
+    render: (row) => (
+      <span
+        className={cn(
+          "inline-flex items-center gap-1 font-semibold",
+          row.trend.startsWith("+") ? "text-rose-500" : "text-emerald-600"
+        )}
+      >
+        {row.trend.startsWith("+") ? (
+          <TrendingUp className="size-4" />
+        ) : (
+          <TrendingDown className="size-4" />
+        )}
+        {row.trend}
+      </span>
+    ),
+  },
+  {
+    key: "owner",
+    header: "Owner",
+    render: (row) => row.owner,
+  },
+  {
+    key: "nextAction",
+    header: "Next Action",
+    render: (row) => row.nextAction,
+  },
+]
+
 export default function IntelligenceDashboard({
   dashboardKey,
   focusLabel,
   focusType,
 }: IntelligenceDashboardProps) {
+  const [period, setPeriod] = useState("Last 30 Days")
+  const [compareMode, setCompareMode] = useState("This month vs previous month")
   const dashboard = intelligenceDashboards[dashboardKey]
   const focusPrefix = focusLabel ? `${focusType}: ${focusLabel}` : undefined
-  const rows = buildDecisionRows(dashboardKey, focusLabel)
+  const decisionRows = buildDecisionRows(dashboardKey, focusLabel)
+  const riskRows = buildRiskRows(dashboardKey)
+  const metrics = buildMetricCards(dashboardKey, dashboard.metrics)
 
   return (
     <DashboardLayout>
       <PageHeader
         breadcrumbs={[
-          {
-            label: "Dashboards",
-          },
-          {
-            label: "Intelligence",
-          },
-          {
-            label: focusLabel ?? dashboard.title,
-          },
+          { label: "Dashboards" },
+          { label: "Intelligence" },
+          { label: focusLabel ?? dashboard.title },
         ]}
         eyebrow={focusPrefix}
         title={dashboard.title}
         description={dashboard.description}
       />
 
-      <section className="mb-8 rounded-2xl border border-violet-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <p className="text-xs font-bold uppercase tracking-wide text-violet-600">
-          Executive Thesis
-        </p>
-        <p className="mt-3 max-w-4xl text-lg font-semibold leading-8 text-slate-950">
-          {dashboard.thesis}
-        </p>
+      <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+        <div className="grid gap-6 xl:grid-cols-[1.1fr_1.4fr]">
+          <FilterGroup label="Period">
+            {periods.map((item) => (
+              <button
+                key={item}
+                className={filterClass(period === item)}
+                onClick={() => setPeriod(item)}
+              >
+                {item}
+              </button>
+            ))}
+          </FilterGroup>
+          <FilterGroup label="Compare Mode">
+            {compareModes.map((item) => (
+              <button
+                key={item}
+                className={filterClass(compareMode === item)}
+                onClick={() => setCompareMode(item)}
+              >
+                {item}
+              </button>
+            ))}
+          </FilterGroup>
+        </div>
       </section>
 
       <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {dashboard.metrics.map(([label, value]) => (
-          <StatCard key={label} label={label} value={value} />
+        {metrics.map((metric) => (
+          <MetricDeltaCard key={metric.label} {...metric} />
         ))}
       </div>
 
-      <div className="mb-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-          <h2 className="text-lg font-semibold text-slate-950">
-            Decision Queue
-          </h2>
-          <div className="mt-5 space-y-3">
-            {dashboard.decisions.map((decision, index) => (
-              <div
-                key={decision}
-                className="rounded-xl border border-slate-100 bg-slate-50 p-4"
-              >
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  Decision {index + 1}
-                </p>
-                <p className="mt-2 text-sm font-semibold leading-6 text-slate-950">
-                  {decision}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
+      <div className="mb-8">
+        <IntelligenceCharts />
+      </div>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-          <h2 className="text-lg font-semibold text-slate-950">
-            BI / Event Tracking Plan
-          </h2>
-          <div className="mt-5 grid gap-3">
-            {[
-              "Track visitor_source, campaign_id, first_project_created, first_generation_completed, first_export_completed.",
-              "Connect PostHog/Mixpanel cohorts to plan, feature, and channel dimensions.",
-              "Separate operational metrics from product events: queue_latency, gpu_utilization, model_failure, retry_count.",
-              "Materialize daily summary tables for dashboard speed and executive reporting.",
-            ].map((item) => (
-              <div
-                key={item}
-                className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm font-medium leading-6 text-slate-700"
-              >
-                {item}
-              </div>
-            ))}
+      <section className="mb-8 rounded-2xl border border-violet-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-violet-600">
+              Interpretation After Data
+            </p>
+            <p className="mt-3 max-w-4xl text-lg font-semibold leading-8 text-slate-950">
+              {dashboard.thesis}
+            </p>
           </div>
-        </section>
+          <Link
+            href="/dashboard/intelligence/funnel"
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white shadow-sm shadow-violet-600/20 transition hover:bg-violet-700"
+          >
+            Open Funnel
+            <ArrowRight className="size-4" />
+          </Link>
+        </div>
+      </section>
+
+      <section className="mb-8">
+        <div className="mb-4">
+          <h2 className="text-xl font-semibold text-slate-950">
+            Recommendation Cards
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Action-oriented decisions generated from trend, anomaly, and cohort signals.
+          </p>
+        </div>
+        <div className="grid gap-4 xl:grid-cols-3">
+          {dashboard.decisions.map((decision, index) => (
+            <div
+              key={decision}
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]"
+            >
+              <StatusBadge tone={index === 0 ? "danger" : "neutral"}>
+                {index === 0 ? "High Impact" : "Decision"}
+              </StatusBadge>
+              <p className="mt-4 text-base font-bold leading-6 text-slate-950">
+                {decision}
+              </p>
+              <div className="mt-5 flex gap-2">
+                <Link
+                  href="/dashboard/intelligence/retention"
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  View Detail
+                </Link>
+                <Link
+                  href="/dashboard/intelligence/funnel"
+                  className="rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                >
+                  Open Funnel
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="mb-8">
+        <DataTable
+          columns={riskColumns}
+          data={riskRows}
+          summary={`Showing 1 to ${riskRows.length} of ${riskRows.length} operational risks`}
+          compactPagination
+        />
       </div>
 
       <DataTable
         columns={decisionColumns}
-        data={rows}
-        summary={`Showing 1 to ${rows.length} of ${rows.length} intelligence signals`}
+        data={decisionRows}
+        summary={`Showing 1 to ${decisionRows.length} of ${decisionRows.length} intelligence signals`}
         compactPagination
       />
+
+      <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+        <h2 className="text-lg font-semibold text-slate-950">
+          Analytics Pipeline Readiness
+        </h2>
+        <div className="mt-5 grid gap-3 xl:grid-cols-2">
+          {[
+            "Track visitor_source, campaign_id, first_project_created, first_generation_completed, first_export_completed.",
+            "Connect PostHog/Mixpanel cohorts to plan, feature, channel, release, and campaign dimensions.",
+            "Separate operational metrics from product events: queue_latency, gpu_utilization, model_failure, retry_count.",
+            "Materialize daily summary tables for dashboard speed, anomaly detection, and executive reporting.",
+          ].map((item) => (
+            <div
+              key={item}
+              className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm font-medium leading-6 text-slate-700"
+            >
+              {item}
+            </div>
+          ))}
+        </div>
+      </section>
     </DashboardLayout>
   )
+}
+
+function FilterGroup({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div>
+      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </div>
+  )
+}
+
+function filterClass(active: boolean) {
+  return cn(
+    "h-9 rounded-lg px-3 text-sm font-semibold transition hover:bg-slate-100 hover:text-slate-950",
+    active
+      ? "bg-violet-600 text-white shadow-sm shadow-violet-600/20 hover:bg-violet-600 hover:text-white"
+      : "text-slate-600"
+  )
+}
+
+function MetricDeltaCard({
+  label,
+  value,
+  delta,
+  detail,
+}: {
+  label: string
+  value: string
+  delta: string
+  detail: string
+}) {
+  const isPositive = delta.startsWith("+")
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_10px_24px_rgba(15,23,42,0.04)]">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-slate-500">{label}</p>
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold",
+            isPositive ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-500"
+          )}
+        >
+          {isPositive ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
+          {delta}
+        </span>
+      </div>
+      <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
+        {value}
+      </p>
+      <p className="mt-2 text-sm text-slate-500">{detail}</p>
+    </div>
+  )
+}
+
+function buildMetricCards(
+  dashboardKey: DashboardKey,
+  metrics: readonly (readonly [string, string])[]
+) {
+  const deltas = {
+    visitors: ["+18%", "+5.7%", "+2.4x", "-11%"],
+    subscriptions: ["+9%", "+4,180", "-7%", "+22%"],
+    "ai-operations": ["+14%", "-0.2%", "+0.8%", "+9%"],
+    retention: ["+3%", "+5%", "+6%", "+2.8x"],
+  } satisfies Record<DashboardKey, string[]>
+
+  return metrics.map(([label, value], index) => ({
+    label,
+    value,
+    delta: deltas[dashboardKey][index] ?? "+0%",
+    detail: "Compared with selected baseline period",
+  }))
 }
 
 function buildDecisionRows(dashboardKey: DashboardKey, focusLabel?: string) {
@@ -211,6 +427,48 @@ function buildDecisionRows(dashboardKey: DashboardKey, focusLabel?: string) {
     action,
     priority,
   }))
+}
+
+function buildRiskRows(dashboardKey: DashboardKey) {
+  const shared = [
+    {
+      alert: "Payment failure spike",
+      severity: "High",
+      trend: "+28%",
+      owner: "Billing Ops",
+      nextAction: "Review failed invoices and retry rules",
+    },
+    {
+      alert: "Signup conversion dropped",
+      severity: "Medium",
+      trend: "-7%",
+      owner: "Growth",
+      nextAction: "Compare landing page variants by source",
+    },
+    {
+      alert: "GPU queue latency high",
+      severity: dashboardKey === "ai-operations" ? "High" : "Medium",
+      trend: "+34%",
+      owner: "AI Ops",
+      nextAction: "Scale queue capacity during campaign windows",
+    },
+    {
+      alert: "AI generation failures increased",
+      severity: "Medium",
+      trend: "+0.8%",
+      owner: "Engineering",
+      nextAction: "Inspect model retries and failure clusters",
+    },
+    {
+      alert: "Traffic anomaly detected",
+      severity: "Low",
+      trend: "+12%",
+      owner: "Marketing",
+      nextAction: "Segment by campaign and referrer",
+    },
+  ]
+
+  return shared
 }
 
 function slugify(value: string) {

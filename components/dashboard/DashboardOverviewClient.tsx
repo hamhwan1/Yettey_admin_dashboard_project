@@ -204,8 +204,6 @@ export default function DashboardOverviewClient() {
         )}
       </div>
 
-      <InsightCards />
-
       <div className="mb-8">
         <DashboardCharts />
       </div>
@@ -213,6 +211,8 @@ export default function DashboardOverviewClient() {
       <div className="mb-8">
         <FunnelCard />
       </div>
+
+      <InsightCards />
 
       <div className="mb-8">
         <div className="mb-4">
@@ -271,7 +271,11 @@ export default function DashboardOverviewClient() {
 }
 
 function slugify(value: string) {
-  return value.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+  return value
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
 }
 
 function FilterGroup({
