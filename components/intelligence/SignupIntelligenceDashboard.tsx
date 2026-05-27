@@ -36,6 +36,11 @@ import {
   type DashboardService,
   useDashboardServiceFilter,
 } from "@/lib/dashboard-service-store"
+import {
+  compareBaseline,
+  getCompareDelta,
+  getPeriodBuckets,
+} from "@/lib/mock-analytics-engine"
 import { cn } from "@/lib/utils"
 import {
   landingPagePerformance,
@@ -206,41 +211,65 @@ export default function SignupIntelligenceDashboard() {
   const { resetService, service, setService } = useDashboardServiceFilter()
   const periodMultiplier = getPeriodMultiplier(period)
   const serviceProfile = signupServiceProfiles[service]
+  const trendBuckets = useMemo(
+    () =>
+      getPeriodBuckets({
+        compareMode,
+        endDate,
+        period,
+        service,
+        startDate,
+      }),
+    [compareMode, endDate, period, service, startDate]
+  )
+  const signupDelta = getCompareDelta(compareMode, "signups")
+  const visitorDelta = getCompareDelta(compareMode, "visitors")
+  const conversionDelta = signupDelta / 9
 
   const trendRows = useMemo(
     () =>
-      signupTrend.map((row, index) => {
+      trendBuckets.map((bucket, index) => {
+        const row = signupTrend[index % signupTrend.length]
+        const bucketShare = bucket.share * 7
         const visitors = scale(
           row.visitors,
-          periodMultiplier * serviceProfile.visitorFactor * (0.96 + index * 0.012)
+          serviceProfile.visitorFactor *
+            bucketShare *
+            (0.96 + bucket.level * 0.04)
         )
         const signups = scale(
           row.signups,
-          periodMultiplier * serviceProfile.signupFactor * (0.98 + index * 0.01)
+          serviceProfile.signupFactor *
+            bucketShare *
+            (0.98 + bucket.activity * 0.04)
         )
         const signupStarted = scale(
           row.signupStarted,
-          periodMultiplier * serviceProfile.signupFactor * 1.04
+          serviceProfile.signupFactor * bucketShare * 1.04
         )
 
         return {
           ...row,
-          paidUsers: scale(row.paidUsers, periodMultiplier * serviceProfile.paidFactor),
+          date: bucket.label,
+          paidUsers: scale(row.paidUsers, serviceProfile.paidFactor * bucketShare),
+          previousSignups: compareBaseline(signups, signupDelta),
+          previousVisitors: compareBaseline(visitors, visitorDelta),
           signupConversion: Number(((signups / Math.max(visitors, 1)) * 100).toFixed(1)),
           signupStarted,
           signups,
           visitors,
         }
       }),
-    [periodMultiplier, serviceProfile]
+    [serviceProfile, signupDelta, trendBuckets, visitorDelta]
   )
 
   const sourceRows = useMemo(
     () =>
       signupSourceBreakdown.map((row) => {
         const bias = serviceProfile.sourceBias[row.source] ?? 1
-        const visitors = scale(row.visitors, periodMultiplier * serviceProfile.visitorFactor * bias)
-        const signups = scale(row.signups, periodMultiplier * serviceProfile.signupFactor * bias)
+        const compareBias = 1 + signupDelta / 240
+        const visitors = scale(row.visitors, periodMultiplier * serviceProfile.visitorFactor * bias * (1 + visitorDelta / 500))
+        const signups = scale(row.signups, periodMultiplier * serviceProfile.signupFactor * bias * compareBias)
         const signupRate = (signups / Math.max(visitors, 1)) * 100
         const paidRate = clamp(
           percentValue(row.paidConversion) * serviceProfile.paidFactor * (1 / Math.max(serviceProfile.signupFactor, 0.1)),
@@ -258,15 +287,15 @@ export default function SignupIntelligenceDashboard() {
           visitors,
         }
       }),
-    [periodMultiplier, serviceProfile]
+    [periodMultiplier, serviceProfile, signupDelta, visitorDelta]
   )
 
   const landingRows = useMemo(
     () =>
       landingPagePerformance.map((row) => {
         const bias = serviceProfile.landingBias[row.landingPage] ?? 1
-        const visitors = scale(row.visitors, periodMultiplier * serviceProfile.visitorFactor * bias)
-        const signups = scale(row.signups, periodMultiplier * serviceProfile.signupFactor * bias)
+        const visitors = scale(row.visitors, periodMultiplier * serviceProfile.visitorFactor * bias * (1 + visitorDelta / 520))
+        const signups = scale(row.signups, periodMultiplier * serviceProfile.signupFactor * bias * (1 + signupDelta / 260))
         const signupRate = (signups / Math.max(visitors, 1)) * 100
         const paidRate = clamp(
           percentValue(row.paidConversion) * serviceProfile.paidFactor * (1 / Math.max(serviceProfile.signupFactor, 0.1)),
@@ -284,7 +313,7 @@ export default function SignupIntelligenceDashboard() {
           visitors,
         }
       }),
-    [periodMultiplier, serviceProfile]
+    [periodMultiplier, serviceProfile, signupDelta, visitorDelta]
   )
 
   const providerRows = useMemo(
@@ -295,10 +324,10 @@ export default function SignupIntelligenceDashboard() {
         return {
           ...row,
           completionRate: percentValue(row.signupCompletion),
-          signups: scale(row.signups, periodMultiplier * serviceProfile.signupFactor * bias),
+          signups: scale(row.signups, periodMultiplier * serviceProfile.signupFactor * bias * (1 + signupDelta / 280)),
           signupStarted: scale(
             row.signupStarted,
-            periodMultiplier * serviceProfile.signupFactor * bias
+            periodMultiplier * serviceProfile.signupFactor * bias * (1 + signupDelta / 320)
           ),
         }
       })
@@ -309,7 +338,7 @@ export default function SignupIntelligenceDashboard() {
         share: `${((row.signups / Math.max(providerTotal, 1)) * 100).toFixed(1)}%`,
       }))
     },
-    [periodMultiplier, serviceProfile]
+    [periodMultiplier, serviceProfile, signupDelta]
   )
 
   const regionRows = useMemo(
@@ -323,20 +352,20 @@ export default function SignupIntelligenceDashboard() {
           ...row,
           paidConversion: `${paidRate.toFixed(2)}%`,
           paidRate,
-          signups: scale(row.signups, periodMultiplier * serviceProfile.signupFactor * bias),
+          signups: scale(row.signups, periodMultiplier * serviceProfile.signupFactor * bias * (1 + signupDelta / 300)),
           signupRate,
           conversion: `${signupRate.toFixed(2)}%`,
         }
       }),
-    [periodMultiplier, serviceProfile]
+    [periodMultiplier, serviceProfile, signupDelta]
   )
 
   const utmRows = useMemo(
     () =>
       utmPerformance.map((row) => {
         const bias = serviceProfile.utmBias[row.utmSource] ?? 1
-        const visitors = scale(row.visitors, periodMultiplier * serviceProfile.visitorFactor * bias)
-        const signups = scale(row.signups, periodMultiplier * serviceProfile.signupFactor * bias)
+        const visitors = scale(row.visitors, periodMultiplier * serviceProfile.visitorFactor * bias * (1 + visitorDelta / 520))
+        const signups = scale(row.signups, periodMultiplier * serviceProfile.signupFactor * bias * (1 + signupDelta / 260))
         const signupRate = (signups / Math.max(visitors, 1)) * 100
         const paidRate = clamp(
           percentValue(row.paidConversion) * serviceProfile.paidFactor * (1 / Math.max(serviceProfile.signupFactor, 0.1)),
@@ -352,7 +381,7 @@ export default function SignupIntelligenceDashboard() {
           visitors,
         }
       }),
-    [periodMultiplier, serviceProfile]
+    [periodMultiplier, serviceProfile, signupDelta, visitorDelta]
   )
 
   const totalSignups = sourceRows.reduce((sum, row) => sum + row.signups, 0)
@@ -540,8 +569,9 @@ export default function SignupIntelligenceDashboard() {
       <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
         <div className="grid divide-y divide-slate-100 md:grid-cols-5 md:divide-x md:divide-y-0">
           <SummaryMetric
-            delta="+0.6pp"
+            delta={formatPoints(conversionDelta)}
             label="Signup Conversion"
+            tone={conversionDelta >= 0 ? "success" : "danger"}
             value={`${signupConversion.toFixed(2)}%`}
           />
           <SummaryMetric
@@ -550,15 +580,17 @@ export default function SignupIntelligenceDashboard() {
             value={formatNumber(totalSignups)}
           />
           <SummaryMetric
-            delta="+8.3%"
+            delta={formatPercent(signupDelta * 0.72)}
             label="Organic Signups"
             subtext={`${((organicSignups / Math.max(totalSignups, 1)) * 100).toFixed(1)}% of total`}
+            tone={signupDelta >= 0 ? "success" : "danger"}
             value={formatNumber(organicSignups)}
           />
           <SummaryMetric
-            delta="+6.1%"
+            delta={formatPercent(signupDelta * 0.54)}
             label="Paid Signups"
             subtext={`${((paidSignups / Math.max(totalSignups, 1)) * 100).toFixed(1)}% of total`}
+            tone={signupDelta >= 0 ? "success" : "danger"}
             value={formatNumber(paidSignups)}
           />
           <SummaryMetric
@@ -618,14 +650,16 @@ export default function SignupIntelligenceDashboard() {
         >
           {isMounted ? (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendRows}>
+              <LineChart data={trendRows} key={`${service}-${period}-${compareMode}`}>
                 <CartesianGrid stroke="#eef2f7" vertical={false} />
                 <XAxis dataKey="date" tickLine={false} axisLine={false} />
                 <YAxis tickLine={false} axisLine={false} width={72} />
                 <Tooltip />
                 <Line dataKey="visitors" name="Visitors" stroke="#7c3aed" strokeWidth={2.5} dot={false} />
+                <Line dataKey="previousVisitors" name="Previous Visitors" stroke="#a78bfa" strokeDasharray="5 5" strokeWidth={2} dot={false} />
                 <Line dataKey="signupStarted" name="Signup Page Entered" stroke="#2563eb" strokeWidth={2.5} dot={false} />
                 <Line dataKey="signups" name="Signup Completed" stroke="#10b981" strokeWidth={3} />
+                <Line dataKey="previousSignups" name="Previous Completed" stroke="#86efac" strokeDasharray="4 5" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -1194,11 +1228,13 @@ function SummaryMetric({
   delta,
   label,
   subtext,
+  tone = "success",
   value,
 }: {
   delta?: string
   label: string
   subtext?: string
+  tone?: "success" | "danger" | "neutral"
   value: string
 }) {
   return (
@@ -1210,11 +1246,19 @@ function SummaryMetric({
         <p className="text-3xl font-bold tracking-tight text-slate-950">
           {value}
         </p>
-        {delta ? <StatusBadge tone="success">{delta}</StatusBadge> : null}
+        {delta ? <StatusBadge tone={tone}>{delta}</StatusBadge> : null}
       </div>
       {subtext ? <p className="mt-3 text-sm font-medium text-slate-500">{subtext}</p> : null}
     </div>
   )
+}
+
+function formatPercent(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`
+}
+
+function formatPoints(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}pp`
 }
 
 function FunnelStepCard({

@@ -14,7 +14,7 @@ export default function UserDetailPage() {
         },
         {
           label: "Current Plan",
-          value: "Enterprise",
+          value: "Pro",
           detail: "Yettey workspace",
         },
         {

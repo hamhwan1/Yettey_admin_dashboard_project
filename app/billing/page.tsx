@@ -16,6 +16,7 @@ import {
   getDateRangeLabel,
   useDashboardDateRange,
 } from "@/lib/dashboard-date-store"
+import { formatKrw } from "@/lib/pricing-plans"
 
 const subscriptions = [
   {
@@ -23,7 +24,7 @@ const subscriptions = [
     product: "Yettey",
     plan: "Pro",
     status: "Active",
-    amount: "$49",
+    amount: 249000,
     renewal: "2026-04-15",
   },
   {
@@ -31,23 +32,23 @@ const subscriptions = [
     product: "Yettey",
     plan: "Growth",
     status: "Active",
-    amount: "$129",
+    amount: 99000,
     renewal: "2026-04-19",
   },
   {
     account: "Vpick Ops",
     product: "Vpick",
-    plan: "Free",
-    status: "Inactive",
-    amount: "$0",
+    plan: "Basic",
+    status: "Active",
+    amount: 20000,
     renewal: "2026-03-15",
   },
   {
     account: "Media Lab",
-    product: "Yettey",
-    plan: "Lite",
+    product: "Vpick",
+    plan: "Professional",
     status: "Active",
-    amount: "$19",
+    amount: 40000,
     renewal: "2026-05-01",
   },
 ]
@@ -86,7 +87,7 @@ const columns: DataTableColumn<Subscription>[] = [
   {
     key: "amount",
     header: "Amount",
-    render: (subscription) => subscription.amount,
+    render: (subscription) => formatKrw(subscription.amount),
   },
   {
     key: "renewal",
@@ -110,7 +111,7 @@ export default function BillingOverviewPage() {
       Compare: getCompareModeLabel(compareMode),
     },
     kpis: [
-      { label: "MRR", value: "$24.5K", detail: "+12.9% this month" },
+      { label: "MRR", value: formatKrw(408000), detail: "+12.9% this month" },
       {
         label: "Active Subscriptions",
         value: "1,284",
@@ -126,7 +127,7 @@ export default function BillingOverviewPage() {
           Product: subscription.product,
           Plan: subscription.plan,
           Status: subscription.status,
-          Amount: subscription.amount,
+          Amount: formatKrw(subscription.amount),
           Renewal: subscription.renewal,
         })),
       },
@@ -151,7 +152,7 @@ export default function BillingOverviewPage() {
       />
 
       <div className="mb-8 grid gap-4 md:grid-cols-3">
-        <StatCard label="MRR" value="$24.5K" detail="+12.9% this month" />
+        <StatCard label="MRR" value={formatKrw(408000)} detail="+12.9% this month" />
         <StatCard
           label="Active Subscriptions"
           value="1,284"

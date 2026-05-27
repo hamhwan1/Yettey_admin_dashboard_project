@@ -40,6 +40,7 @@ import StatusBadge from "@/components/admin/StatusBadge"
 import { formatNumber } from "@/components/dashboard/dashboard-data"
 import DashboardLayout from "@/components/layout/DashboardLayout"
 import {
+  type DashboardCompareMode,
   getCompareModeLabel,
   getDateRangeLabel,
   getPeriodMultiplier,
@@ -49,6 +50,16 @@ import {
   type DashboardService,
   useDashboardServiceFilter,
 } from "@/lib/dashboard-service-store"
+import {
+  compareBaseline,
+  getCompareDelta,
+  getPeriodBuckets,
+} from "@/lib/mock-analytics-engine"
+import {
+  type CurrentPlanName,
+  formatKrw,
+  getPlanPrice,
+} from "@/lib/pricing-plans"
 import { cn } from "@/lib/utils"
 import {
   paidAcquisitionSources,
@@ -106,7 +117,7 @@ const paidLandingPages = [
     visitors: 18420,
     paidUsers: 821,
     paidConversion: "4.46%",
-    revenue: 18400,
+    revenue: 18400000,
     churnRate: "2.9%",
   },
   {
@@ -115,7 +126,7 @@ const paidLandingPages = [
     visitors: 14680,
     paidUsers: 612,
     paidConversion: "4.17%",
-    revenue: 12900,
+    revenue: 12900000,
     churnRate: "3.4%",
   },
   {
@@ -124,7 +135,7 @@ const paidLandingPages = [
     visitors: 22840,
     paidUsers: 704,
     paidConversion: "3.08%",
-    revenue: 16200,
+    revenue: 16200000,
     churnRate: "3.1%",
   },
   {
@@ -133,7 +144,7 @@ const paidLandingPages = [
     visitors: 9360,
     paidUsers: 460,
     paidConversion: "4.91%",
-    revenue: 10800,
+    revenue: 10800000,
     churnRate: "2.6%",
   },
   {
@@ -142,7 +153,7 @@ const paidLandingPages = [
     visitors: 8240,
     paidUsers: 318,
     paidConversion: "3.86%",
-    revenue: 7200,
+    revenue: 7200000,
     churnRate: "3.8%",
   },
 ]
@@ -233,27 +244,62 @@ export default function SubscriptionIntelligenceDashboard() {
   const { resetService, service, setService } = useDashboardServiceFilter()
   const periodMultiplier = getPeriodMultiplier(period)
   const serviceProfile = subscriptionServiceProfiles[service]
+  const trendBuckets = useMemo(
+    () =>
+      getPeriodBuckets({
+        compareMode,
+        endDate,
+        period,
+        service,
+        startDate,
+      }),
+    [compareMode, endDate, period, service, startDate]
+  )
+  const paidDelta = getCompareDelta(compareMode, "paidUsers")
+  const revenueDelta = getCompareDelta(compareMode, "revenue")
+  const churnDelta = getCompareDelta(compareMode, "churn")
 
   const growthRows = useMemo(
     () =>
-      paidUserGrowthTrend.map((row) => ({
-        ...row,
-        activePaid: scale(row.activePaid, serviceProfile.activeFactor),
-        churn: scale(row.churn, periodMultiplier * serviceProfile.churnFactor),
-        monthly: scale(row.monthly, serviceProfile.activeFactor),
-        netGrowth: scale(row.netGrowth, periodMultiplier * serviceProfile.newPaidFactor),
-        newPaid: scale(row.newPaid, periodMultiplier * serviceProfile.newPaidFactor),
-        yearly: scale(row.yearly, serviceProfile.activeFactor),
-      })),
-    [periodMultiplier, serviceProfile]
+      trendBuckets.map((bucket, index) => {
+        const row = paidUserGrowthTrend[index % paidUserGrowthTrend.length]
+        const bucketShare = bucket.share * 7
+        const activePaid = scale(
+          row.activePaid,
+          serviceProfile.activeFactor * bucket.level
+        )
+        const newPaid = scale(
+          row.newPaid,
+          serviceProfile.newPaidFactor * bucketShare * (1 + paidDelta / 420)
+        )
+        const churn = scale(
+          row.churn,
+          serviceProfile.churnFactor *
+            bucketShare *
+            (1 + Math.max(churnDelta, -4) / 100)
+        )
+
+        return {
+          ...row,
+          activePaid,
+          churn,
+          date: bucket.label,
+          monthly: scale(row.monthly, serviceProfile.activeFactor * bucket.level),
+          netGrowth: newPaid - churn,
+          newPaid,
+          previousActivePaid: compareBaseline(activePaid, paidDelta),
+          yearly: scale(row.yearly, serviceProfile.activeFactor * bucket.level),
+        }
+      }),
+    [churnDelta, paidDelta, serviceProfile, trendBuckets]
   )
 
   const acquisitionRows = useMemo(
     () =>
       paidAcquisitionSources.map((row) => {
         const bias = serviceProfile.sourceBias[row.source] ?? 1
-        const visitors = scale(row.visitors, periodMultiplier * serviceProfile.activeFactor * bias)
-        const paidUsers = scale(row.paidUsers, periodMultiplier * serviceProfile.newPaidFactor * bias)
+        const visitors = scale(row.visitors, periodMultiplier * serviceProfile.activeFactor * bias * (1 + paidDelta / 520))
+        const paidUsers = scale(row.paidUsers, periodMultiplier * serviceProfile.newPaidFactor * bias * (1 + paidDelta / 260))
         const paidConversion = (paidUsers / Math.max(visitors, 1)) * 100
         const retention = clamp(
           percentValue(row.retention) * (0.92 + serviceProfile.activeFactor * 0.08),
@@ -276,16 +322,16 @@ export default function SubscriptionIntelligenceDashboard() {
           visitors,
         }
       }),
-    [periodMultiplier, serviceProfile]
+    [paidDelta, periodMultiplier, serviceProfile]
   )
 
   const landingRows = useMemo(
     () =>
       paidLandingPages.map((row) => {
         const bias = serviceProfile.landingBias[row.landingPage] ?? 1
-        const visitors = scale(row.visitors, periodMultiplier * serviceProfile.activeFactor * bias)
-        const paidUsers = scale(row.paidUsers, periodMultiplier * serviceProfile.newPaidFactor * bias)
-        const revenue = scale(row.revenue, periodMultiplier * serviceProfile.activeFactor * bias)
+        const visitors = scale(row.visitors, periodMultiplier * serviceProfile.activeFactor * bias * (1 + paidDelta / 520))
+        const paidUsers = scale(row.paidUsers, periodMultiplier * serviceProfile.newPaidFactor * bias * (1 + paidDelta / 260))
+        const revenue = scale(row.revenue, periodMultiplier * serviceProfile.activeFactor * bias * (1 + revenueDelta / 260))
         const paidConversion = (paidUsers / Math.max(visitors, 1)) * 100
         const churnRate = clamp(
           percentValue(row.churnRate) * (1.08 - serviceProfile.activeFactor * 0.08),
@@ -302,10 +348,13 @@ export default function SubscriptionIntelligenceDashboard() {
           visitors,
         }
       }),
-    [periodMultiplier, serviceProfile]
+    [paidDelta, periodMultiplier, revenueDelta, serviceProfile]
   )
 
-  const planRows = useMemo(() => buildPlanRows(planDistribution, service), [service])
+  const planRows = useMemo(
+    () => buildPlanRows(planDistribution, service, compareMode, periodMultiplier),
+    [compareMode, periodMultiplier, service]
+  )
   const activePaidUsers = planRows.reduce((sum, row) => sum + row.activePaidUsers, 0)
   const newPaidUsers = growthRows.reduce((sum, row) => sum + row.newPaid, 0)
   const churnUsers = growthRows.reduce((sum, row) => sum + row.churn, 0)
@@ -629,7 +678,7 @@ function RevenueIntelligence({
   churnUsers: number
   failedPayments: number
   grossRevenue: number
-  growthRows: Array<GrowthRow & { newPaid: number; churn: number; netGrowth: number }>
+  growthRows: Array<GrowthRow & { newPaid: number; churn: number; netGrowth: number; previousActivePaid?: number }>
   isMounted: boolean
   netPaidGrowth: number
   newPaidUsers: number
@@ -1001,7 +1050,7 @@ function buildRevenueTabConfig({
   churnUsers: number
   failedPayments: number
   grossRevenue: number
-  growthRows: Array<GrowthRow & { newPaid: number; churn: number; netGrowth: number }>
+  growthRows: Array<GrowthRow & { newPaid: number; churn: number; netGrowth: number; previousActivePaid?: number }>
   netPaidGrowth: number
   newPaidUsers: number
   totalRefunds: number
@@ -1010,11 +1059,18 @@ function buildRevenueTabConfig({
   const revenueTrend = growthRows.map((row, index) => {
     const gross = Math.round(row.activePaid * 210.45 * (0.92 + index * 0.035))
     const refunds = Math.round(gross * (0.06 + (index % 3) * 0.006))
+    const previousGross = Math.round(
+      (row.previousActivePaid ?? row.activePaid * 0.92) *
+        210.45 *
+        (0.9 + index * 0.025)
+    )
+    const previousRefunds = Math.round(previousGross * 0.065)
 
     return {
       date: row.date,
       grossRevenue: gross,
       netRevenue: gross - refunds,
+      previousNetRevenue: previousGross - previousRefunds,
       refunds,
     }
   })
@@ -1040,7 +1096,8 @@ function buildRevenueTabConfig({
             <XAxis dataKey="date" tickLine={false} axisLine={false} />
             <YAxis tickLine={false} axisLine={false} width={72} />
             <Tooltip />
-            <Line dataKey="activePaid" name="Active Paid Users" stroke="#7c3aed" strokeWidth={3} />
+            <Line dataKey="activePaid" name="Active Paid Users" stroke="#7c3aed" strokeWidth={3} type="monotone" />
+            <Line dataKey="previousActivePaid" name="Previous Active Paid" stroke="#a78bfa" strokeDasharray="5 5" strokeWidth={2} dot={false} type="monotone" />
             <Line dataKey="newPaid" name="New Paid Users" stroke="#2563eb" strokeWidth={2.5} />
           </LineChart>
         </ResponsiveContainer>
@@ -1072,7 +1129,7 @@ function buildRevenueTabConfig({
             <XAxis dataKey="date" tickLine={false} axisLine={false} />
             <YAxis tickLine={false} axisLine={false} width={72} />
             <Tooltip />
-            <Bar dataKey="churn" name="Churn Users" fill="#ef4444" radius={[8, 8, 0, 0]} />
+            <Bar dataKey="churn" name="Churn Users" fill="#ef4444" radius={[8, 8, 0, 0]} isAnimationActive />
           </BarChart>
         </ResponsiveContainer>
       ),
@@ -1164,6 +1221,7 @@ function buildRevenueTabConfig({
           <YAxis tickLine={false} axisLine={false} width={72} />
           <Tooltip formatter={(value) => currency(Number(value))} />
           <Area dataKey="netRevenue" fill="url(#subscriptionRevenueFill)" name="Net Revenue" stroke="#7c3aed" strokeWidth={3} type="monotone" />
+          <Line dataKey="previousNetRevenue" name="Previous Net Revenue" stroke="#a78bfa" strokeDasharray="5 5" strokeWidth={2} dot={false} type="monotone" />
           <Line dataKey="grossRevenue" name="Gross Revenue" stroke="#0f172a" strokeWidth={2} dot={false} />
           <Line dataKey="refunds" name="Refunds" stroke="#0ea5e9" strokeWidth={2} dot={false} />
         </AreaChart>
@@ -1321,30 +1379,33 @@ function KeyValueGrid({ item }: { item: DrawerItem }) {
   )
 }
 
-function buildPlanRows(plans: PlanRow[], service: DashboardService) {
+function buildPlanRows(
+  plans: PlanRow[],
+  service: DashboardService,
+  compareMode: DashboardCompareMode,
+  periodMultiplier: number
+) {
+  const paidLift = getCompareDelta(compareMode, "paidUsers") / 420
+  const periodLift = (periodMultiplier - 1) * 0.016
   const focused = plans
     .filter((plan) => service === "Overall" || plan.service === service)
-    .map((plan) => {
-      const arpuMap: Record<string, number> = {
-        Basic: 183.88,
-        Growth: 333.9,
-        Professional: 112.71,
-        Pro: 420,
-        Starter: 210.38,
-      }
+    .map((plan, index) => {
+      const planName = plan.plan as CurrentPlanName
+      const planPulse = 1 + paidLift + periodLift + (index % 2 === 0 ? 0.018 : -0.01)
+      const activePaidUsers = Math.round(plan.activeSubscribers * planPulse)
       const growthMap: Record<string, string> = {
-        Basic: "-1.2%",
-        Growth: "+9.8%",
-        Professional: "-2.5%",
-        Pro: "+6.1%",
-        Starter: "+7.6%",
+        Basic: formatPercent(-1.2 + getCompareDelta(compareMode, "churn") * -0.2),
+        Growth: formatPercent(9.8 + getCompareDelta(compareMode, "paidUsers") * 0.08),
+        Professional: formatPercent(-2.5 + getCompareDelta(compareMode, "revenue") * 0.05),
+        Pro: formatPercent(6.1 + getCompareDelta(compareMode, "revenue") * 0.06),
+        Starter: formatPercent(7.6 + getCompareDelta(compareMode, "paidUsers") * 0.06),
       }
 
       return {
         plan: plan.plan,
-        activePaidUsers: plan.activeSubscribers,
-        revenue: Math.round(plan.activeSubscribers * (arpuMap[plan.plan] ?? 160)),
-        arpu: arpuMap[plan.plan] ?? 160,
+        activePaidUsers,
+        revenue: Math.round(activePaidUsers * getPlanPrice(planName)),
+        arpu: getPlanPrice(planName),
         growth: growthMap[plan.plan] ?? "+3.2%",
         churnRate: plan.churnRate,
       }
@@ -1385,11 +1446,11 @@ function ChartSkeleton() {
 }
 
 function currency(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    currency: "USD",
-    maximumFractionDigits: 0,
-    style: "currency",
-  }).format(value)
+  return formatKrw(value)
+}
+
+function formatPercent(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`
 }
 
 function parseCurrency(value: string) {

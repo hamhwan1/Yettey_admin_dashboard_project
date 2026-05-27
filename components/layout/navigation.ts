@@ -103,16 +103,6 @@ export const sidebarNavigation: Record<TopMenuKey, SidebarItem[]> = {
       title: "Revenue",
       href: "/dashboard/revenue",
       icon: TrendingUp,
-      children: [
-        {
-          title: "Yettey",
-          href: "/dashboard/revenue/yettey",
-        },
-        {
-          title: "VPICK",
-          href: "/dashboard/revenue/vpick",
-        },
-      ],
     },
   ],
   users: [

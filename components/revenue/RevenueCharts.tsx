@@ -30,6 +30,7 @@ type DailyTrendRow = {
   grossRevenue: number
   refunds: number
   netRevenue: number
+  previousNetRevenue?: number
 }
 
 type PlanBreakdownRow = {
@@ -41,6 +42,7 @@ type PlanBreakdownRow = {
 type SubscriberTrendRow = {
   date: string
   activePaidUsers: number
+  previousActivePaidUsers?: number
   newPaidUsers: number
   cancelledSubscribers: number
 }
@@ -94,9 +96,34 @@ export default function RevenueCharts({
   }, [])
 
   const planRows = useMemo(() => normalizePlanRows(planBreakdown), [planBreakdown])
+  const chartDailyTrend = useMemo(
+    () => aggregateTrendRows(dailyTrend, cadence, [
+      "grossRevenue",
+      "refunds",
+      "netRevenue",
+      "previousNetRevenue",
+    ]),
+    [cadence, dailyTrend]
+  )
+  const chartSubscriberTrend = useMemo(
+    () =>
+      aggregateTrendRows(subscriberTrend, cadence, [
+        "activePaidUsers",
+        "previousActivePaidUsers",
+        "newPaidUsers",
+        "cancelledSubscribers",
+      ]),
+    [cadence, subscriberTrend]
+  )
   const tabConfig = useMemo(
-    () => buildRevenueTabConfig(activeTab, dailyTrend, subscriberTrend, summary),
-    [activeTab, dailyTrend, subscriberTrend, summary]
+    () =>
+      buildRevenueTabConfig(
+        activeTab,
+        chartDailyTrend,
+        chartSubscriberTrend,
+        summary
+      ),
+    [activeTab, chartDailyTrend, chartSubscriberTrend, summary]
   )
 
   if (!isMounted) {
@@ -186,7 +213,9 @@ export default function RevenueCharts({
           </div>
 
           <div className="p-6">
-            <div className="h-[360px]">{tabConfig.chart}</div>
+            <div className="h-[360px]" key={`${activeTab}-${cadence}`}>
+              {tabConfig.chart}
+            </div>
           </div>
         </div>
 
@@ -277,7 +306,7 @@ export default function RevenueCharts({
           </h2>
           <div className="mt-6 h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={buildPlanTrend(planRows, dailyTrend)}>
+              <LineChart data={buildPlanTrend(planRows, chartDailyTrend)}>
                 <CartesianGrid stroke="#eef2f7" vertical={false} />
                 <XAxis dataKey="date" tickLine={false} axisLine={false} />
                 <YAxis tickLine={false} axisLine={false} width={72} />
@@ -336,7 +365,8 @@ function buildRevenueTabConfig(
             <XAxis dataKey="date" tickLine={false} axisLine={false} />
             <YAxis tickLine={false} axisLine={false} width={72} />
             <Tooltip />
-            <Line dataKey="activePaidUsers" name="Active Paid Users" stroke="#7c3aed" strokeWidth={3} />
+            <Line dataKey="activePaidUsers" name="Active Paid Users" stroke="#7c3aed" strokeWidth={3} type="monotone" />
+            <Line dataKey="previousActivePaidUsers" name="Previous Active Paid" stroke="#a78bfa" strokeDasharray="5 5" strokeWidth={2} dot={false} type="monotone" />
             <Line dataKey="newPaidUsers" name="New Paid Users" stroke="#2563eb" strokeWidth={2.5} />
           </LineChart>
         </ResponsiveContainer>
@@ -368,7 +398,7 @@ function buildRevenueTabConfig(
             <XAxis dataKey="date" tickLine={false} axisLine={false} />
             <YAxis tickLine={false} axisLine={false} width={72} />
             <Tooltip />
-            <Bar dataKey="cancelledSubscribers" name="Churn Users" fill="#ef4444" radius={[8, 8, 0, 0]} />
+            <Bar dataKey="cancelledSubscribers" name="Churn Users" fill="#ef4444" radius={[8, 8, 0, 0]} isAnimationActive />
           </BarChart>
         </ResponsiveContainer>
       ),
@@ -467,6 +497,7 @@ function buildRevenueTabConfig(
             strokeWidth={3}
             type="monotone"
           />
+          <Line dataKey="previousNetRevenue" name="Previous Net Revenue" stroke="#a78bfa" strokeDasharray="5 5" strokeWidth={2} dot={false} type="monotone" />
           <Line dataKey="grossRevenue" name="Gross Revenue" stroke="#0f172a" strokeWidth={2} dot={false} />
           <Line dataKey="refunds" name="Refunds" stroke="#0ea5e9" strokeWidth={2} dot={false} />
         </AreaChart>
@@ -490,6 +521,42 @@ function normalizePlanRows(planBreakdown: PlanBreakdownRow[]) {
   return otherRevenue > 0
     ? [...focused, { plan: "Other", revenue: otherRevenue, activePaidUsers: otherUsers }]
     : focused
+}
+
+function aggregateTrendRows<T extends { date: string }>(
+  rows: T[],
+  cadence: string,
+  numericKeys: Array<keyof T>
+) {
+  if (cadence === "Daily" || rows.length <= 4) {
+    return rows
+  }
+
+  const groupSize = cadence === "Weekly" ? 2 : Math.max(3, Math.ceil(rows.length / 4))
+  const groups: T[] = []
+
+  for (let index = 0; index < rows.length; index += groupSize) {
+    const slice = rows.slice(index, index + groupSize)
+    const base = { ...slice[slice.length - 1] }
+    const start = slice[0]?.date
+    const end = slice[slice.length - 1]?.date
+
+    numericKeys.forEach((key) => {
+      const total = slice.reduce(
+        (sum, row) => sum + Number(row[key] ?? 0),
+        0
+      )
+      ;(base as Record<string, string | number>)[String(key)] =
+        key === "activePaidUsers" || key === "previousActivePaidUsers"
+          ? Math.round(total / Math.max(slice.length, 1))
+          : Math.round(total)
+    })
+    ;(base as Record<string, string | number>).date =
+      cadence === "Weekly" ? `${start}-${end}` : end
+    groups.push(base)
+  }
+
+  return groups
 }
 
 function buildPlanTrend(planRows: PlanBreakdownRow[], dailyTrend: DailyTrendRow[]) {

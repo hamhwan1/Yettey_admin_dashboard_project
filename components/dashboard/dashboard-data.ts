@@ -42,7 +42,7 @@ export const executiveKpis: ExecutiveKpi[] = [
   },
   {
     label: "Paid Users",
-    baseValue: 52480,
+    baseValue: 14694,
     format: "number",
     delta: "+9.4%",
     deltaTone: "positive",
@@ -53,7 +53,7 @@ export const executiveKpis: ExecutiveKpi[] = [
   },
   {
     label: "MRR",
-    baseValue: 286400,
+    baseValue: 1342060000,
     format: "compactCurrency",
     delta: "+22.0%",
     deltaTone: "positive",
@@ -64,7 +64,7 @@ export const executiveKpis: ExecutiveKpi[] = [
   },
   {
     label: "ARPU / ARPPU",
-    baseValue: 54.6,
+    baseValue: 91337,
     format: "currency",
     delta: "+4.8%",
     deltaTone: "positive",
@@ -130,12 +130,12 @@ export const executiveFunnel = [
 ]
 
 export const executiveMrrTrend = [
-  { period: "W1", mrr: 212400, paidUsers: 42100, arpu: 50.4 },
-  { period: "W2", mrr: 226800, paidUsers: 43820, arpu: 51.8 },
-  { period: "W3", mrr: 241600, paidUsers: 46240, arpu: 52.3 },
-  { period: "W4", mrr: 258900, paidUsers: 48720, arpu: 53.1 },
-  { period: "W5", mrr: 272200, paidUsers: 50980, arpu: 53.4 },
-  { period: "W6", mrr: 286400, paidUsers: 52480, arpu: 54.6 },
+  { period: "W1", mrr: 1064200000, paidUsers: 12600, arpu: 84460 },
+  { period: "W2", mrr: 1126800000, paidUsers: 13140, arpu: 85753 },
+  { period: "W3", mrr: 1198400000, paidUsers: 13680, arpu: 87602 },
+  { period: "W4", mrr: 1269800000, paidUsers: 14020, arpu: 90571 },
+  { period: "W5", mrr: 1312400000, paidUsers: 14240, arpu: 92163 },
+  { period: "W6", mrr: 1342060000, paidUsers: 14694, arpu: 91337 },
 ]
 
 export const executiveRetentionCohort = [
@@ -219,25 +219,25 @@ export const analyticsBlocks = {
     href: "/dashboard/revenue",
     status: "Healthy",
     summary: [
-      { label: "MRR", value: 286400, format: "compactCurrency", delta: "+22.0%" },
-      { label: "Paid Users", value: 52480, format: "number", delta: "+9.4%" },
-      { label: "ARPU", value: 54.6, format: "currency", delta: "+4.8%" },
+      { label: "MRR", value: 1342060000, format: "compactCurrency", delta: "+22.0%" },
+      { label: "Paid Users", value: 14694, format: "number", delta: "+9.4%" },
+      { label: "ARPU", value: 91337, format: "currency", delta: "+4.8%" },
       { label: "Churn", value: 3.8, format: "percent", delta: "-0.7%" },
     ],
     trend: [
-      { period: "W1", mrr: 212400, paidUsers: 42100, arpu: 50.4 },
-      { period: "W2", mrr: 226800, paidUsers: 43820, arpu: 51.8 },
-      { period: "W3", mrr: 241600, paidUsers: 46240, arpu: 52.3 },
-      { period: "W4", mrr: 258900, paidUsers: 48720, arpu: 53.1 },
-      { period: "W5", mrr: 272200, paidUsers: 50980, arpu: 53.4 },
-      { period: "W6", mrr: 286400, paidUsers: 52480, arpu: 54.6 },
+      { period: "W1", mrr: 1064200000, paidUsers: 12600, arpu: 84460 },
+      { period: "W2", mrr: 1126800000, paidUsers: 13140, arpu: 85753 },
+      { period: "W3", mrr: 1198400000, paidUsers: 13680, arpu: 87602 },
+      { period: "W4", mrr: 1269800000, paidUsers: 14020, arpu: 90571 },
+      { period: "W5", mrr: 1312400000, paidUsers: 14240, arpu: 92163 },
+      { period: "W6", mrr: 1342060000, paidUsers: 14694, arpu: 91337 },
     ],
     plans: [
-      { plan: "Starter", subscribers: 18400, share: 35 },
-      { plan: "Growth", subscribers: 16820, share: 32 },
-      { plan: "Pro", subscribers: 9140, share: 17 },
-      { plan: "VPICK Basic", subscribers: 4860, share: 9 },
-      { plan: "VPICK Pro", subscribers: 3260, share: 7 },
+      { plan: "Starter", subscribers: 5200, share: 35 },
+      { plan: "Growth", subscribers: 4100, share: 28 },
+      { plan: "Pro", subscribers: 2400, share: 16 },
+      { plan: "VPICK Basic", subscribers: 1800, share: 12 },
+      { plan: "VPICK Professional", subscribers: 1194, share: 9 },
     ],
     related: [
       {
@@ -249,7 +249,7 @@ export const analyticsBlocks = {
       {
         label: "Upgrade Users",
         value: "1,284",
-        detail: "Starter/Basic to Growth/Pro",
+        detail: "Starter to Growth / Basic to Professional",
         share: 48,
       },
     ],
@@ -335,7 +335,7 @@ export const overviewKpis = [
   },
   {
     label: "Paid Users",
-    value: "52,480",
+    value: "14,694",
     detail: "32.1% of active users",
     insight: "Growth plan users show the strongest net paid user movement.",
     href: "/dashboard/intelligence/subscriptions",
@@ -343,7 +343,7 @@ export const overviewKpis = [
   },
   {
     label: "Revenue",
-    value: "$286.4K",
+    value: "₩1.34B",
     detail: "Open revenue analysis",
     insight: "Credit-heavy accounts are showing higher upgrade intent this period.",
     href: "/dashboard/revenue",
@@ -462,7 +462,7 @@ export const advancedFunnel = [
     dropOffRate: "24.2%",
     avgTimeToNext: "1h 12m",
     sourceComparison: "YouTube cohort exports more",
-    planComparison: "Enterprise exports fastest",
+    planComparison: "Pro exports fastest",
   },
   {
     label: "Return Visit",
@@ -475,7 +475,7 @@ export const advancedFunnel = [
   },
   {
     label: "Paid User",
-    value: 52480,
+    value: 14694,
     conversionRate: "33.5%",
     dropOffRate: "66.5%",
     avgTimeToNext: "5d",
@@ -489,7 +489,7 @@ export const advancedFunnel = [
     dropOffRate: "20.3%",
     avgTimeToNext: "30d",
     sourceComparison: "Direct users renew reliably",
-    planComparison: "Enterprise renewal strongest",
+    planComparison: "Professional renewal strongest",
   },
 ]
 
@@ -519,7 +519,7 @@ export const intelligenceDashboards = {
     thesis:
       "Paid user growth is positive, but cancellations are clustered around users who hit value friction before first export.",
     metrics: [
-      ["Active Paid Users", "52,480"],
+      ["Active Paid Users", "14,694"],
       ["Net Paid Users", "+4,180"],
       ["Churn Risk", "Medium"],
       ["Best Plan", "Growth"],
@@ -643,8 +643,8 @@ export const funnel = [
   },
   {
     label: "Paid User",
-    value: 52480,
-    rate: "33.5%",
+    value: 14694,
+    rate: "9.4%",
   },
 ]
 

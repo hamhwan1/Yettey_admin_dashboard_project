@@ -16,19 +16,18 @@ import {
   getDateRangeLabel,
   useDashboardDateRange,
 } from "@/lib/dashboard-date-store"
+import {
+  type ProductService,
+  formatKrw,
+  getPlansByProduct,
+} from "@/lib/pricing-plans"
 import { cn } from "@/lib/utils"
 
-const plans = [
-  { name: "Pro", status: "Active", createdAt: "2026-03-15", stoppedAt: "2999-01-01" },
-  { name: "Growth", status: "Active", createdAt: "2026-03-15", stoppedAt: "2999-01-01" },
-  { name: "Lite", status: "Inactive", createdAt: "2026-03-15", stoppedAt: "2026-03-15" },
-  { name: "Test Plan", status: "Inactive", createdAt: "2026-03-15", stoppedAt: "2026-03-15" },
-  { name: "Free", status: "Active", createdAt: "2026-03-15", stoppedAt: "-" },
-]
-
-type Plan = (typeof plans)[number]
+type Plan = ReturnType<typeof createBillingPlans>[number]
 
 export default function BillingPlansClient({ product }: { product: "Yettey" | "Vpick" }) {
+  const productKey: ProductService = product === "Vpick" ? "VPICK" : "Yettey"
+  const plans = useMemo(() => createBillingPlans(productKey), [productKey])
   const [status, setStatus] = useState("All")
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<Plan | null>(null)
@@ -36,7 +35,7 @@ export default function BillingPlansClient({ product }: { product: "Yettey" | "V
     useDashboardDateRange()
   const filtered = useMemo(
     () => plans.filter((plan) => status === "All" || plan.status === status),
-    [status]
+    [plans, status]
   )
   const exportPayload = useMemo(
     () => ({
@@ -65,6 +64,9 @@ export default function BillingPlansClient({ product }: { product: "Yettey" | "V
           name: "Billing Data",
           rows: filtered.map((plan) => ({
             "Plan Name": plan.name,
+            Price: formatKrw(plan.price),
+            Credits: plan.credits,
+            Limits: plan.limits.join(", "),
             Status: plan.status,
             "Created At": plan.createdAt,
             "Stopped At": plan.stoppedAt,
@@ -76,6 +78,19 @@ export default function BillingPlansClient({ product }: { product: "Yettey" | "V
   )
   const columns: DataTableColumn<Plan>[] = [
     { key: "name", header: "Plan Name", render: (plan) => <span className="font-semibold">{plan.name}</span> },
+    {
+      key: "price",
+      header: "Price",
+      render: (plan) => (
+        <span className="font-semibold text-slate-950">{formatKrw(plan.price)}</span>
+      ),
+    },
+    { key: "credits", header: "Credits", render: (plan) => plan.credits },
+    {
+      key: "limits",
+      header: "Limits",
+      render: (plan) => <span className="text-slate-600">{plan.limits.join(" / ")}</span>,
+    },
     {
       key: "status",
       header: "Status",
@@ -112,7 +127,7 @@ export default function BillingPlansClient({ product }: { product: "Yettey" | "V
           Reset All
         </button>
       </section>
-      <DataTable columns={columns} data={filtered} summary={`Showing page ${page} of 2 plan pages`} compactPagination page={page} totalPages={2} onPageChange={setPage} onRowClick={setSelected} />
+      <DataTable columns={columns} data={filtered} summary={`Showing page ${page} of 1 plan page`} compactPagination page={page} totalPages={1} onPageChange={setPage} onRowClick={setSelected} />
       <SideDrawer open={Boolean(selected)} title={`${selected?.name ?? "Plan"} detail`} description="Mock plan detail drawer" onClose={() => setSelected(null)}>
         {selected ? <div className="space-y-4">{Object.entries(selected).map(([key, value]) => <div key={key} className="rounded-xl border border-slate-100 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{key}</p><p className="mt-1 text-sm font-semibold text-slate-950">{value}</p></div>)}</div> : null}
       </SideDrawer>
@@ -122,4 +137,13 @@ export default function BillingPlansClient({ product }: { product: "Yettey" | "V
 
 function filterClass(active: boolean) {
   return cn("h-9 rounded-lg px-3 text-sm font-semibold transition hover:bg-slate-100 hover:text-slate-950", active ? "bg-violet-600 text-white shadow-sm shadow-violet-600/20 hover:bg-violet-600 hover:text-white" : "text-slate-600")
+}
+
+function createBillingPlans(product: ProductService) {
+  return getPlansByProduct(product).map((plan) => ({
+    ...plan,
+    createdAt: "2026-05-27",
+    status: "Active",
+    stoppedAt: "2999-01-01",
+  }))
 }

@@ -32,13 +32,13 @@ const visitorTrend = [
 ]
 
 const revenueTrend = [
-  { date: "D-6", revenue: 32500, newPaidUsers: 260, activePaidUsers: 12600, arpu: 38 },
-  { date: "D-5", revenue: 38400, newPaidUsers: 330, activePaidUsers: 13140, arpu: 41 },
-  { date: "D-4", revenue: 42100, newPaidUsers: 390, activePaidUsers: 13940, arpu: 44 },
-  { date: "D-3", revenue: 46800, newPaidUsers: 470, activePaidUsers: 14580, arpu: 47 },
-  { date: "D-2", revenue: 51200, newPaidUsers: 540, activePaidUsers: 15120, arpu: 49 },
-  { date: "D-1", revenue: 56800, newPaidUsers: 610, activePaidUsers: 15880, arpu: 51 },
-  { date: "Today", revenue: 62400, newPaidUsers: 690, activePaidUsers: 16420, arpu: 54 },
+  { date: "D-6", revenue: 1064200000, newPaidUsers: 260, activePaidUsers: 12600, arpu: 84460 },
+  { date: "D-5", revenue: 1126800000, newPaidUsers: 330, activePaidUsers: 13140, arpu: 85753 },
+  { date: "D-4", revenue: 1198400000, newPaidUsers: 390, activePaidUsers: 13680, arpu: 87602 },
+  { date: "D-3", revenue: 1269800000, newPaidUsers: 470, activePaidUsers: 14020, arpu: 90571 },
+  { date: "D-2", revenue: 1312400000, newPaidUsers: 540, activePaidUsers: 14240, arpu: 92163 },
+  { date: "D-1", revenue: 1334800000, newPaidUsers: 610, activePaidUsers: 14580, arpu: 91550 },
+  { date: "Today", revenue: 1342060000, newPaidUsers: 690, activePaidUsers: 14694, arpu: 91337 },
 ]
 
 const sourceQuality = [

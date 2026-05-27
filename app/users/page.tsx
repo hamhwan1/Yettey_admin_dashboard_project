@@ -25,7 +25,7 @@ const users = [
     name: "Name",
     userType: "Vpick",
     status: "Active",
-    plan: "Free",
+    plan: "Basic",
     created: "2026-03-04T13:20",
     lastActive: "2026-03-04T13:20",
   },
@@ -34,7 +34,7 @@ const users = [
     name: "Name",
     userType: "Vpick",
     status: "Active",
-    plan: "Free",
+    plan: "Professional",
     created: "2026-03-04T13:20",
     lastActive: "2026-03-04T13:20",
   },
@@ -232,7 +232,7 @@ export default function UsersPage() {
             ))}
           </FilterGroup>
           <FilterGroup label="Plan">
-            {["All Plans", "Free", "Starter", "Growth", "Pro"].map((item) => (
+            {["All Plans", "Starter", "Growth", "Pro", "Basic", "Professional"].map((item) => (
               <button key={item} className={filterClass(plan === item)} onClick={() => { setPlan(item); setPage(1) }}>
                 {item}
               </button>

@@ -41,6 +41,7 @@ import {
   type DashboardService,
   useDashboardServiceFilter,
 } from "@/lib/dashboard-service-store"
+import { formatKrw } from "@/lib/pricing-plans"
 import { cn } from "@/lib/utils"
 import { analyticsBlocks, formatNumber } from "./dashboard-data"
 
@@ -171,8 +172,8 @@ const serviceProfiles: Record<
   Yettey: {
     visitorFactor: 0.62,
     signupFactor: 0.66,
-    paidFactor: 0.71,
-    revenueFactor: 0.68,
+    paidFactor: 0.796,
+    revenueFactor: 0.938,
     conversionShift: 0.4,
     churnShift: -0.3,
     newUserShare: 24,
@@ -183,8 +184,8 @@ const serviceProfiles: Record<
   VPICK: {
     visitorFactor: 0.38,
     signupFactor: 0.34,
-    paidFactor: 0.29,
-    revenueFactor: 0.32,
+    paidFactor: 0.204,
+    revenueFactor: 0.062,
     conversionShift: -0.5,
     churnShift: 0.5,
     newUserShare: 36,
@@ -1366,14 +1367,14 @@ function createDashboardDataset({
 
   const visitors = Math.round(842390 * periodScale * serviceProfile.visitorFactor)
   const signups = Math.round(48210 * periodScale * serviceProfile.signupFactor)
-  const paidUsers = Math.round(52480 * periodScale * serviceProfile.paidFactor)
-  const mrr = Math.round(802400 * periodScale * serviceProfile.revenueFactor)
+  const paidUsers = Math.round(14694 * periodScale * serviceProfile.paidFactor)
+  const mrr = Math.round(1342060000 * periodScale * serviceProfile.revenueFactor)
   const conversionRate = clamp(
     (signups / Math.max(visitors, 1)) * 100 + serviceProfile.conversionShift,
     1.2,
     12.5
   )
-  const arpu = clamp(49.2 * serviceProfile.revenueFactor * 1.18, 22, 92)
+  const arpu = mrr / Math.max(paidUsers, 1)
   const churn = clamp(2.1 + serviceProfile.churnShift + compareProfile.churnDelta, 0.8, 6.2)
   const newUserShare = clamp(
     serviceProfile.newUserShare +
@@ -1824,27 +1825,25 @@ function buildPlanMix(
 
   if (service === "Yettey") {
     return normalizeShares([
-      { plan: "Starter", subscribers: 18400, share: 34 + monthlyDip },
-      { plan: "Growth", subscribers: 16820, share: 38 + annualLift },
-      { plan: "Pro", subscribers: 9140, share: 21 },
-      { plan: "Enterprise", subscribers: 2360, share: 7 - monthlyDip },
+      { plan: "Starter", subscribers: 5200, share: 44 + monthlyDip },
+      { plan: "Growth", subscribers: 4100, share: 35 + annualLift },
+      { plan: "Pro", subscribers: 2400, share: 21 - monthlyDip - annualLift },
     ])
   }
 
   if (service === "VPICK") {
     return normalizeShares([
-      { plan: "Basic", subscribers: 4860, share: 46 + monthlyDip },
-      { plan: "Professional", subscribers: 3260, share: 37 + annualLift },
-      { plan: "Enterprise", subscribers: 980, share: 17 - annualLift - monthlyDip },
+      { plan: "Basic", subscribers: 1800, share: 60 + monthlyDip },
+      { plan: "Professional", subscribers: 1194, share: 40 - monthlyDip },
     ])
   }
 
   return normalizeShares([
-    { plan: "Starter", subscribers: 18400, share: 31 + monthlyDip },
-    { plan: "Growth", subscribers: 16820, share: 29 + annualLift },
-    { plan: "Pro", subscribers: 9140, share: 18 },
-    { plan: "VPICK Basic", subscribers: 4860, share: 13 - annualLift },
-    { plan: "VPICK Pro", subscribers: 3260, share: 9 - monthlyDip },
+    { plan: "Starter", subscribers: 5200, share: 35 + monthlyDip },
+    { plan: "Growth", subscribers: 4100, share: 28 + annualLift },
+    { plan: "Pro", subscribers: 2400, share: 16 },
+    { plan: "VPICK Basic", subscribers: 1800, share: 12 - annualLift },
+    { plan: "VPICK Professional", subscribers: 1194, share: 9 - monthlyDip },
   ])
 }
 
@@ -1946,7 +1945,7 @@ function formatMetricValue(metric: SummaryMetric) {
   }
 
   if (metric.format === "currency" && typeof metric.value === "number") {
-    return `$${metric.value.toFixed(1)}`
+    return formatKrw(metric.value)
   }
 
   if (metric.format === "percent" && typeof metric.value === "number") {
@@ -1957,11 +1956,7 @@ function formatMetricValue(metric: SummaryMetric) {
 }
 
 function formatCompactCurrency(value: number) {
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(2)}M`
-  }
-
-  return `$${(value / 1000).toFixed(1)}K`
+  return formatKrw(value, true)
 }
 
 function compactNumber(value: number) {

@@ -20,9 +20,9 @@ import DashboardLayout from "@/components/layout/DashboardLayout"
 import {
   getCompareModeLabel,
   getDateRangeLabel,
-  getPeriodMultiplier,
   useDashboardDateRange,
 } from "@/lib/dashboard-date-store"
+import { getPlanPrice } from "@/lib/pricing-plans"
 import { cn } from "@/lib/utils"
 import RevenueCharts from "./RevenueCharts"
 import {
@@ -77,23 +77,16 @@ export default function RevenuePage({ service }: RevenuePageProps) {
   const [drawer, setDrawer] = useState<DrawerState>(null)
   const { period, startDate, endDate, compareMode, resetDateRange } =
     useDashboardDateRange()
-  const periodMultiplier = getPeriodMultiplier(period)
 
   const rows = useMemo(
     () =>
-      getRevenueRows(service).map((row) => ({
-        ...row,
-        newPaidUsers: Math.round(row.newPaidUsers * periodMultiplier),
-        activePaidUsers: Math.round(row.activePaidUsers * periodMultiplier),
-        cancelledSubscribers: Math.round(
-          row.cancelledSubscribers * periodMultiplier
-        ),
-        grossRevenue: Math.round(row.grossRevenue * periodMultiplier),
-        refunds: Math.round(row.refunds * periodMultiplier),
-        netRevenue: Math.round(row.netRevenue * periodMultiplier),
-        failedPayments: Math.round(row.failedPayments * periodMultiplier),
-      })),
-    [periodMultiplier, service]
+      getRevenueRows(service, {
+        compareMode,
+        endDate,
+        period,
+        startDate,
+      }),
+    [compareMode, endDate, period, service, startDate]
   )
 
   const summary = getRevenueSummary(rows)
@@ -112,7 +105,7 @@ export default function RevenuePage({ service }: RevenuePageProps) {
           time: `${row.date} ${["14:32", "13:18", "11:05", "10:22", "09:44", "08:30", "07:58", "07:22"][index]}`,
           user: paymentUsers[index % paymentUsers.length],
           plan: row.plan,
-          amount: Math.max(row.netRevenue, 0),
+          amount: getPlanPrice(row.plan),
           status: row.failedPayments > 7 && index % 3 === 1 ? "Failed" : "Paid",
           method: "Card",
           service: row.service,

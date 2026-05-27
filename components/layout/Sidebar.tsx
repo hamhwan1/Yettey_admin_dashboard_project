@@ -36,10 +36,7 @@ function SidebarLink({
 }) {
   const Icon = item.icon
   const hasChildren = Boolean(item.children?.length)
-  const isActive = item.href
-    ? pathname === item.href ||
-      (hasChildren && pathname.startsWith(`${item.href}/`))
-    : false
+  const isActive = isSidebarItemActive(item, pathname)
 
   return (
     <div>
@@ -73,6 +70,22 @@ function SidebarLink({
       ) : null}
     </div>
   )
+}
+
+function isSidebarItemActive(item: SidebarItem, pathname: string) {
+  if (!item.href) {
+    return false
+  }
+
+  if (pathname === item.href) {
+    return true
+  }
+
+  if (item.href === "/dashboard") {
+    return false
+  }
+
+  return pathname.startsWith(`${item.href}/`)
 }
 
 function ChildSidebarLink({
