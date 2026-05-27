@@ -17,6 +17,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import { FileText, Globe2, Tag, UserRound } from "lucide-react"
 
 import DataTable, { type DataTableColumn } from "@/components/admin/DataTable"
 import DateRangeControl from "@/components/admin/DateRangeControl"
@@ -32,6 +33,7 @@ import {
   getPeriodMultiplier,
   useDashboardDateRange,
 } from "@/lib/dashboard-date-store"
+import { cn } from "@/lib/utils"
 import {
   landingPagePerformance,
   loginProviderAnalytics,
@@ -52,8 +54,42 @@ type UtmRow = (typeof utmPerformance)[number]
 type RegionRow = (typeof regionBreakdown)[number]
 type LandingRow = (typeof landingPagePerformance)[number]
 type ProviderRow = (typeof loginProviderAnalytics)[number]
+type AcquisitionTab = "landing" | "providers" | "countries" | "utm"
 
-const chartColors = ["#7c3aed", "#2563eb", "#10b981", "#f59e0b"]
+type AcquisitionKpi = {
+  label: string
+  value: string
+  detail: string
+  tone?: "success" | "danger" | "neutral"
+}
+
+type AcquisitionTabConfig = {
+  distributionTitle: string
+  trendTitle: string
+  totalSignups: number
+  distribution: { label: string; value: number; detail: string }[]
+  series: TrendSeries[]
+  kpis: AcquisitionKpi[]
+}
+
+type TrendSeries = {
+  label: string
+  color: string
+  values: number[]
+}
+
+const acquisitionColors = ["#7c3aed", "#2563eb", "#10b981", "#f59e0b", "#ec4899"]
+
+const acquisitionTabs: {
+  id: AcquisitionTab
+  label: string
+  icon: typeof FileText
+}[] = [
+  { id: "landing", label: "Landing Pages", icon: FileText },
+  { id: "providers", label: "Login Providers", icon: UserRound },
+  { id: "countries", label: "Countries", icon: Globe2 },
+  { id: "utm", label: "UTM Campaigns", icon: Tag },
+]
 
 export default function SignupIntelligenceDashboard() {
   const [isMounted, setIsMounted] = useState(false)
@@ -422,28 +458,6 @@ export default function SignupIntelligenceDashboard() {
         </ChartCard>
 
         <ChartCard
-          title="Landing Page Conversion"
-          description="Last landing page before signup completion."
-        >
-          {isMounted ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={landingRows}>
-                <CartesianGrid stroke="#eef2f7" vertical={false} />
-                <XAxis dataKey="landingPage" tickLine={false} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} width={64} />
-                <Tooltip />
-                <Bar dataKey="signupRate" fill="#7c3aed" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="paidRate" fill="#2563eb" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <ChartSkeleton />
-          )}
-        </ChartCard>
-
-        <ProviderAnalyticsCard rows={providerRows} isMounted={isMounted} />
-
-        <ChartCard
           title="Monthly Signup Mix"
           description="Organic, paid, and referral signup growth by month."
         >
@@ -516,49 +530,15 @@ export default function SignupIntelligenceDashboard() {
         </section>
       </div>
 
-      <div className="mb-8 grid gap-8 xl:grid-cols-2">
-        <TableBlock title="Landing Page Analysis">
-          <DataTable
-            columns={landingColumns}
-            data={landingRows}
-            summary={`Showing 1 to ${landingRows.length} of ${landingRows.length} landing pages`}
-            compactPagination
-            onRowClick={(row) => setDrawer(row)}
-          />
-        </TableBlock>
-
-        <TableBlock title="Login Provider Analytics">
-          <DataTable
-            columns={providerColumns}
-            data={providerRows}
-            summary={`Showing 1 to ${providerRows.length} of ${providerRows.length} login providers`}
-            compactPagination
-            onRowClick={(row) => setDrawer(row)}
-          />
-        </TableBlock>
-      </div>
-
-      <div className="mb-8 grid gap-8 xl:grid-cols-2">
-        <TableBlock title="Country Signup Analytics">
-          <DataTable
-            columns={regionColumns}
-            data={regionRows}
-            summary={`Showing 1 to ${regionRows.length} of ${regionRows.length} countries`}
-            compactPagination
-            onRowClick={(row) => setDrawer(row)}
-          />
-        </TableBlock>
-
-        <TableBlock title="UTM / Campaign Breakdown">
-          <DataTable
-            columns={utmColumns}
-            data={utmRows}
-            summary={`Showing 1 to ${utmRows.length} of ${utmRows.length} UTM rows`}
-            compactPagination
-            onRowClick={(row) => setDrawer(row)}
-          />
-        </TableBlock>
-      </div>
+      <SignupAcquisitionModule
+        isMounted={isMounted}
+        landingRows={landingRows}
+        providerRows={providerRows}
+        regionRows={regionRows}
+        trendRows={trendRows}
+        utmRows={utmRows}
+        onRowClick={(row) => setDrawer(row)}
+      />
 
       <SideDrawer
         open={Boolean(drawer)}
@@ -585,55 +565,506 @@ export default function SignupIntelligenceDashboard() {
   )
 }
 
-function ProviderAnalyticsCard({
-  rows,
+function SignupAcquisitionModule({
   isMounted,
+  landingRows,
+  providerRows,
+  regionRows,
+  trendRows,
+  utmRows,
+  onRowClick,
 }: {
-  rows: Array<ProviderRow & { completionRate: number }>
   isMounted: boolean
+  landingRows: Array<LandingRow & { signupRate: number; paidRate: number }>
+  providerRows: Array<ProviderRow & { completionRate: number }>
+  regionRows: Array<RegionRow & { signupRate: number; paidRate: number }>
+  trendRows: typeof signupTrend
+  utmRows: UtmRow[]
+  onRowClick: (row: DrawerItem) => void
 }) {
+  const [activeTab, setActiveTab] = useState<AcquisitionTab>("landing")
+  const config = useMemo(
+    () =>
+      buildAcquisitionTabConfig({
+        activeTab,
+        landingRows,
+        providerRows,
+        regionRows,
+        trendRows,
+        utmRows,
+      }),
+    [activeTab, landingRows, providerRows, regionRows, trendRows, utmRows]
+  )
+
   return (
-    <ChartCard
-      title="Login Provider Analytics"
-      description="Signup share and signup completion by login method."
-    >
-      <div className="grid h-full gap-4 md:grid-cols-[0.95fr_1.05fr]">
-        {isMounted ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={rows} dataKey="signups" innerRadius={52} outerRadius={86} paddingAngle={3}>
-                {rows.map((row, index) => (
-                  <Cell key={row.provider} fill={chartColors[index % chartColors.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        ) : (
-          <ChartSkeleton />
-        )}
-        <div className="space-y-3 self-center">
-          {rows.map((row, index) => (
-            <div key={row.provider} className="rounded-xl border border-slate-100 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <span
-                    className="size-2 rounded-full"
-                    style={{ backgroundColor: chartColors[index % chartColors.length] }}
-                  />
-                  <p className="font-semibold text-slate-950">{row.provider}</p>
-                </div>
-                <span className="text-sm font-semibold text-slate-700">{row.share}</span>
-              </div>
-              <p className="mt-1 text-xs text-slate-500">
-                {formatNumber(row.signups)} signups / {row.signupCompletion} completion
-              </p>
-            </div>
-          ))}
+    <section className="mb-8 overflow-hidden rounded-2xl border border-violet-100 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_20px_48px_rgba(124,58,237,0.08)]">
+      <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight text-slate-950">
+            Signup Acquisition Intelligence
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Understand where signups come from across landing pages, providers, countries, and campaigns.
+          </p>
+        </div>
+        <div className="grid overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-1 sm:grid-cols-4 lg:w-auto">
+          {acquisitionTabs.map((tab) => {
+            const Icon = tab.icon
+
+            return (
+              <button
+                key={tab.id}
+                className={cn(
+                  "inline-flex h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold transition",
+                  activeTab === tab.id
+                    ? "bg-violet-600 text-white shadow-sm shadow-violet-600/20"
+                    : "text-slate-600 hover:bg-white hover:text-slate-950"
+                )}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <Icon className="size-4" />
+                {tab.label}
+              </button>
+            )
+          })}
         </div>
       </div>
-    </ChartCard>
+
+      <div className="grid gap-0 xl:grid-cols-[0.78fr_1.22fr]">
+        <div className="border-b border-slate-100 p-5 xl:border-b-0 xl:border-r">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-950">
+                {config.distributionTitle}
+              </p>
+              <p className="mt-1 text-xs font-medium text-slate-500">
+                Top records by completed signup volume.
+              </p>
+            </div>
+            <span className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-600">
+              Top {config.distribution.length}
+            </span>
+          </div>
+
+          <div className="grid gap-5 sm:grid-cols-[180px_1fr] xl:grid-cols-1 2xl:grid-cols-[180px_1fr]">
+            <div className="relative h-48">
+              {isMounted ? (
+                <>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={config.distribution}
+                        dataKey="value"
+                        innerRadius={58}
+                        outerRadius={82}
+                        paddingAngle={3}
+                      >
+                        {config.distribution.map((row, index) => (
+                          <Cell
+                            key={row.label}
+                            fill={acquisitionColors[index % acquisitionColors.length]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => formatNumber(Number(value))} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                    <span className="text-xs font-bold text-slate-500">
+                      Total
+                    </span>
+                    <span className="text-xl font-bold text-slate-950">
+                      {formatNumber(config.totalSignups)}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <ChartSkeleton />
+              )}
+            </div>
+
+            <div className="space-y-3 self-center">
+              {config.distribution.map((row, index) => (
+                <div key={row.label}>
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        className="size-2.5 shrink-0 rounded-full"
+                        style={{
+                          backgroundColor:
+                            acquisitionColors[index % acquisitionColors.length],
+                        }}
+                      />
+                      <span className="truncate font-semibold text-slate-800">
+                        {row.label}
+                      </span>
+                    </div>
+                    <span className="font-bold text-slate-950">
+                      {formatNumber(row.value)}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${(row.value / Math.max(config.totalSignups, 1)) * 100}%`,
+                        backgroundColor:
+                          acquisitionColors[index % acquisitionColors.length],
+                      }}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs font-medium text-slate-500">
+                    {row.detail}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-950">
+                {config.trendTitle}
+              </p>
+              <p className="mt-1 text-xs font-medium text-slate-500">
+                Mock trend split by current tab selection.
+              </p>
+            </div>
+            <span className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-600">
+              Last 30 Days
+            </span>
+          </div>
+          <div className="h-64">
+            {isMounted ? (
+              <MultiSeriesTrendChart series={config.series} trendRows={trendRows} />
+            ) : (
+              <ChartSkeleton />
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 border-t border-slate-100 bg-slate-50/60 p-5 md:grid-cols-2 xl:grid-cols-4">
+        {config.kpis.map((metric) => (
+          <div
+            key={metric.label}
+            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                {metric.label}
+              </p>
+              <StatusBadge tone={metric.tone ?? "success"}>{metric.detail}</StatusBadge>
+            </div>
+            <p className="mt-3 text-2xl font-bold tracking-tight text-slate-950">
+              {metric.value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="border-t border-slate-100 p-5">
+        {activeTab === "landing" ? (
+          <DataTable
+            columns={landingColumns}
+            data={landingRows}
+            summary={`Showing 1 to ${landingRows.length} of ${landingRows.length} landing pages`}
+            compactPagination
+            onRowClick={onRowClick}
+          />
+        ) : null}
+        {activeTab === "providers" ? (
+          <DataTable
+            columns={providerColumns}
+            data={providerRows}
+            summary={`Showing 1 to ${providerRows.length} of ${providerRows.length} login providers`}
+            compactPagination
+            onRowClick={onRowClick}
+          />
+        ) : null}
+        {activeTab === "countries" ? (
+          <DataTable
+            columns={regionColumns}
+            data={regionRows}
+            summary={`Showing 1 to ${regionRows.length} of ${regionRows.length} countries`}
+            compactPagination
+            onRowClick={onRowClick}
+          />
+        ) : null}
+        {activeTab === "utm" ? (
+          <DataTable
+            columns={utmColumns}
+            data={utmRows}
+            summary={`Showing 1 to ${utmRows.length} of ${utmRows.length} UTM rows`}
+            compactPagination
+            onRowClick={onRowClick}
+          />
+        ) : null}
+      </div>
+    </section>
   )
+}
+
+function MultiSeriesTrendChart({
+  series,
+  trendRows,
+}: {
+  series: TrendSeries[]
+  trendRows: typeof signupTrend
+}) {
+  const data = trendRows.map((row, index) => {
+    const point: Record<string, string | number> = { date: row.date }
+
+    series.forEach((item, seriesIndex) => {
+      point[`series${seriesIndex}`] = item.values[index] ?? 0
+    })
+
+    return point
+  })
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={data}>
+        <CartesianGrid stroke="#eef2f7" vertical={false} />
+        <XAxis dataKey="date" tickLine={false} axisLine={false} />
+        <YAxis tickLine={false} axisLine={false} width={64} />
+        <Tooltip />
+        {series.map((item, index) => (
+          <Line
+            key={item.label}
+            dataKey={`series${index}`}
+            dot={index === 0 ? { r: 3 } : false}
+            name={item.label}
+            stroke={item.color}
+            strokeWidth={index === 0 ? 3 : 2}
+            type="monotone"
+          />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
+
+function buildAcquisitionTabConfig({
+  activeTab,
+  landingRows,
+  providerRows,
+  regionRows,
+  trendRows,
+  utmRows,
+}: {
+  activeTab: AcquisitionTab
+  landingRows: Array<LandingRow & { signupRate: number; paidRate: number }>
+  providerRows: Array<ProviderRow & { completionRate: number }>
+  regionRows: Array<RegionRow & { signupRate: number; paidRate: number }>
+  trendRows: typeof signupTrend
+  utmRows: UtmRow[]
+}): AcquisitionTabConfig {
+  if (activeTab === "providers") {
+    const totalSignups = providerRows.reduce((sum, row) => sum + row.signups, 0)
+    const topProvider = maxBy(providerRows, (row) => row.signups)
+    const bestCompletion = maxBy(providerRows, (row) => row.completionRate)
+    const bestPaid = maxBy(providerRows, (row) => percentValue(row.paidConversion))
+
+    return {
+      distributionTitle: "Provider signup share",
+      trendTitle: "Signup Trend by Login Provider",
+      totalSignups,
+      distribution: providerRows.map((row) => ({
+        label: row.provider,
+        value: row.signups,
+        detail: `${row.share} share / ${row.signupCompletion} completion`,
+      })),
+      series: createSeries(
+        providerRows.map((row) => ({ label: row.provider, value: row.signups })),
+        trendRows,
+        0.13
+      ),
+      kpis: [
+        {
+          label: "Top Provider",
+          value: topProvider.provider,
+          detail: `${formatNumber(topProvider.signups)} signups`,
+        },
+        {
+          label: "Provider Share",
+          value: topProvider.share,
+          detail: "Top provider",
+        },
+        {
+          label: "Completion Rate",
+          value: bestCompletion.signupCompletion,
+          detail: bestCompletion.provider,
+        },
+        {
+          label: "Best Paid Conv.",
+          value: bestPaid.paidConversion,
+          detail: bestPaid.provider,
+        },
+      ] satisfies AcquisitionKpi[],
+    }
+  }
+
+  if (activeTab === "countries") {
+    const totalSignups = regionRows.reduce((sum, row) => sum + row.signups, 0)
+    const topCountry = maxBy(regionRows, (row) => row.signups)
+    const bestConversion = maxBy(regionRows, (row) => row.signupRate)
+    const bestPaid = maxBy(regionRows, (row) => row.paidRate)
+
+    return {
+      distributionTitle: "Country signup distribution",
+      trendTitle: "Signup Trend by Country",
+      totalSignups,
+      distribution: regionRows.map((row) => ({
+        label: row.country,
+        value: row.signups,
+        detail: `${row.region} / ${row.conversion} signup conv.`,
+      })),
+      series: createSeries(
+        regionRows.map((row) => ({ label: row.country, value: row.signups })),
+        trendRows,
+        0.16
+      ),
+      kpis: [
+        {
+          label: "Top Country",
+          value: topCountry.country,
+          detail: `${formatNumber(topCountry.signups)} signups`,
+        },
+        {
+          label: "Country Signup Conv.",
+          value: bestConversion.conversion,
+          detail: bestConversion.country,
+        },
+        {
+          label: "Regional Growth",
+          value: "+7.8%",
+          detail: "South Korea",
+        },
+        {
+          label: "Best Paid Conv.",
+          value: bestPaid.paidConversion,
+          detail: bestPaid.country,
+        },
+      ] satisfies AcquisitionKpi[],
+    }
+  }
+
+  if (activeTab === "utm") {
+    const totalSignups = utmRows.reduce((sum, row) => sum + row.signups, 0)
+    const topSource = maxBy(utmRows, (row) => row.signups)
+    const bestCampaign = maxBy(utmRows, (row) => percentValue(row.signupConversion))
+    const bestPaid = maxBy(utmRows, (row) => percentValue(row.paidConversion))
+
+    return {
+      distributionTitle: "UTM source distribution",
+      trendTitle: "Signup Trend by UTM Source",
+      totalSignups,
+      distribution: utmRows.map((row) => ({
+        label: row.utmSource,
+        value: row.signups,
+        detail: `${row.utmCampaign} / ${row.signupConversion}`,
+      })),
+      series: createSeries(
+        utmRows.map((row) => ({ label: row.utmSource, value: row.signups })),
+        trendRows,
+        0.18
+      ),
+      kpis: [
+        {
+          label: "Top UTM Source",
+          value: topSource.utmSource,
+          detail: `${formatNumber(topSource.signups)} signups`,
+        },
+        {
+          label: "Best Campaign",
+          value: bestCampaign.utmCampaign,
+          detail: bestCampaign.signupConversion,
+        },
+        {
+          label: "Paid Conversion",
+          value: bestPaid.paidConversion,
+          detail: bestPaid.utmSource,
+        },
+        {
+          label: "Total UTM Signups",
+          value: formatNumber(totalSignups),
+          detail: "+6.5%",
+        },
+      ] satisfies AcquisitionKpi[],
+    }
+  }
+
+  const totalSignups = landingRows.reduce((sum, row) => sum + row.signups, 0)
+  const topLanding = maxBy(landingRows, (row) => row.signups)
+  const bestConversion = maxBy(landingRows, (row) => row.signupRate)
+  const bestPaid = maxBy(landingRows, (row) => row.paidRate)
+
+  return {
+    distributionTitle: "Top Landing Pages",
+    trendTitle: "Signup Trend by Top Landing Pages",
+    totalSignups,
+    distribution: landingRows.map((row) => ({
+      label: row.landingPage,
+      value: row.signups,
+      detail: `${row.signupConversion} signup conv. / ${row.intent}`,
+    })),
+    series: createSeries(
+      landingRows.map((row) => ({ label: row.landingPage, value: row.signups })),
+      trendRows,
+      0.12
+    ),
+    kpis: [
+      {
+        label: "Top Landing Page",
+        value: topLanding.landingPage,
+        detail: `${formatNumber(topLanding.signups)} signups`,
+      },
+      {
+        label: "Signup Conversion",
+        value: bestConversion.signupConversion,
+        detail: bestConversion.landingPage,
+      },
+      {
+        label: "Total Signups",
+        value: formatNumber(totalSignups),
+        detail: "+18.8%",
+      },
+      {
+        label: "Avg Time to Signup",
+        value: "3m 42s",
+        detail: bestPaid.landingPage,
+      },
+    ] satisfies AcquisitionKpi[],
+  }
+}
+
+function createSeries(
+  rows: { label: string; value: number }[],
+  trendRows: typeof signupTrend,
+  wobble: number
+): TrendSeries[] {
+  const total = rows.reduce((sum, row) => sum + row.value, 0)
+
+  return rows.slice(0, 5).map((row, seriesIndex) => ({
+    label: row.label,
+    color: acquisitionColors[seriesIndex % acquisitionColors.length],
+    values: trendRows.map((point, pointIndex) => {
+      const share = row.value / Math.max(total, 1)
+      const pulse =
+        1 +
+        (pointIndex % 2 === 0 ? wobble : -wobble / 1.8) +
+        seriesIndex * 0.018
+
+      return Math.round(point.signups * share * pulse)
+    }),
+  }))
+}
+
+function maxBy<T>(rows: T[], getValue: (row: T) => number) {
+  return rows.reduce((best, row) => (getValue(row) > getValue(best) ? row : best))
 }
 
 function MetricTile({
@@ -692,21 +1123,6 @@ function ChartCard({
         <p className="mt-1 text-sm text-slate-500">{description}</p>
       </div>
       <div className="h-72">{children}</div>
-    </section>
-  )
-}
-
-function TableBlock({
-  title,
-  children,
-}: {
-  title: string
-  children: ReactNode
-}) {
-  return (
-    <section>
-      <SectionTitle title={title} />
-      {children}
     </section>
   )
 }

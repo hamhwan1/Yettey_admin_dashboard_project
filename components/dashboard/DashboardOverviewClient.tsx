@@ -88,26 +88,37 @@ type RevenueTrendPoint = {
   paidUsers: number
 }
 
-type ProductTrendPoint = {
-  period: string
-  primary: number
-  secondary: number
-}
-
 type PlanMixItem = {
   plan: string
   subscribers: number
   share: number
 }
 
-type ProductSummary = {
-  title: string
-  subtitle: string
-  href: string
-  status: string
-  metrics: SummaryMetric[]
-  trend: ProductTrendPoint[]
-  legend: { label: string; color: string; dashed?: boolean }[]
+type OperationsService = "All" | "Yettey" | "VPICK"
+
+type UsageMetric = {
+  label: string
+  value: string
+  detail: string
+  share: number
+  delta: string
+  deltaTone: DeltaTone
+  service: "Yettey" | "VPICK" | "Platform"
+}
+
+type CostCategory = {
+  label: string
+  amount: number
+  yettey: number
+  vpick: number
+  color: string
+}
+
+type OperationsSummary = {
+  usage: Record<OperationsService, UsageMetric[]>
+  cost: Record<OperationsService, CostCategory[]>
+  usageMix: Record<OperationsService, { label: string; share: number; color: string }[]>
+  totalCost: Record<OperationsService, number>
 }
 
 type DashboardDataset = {
@@ -121,8 +132,7 @@ type DashboardDataset = {
   userRelated: RelatedMetric[]
   revenueRelated: RelatedMetric[]
   planMix: PlanMixItem[]
-  yettey: ProductSummary
-  vpick: ProductSummary
+  operations: OperationsSummary
 }
 
 const chartColors = ["#7c3aed", "#3b82f6", "#10b981", "#94a3b8"]
@@ -341,8 +351,14 @@ export default function DashboardOverviewClient() {
           rows: toExportRows(dataset.revenueRelated),
         },
         { name: "Plan Distribution", rows: toExportRows(dataset.planMix) },
-        { name: "Yettey Usage Trend", rows: toExportRows(dataset.yettey.trend) },
-        { name: "VPICK Operations Trend", rows: toExportRows(dataset.vpick.trend) },
+        {
+          name: "Product Usage Overview",
+          rows: toExportRows(dataset.operations.usage.All),
+        },
+        {
+          name: "Infrastructure Cost Breakdown",
+          rows: toExportRows(dataset.operations.cost.All),
+        },
       ],
     }),
     [compareMode, dataset, endDate, service, startDate]
@@ -540,87 +556,13 @@ export default function DashboardOverviewClient() {
           }
         />
 
-        <div className="grid gap-6 xl:grid-cols-2">
-          <ProductSummaryBlock
-            title={dataset.yettey.title}
-            subtitle={dataset.yettey.subtitle}
-            href={dataset.yettey.href}
-            status={dataset.yettey.status}
-            metrics={dataset.yettey.metrics}
-            legend={dataset.yettey.legend}
-            updating={isUpdating}
-          >
-            {ready ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                  data={dataset.yettey.trend}
-                  key={`yettey-${service}-${period}-${compareMode}`}
-                >
-                  <CartesianGrid stroke="#eef2f7" vertical={false} />
-                  <XAxis dataKey="period" tickLine={false} axisLine={false} />
-                  <YAxis tickLine={false} axisLine={false} width={48} />
-                  <Tooltip />
-                  <Line
-                    dataKey="primary"
-                    dot={{ r: 3 }}
-                    stroke="#7c3aed"
-                    strokeWidth={2.5}
-                    type="monotone"
-                  />
-                  <Line
-                    dataKey="secondary"
-                    dot={false}
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    type="monotone"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <BlockSkeleton />
-            )}
-          </ProductSummaryBlock>
-
-          <ProductSummaryBlock
-            title={dataset.vpick.title}
-            subtitle={dataset.vpick.subtitle}
-            href={dataset.vpick.href}
-            status={dataset.vpick.status}
-            metrics={dataset.vpick.metrics}
-            legend={dataset.vpick.legend}
-            updating={isUpdating}
-          >
-            {ready ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                  data={dataset.vpick.trend}
-                  key={`vpick-${service}-${period}-${compareMode}`}
-                >
-                  <CartesianGrid stroke="#eef2f7" vertical={false} />
-                  <XAxis dataKey="period" tickLine={false} axisLine={false} />
-                  <YAxis tickLine={false} axisLine={false} width={48} />
-                  <Tooltip />
-                  <Line
-                    dataKey="primary"
-                    dot={{ r: 3 }}
-                    stroke="#7c3aed"
-                    strokeWidth={2.5}
-                    type="monotone"
-                  />
-                  <Line
-                    dataKey="secondary"
-                    dot={false}
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    type="monotone"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <BlockSkeleton />
-            )}
-          </ProductSummaryBlock>
-        </div>
+        <OperationsSummaryBlock
+          key={`operations-${service}`}
+          data={dataset.operations}
+          initialService={service === "Overall" ? "All" : service}
+          ready={ready}
+          updating={isUpdating}
+        />
       </div>
     </DashboardLayout>
   )
@@ -749,48 +691,336 @@ function ExecutiveAnalyticsBlock({
   )
 }
 
-function ProductSummaryBlock({
-  title,
-  subtitle,
-  href,
-  status,
-  metrics,
-  legend,
+function OperationsSummaryBlock({
+  data,
+  initialService,
+  ready,
   updating,
-  children,
 }: {
-  title: string
-  subtitle: string
-  href: string
-  status: string
-  metrics: readonly SummaryMetric[]
-  legend: readonly { label: string; color: string; dashed?: boolean }[]
+  data: OperationsSummary
+  initialService: OperationsService
+  ready: boolean
   updating: boolean
-  children: React.ReactNode
 }) {
+  const [activeService, setActiveService] = useState<OperationsService>(initialService)
+
+  const usage = data.usage[activeService]
+  const costs = data.cost[activeService]
+  const totalCost = data.totalCost[activeService]
+  const usageMix = data.usageMix[activeService]
+  const serviceCostRows = data.cost.All
+
   return (
     <section
       className={cn(
-        "group rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)] transition-all duration-150 hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-[0_2px_4px_rgba(15,23,42,0.08),0_16px_32px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-950",
+        "space-y-4",
         updating && "opacity-90"
       )}
     >
-      <BlockHeader title={title} subtitle={subtitle} status={status} href={href} />
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {metrics.map((metric) => (
-          <MetricTile key={metric.label} metric={metric} />
-        ))}
-      </div>
-      <div className="mt-5">
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-            Usage Trend
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-slate-950 dark:text-slate-50">
+            Operations Summary
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500 dark:text-slate-400">
+            Usage, service mix, and infrastructure cost structure for executive review.
           </p>
-          <ChartLegend items={legend} compact />
         </div>
-        <div className="mt-3 h-64">{children}</div>
+        <div className="flex w-full rounded-xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:w-auto">
+          {(["All", "Yettey", "VPICK"] satisfies OperationsService[]).map(
+            (service) => (
+              <button
+                key={service}
+                aria-pressed={activeService === service}
+                className={cn(
+                  "h-9 flex-1 rounded-lg px-3 text-sm font-bold transition sm:flex-none",
+                  activeService === service
+                    ? "bg-violet-600 text-white shadow-sm shadow-violet-600/20"
+                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-950 dark:hover:bg-slate-900 dark:hover:text-slate-50"
+                )}
+                onClick={() => setActiveService(service)}
+              >
+                {service}
+              </button>
+            )
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)] transition-all duration-150 hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-[0_2px_4px_rgba(15,23,42,0.08),0_16px_32px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-bold text-slate-950 dark:text-slate-50">
+                Product Usage Overview
+              </p>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Activity mix across generation, storage, projects, and teams.
+              </p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+              {activeService}
+            </span>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              Service usage mix
+            </p>
+            <div className="flex h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-900">
+              {usageMix.map((item) => (
+                <div
+                  key={item.label}
+                  className="h-full transition-all duration-300"
+                  style={{ width: `${item.share}%`, backgroundColor: item.color }}
+                  title={`${item.label}: ${item.share}%`}
+                />
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-4">
+              {usageMix.map((item) => (
+                <div key={item.label} className="flex items-center gap-2 text-xs">
+                  <span
+                    className="size-2.5 rounded-sm"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="font-bold text-slate-600 dark:text-slate-300">
+                    {item.label}
+                  </span>
+                  <span className="text-slate-500">{item.share}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            {ready ? (
+              usage.map((metric) => (
+                <UsageMetricTile key={metric.label} metric={metric} />
+              ))
+            ) : (
+              <>
+                <BlockSkeleton />
+                <BlockSkeleton />
+                <BlockSkeleton />
+                <BlockSkeleton />
+              </>
+            )}
+          </div>
+        </article>
+
+        <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)] transition-all duration-150 hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-[0_2px_4px_rgba(15,23,42,0.08),0_16px_32px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-bold text-slate-950 dark:text-slate-50">
+                Infrastructure Cost Breakdown
+              </p>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Cost distribution by category and service contribution.
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                Total cost
+              </p>
+              <AnimatedMetricValue
+                className="mt-1 text-xl font-bold text-slate-950 dark:text-slate-50"
+                value={formatCompactCurrency(totalCost)}
+              />
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-6 lg:grid-cols-[220px_1fr]">
+            <div className="relative h-56">
+              {ready ? (
+                <>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={costs}
+                        dataKey="amount"
+                        innerRadius={66}
+                        outerRadius={94}
+                        paddingAngle={3}
+                      >
+                        {costs.map((row) => (
+                          <Cell key={row.label} fill={row.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => formatCompactCurrency(Number(value))} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Cost
+                    </span>
+                    <span className="text-xl font-bold text-slate-950 dark:text-slate-50">
+                      {formatCompactCurrency(totalCost)}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <BlockSkeleton />
+              )}
+            </div>
+
+            <div className="space-y-3">
+              {ready ? (
+                costs.map((row) => (
+                  <CostCategoryRow
+                    key={row.label}
+                    row={row}
+                    total={Math.max(totalCost, 1)}
+                  />
+                ))
+              ) : (
+                <>
+                  <BlockSkeleton />
+                  <BlockSkeleton />
+                  <BlockSkeleton />
+                </>
+              )}
+            </div>
+          </div>
+
+          <PanelDivider />
+
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              Service cost distribution
+            </p>
+            <div className="mt-4 space-y-4">
+              {serviceCostRows.map((row) => (
+                <ServiceCostSplitRow
+                  key={row.label}
+                  row={row}
+                  activeService={activeService}
+                />
+              ))}
+            </div>
+          </div>
+        </article>
       </div>
     </section>
+  )
+}
+
+function UsageMetricTile({ metric }: { metric: UsageMetric }) {
+  return (
+    <div
+      className="rounded-xl border border-slate-100 bg-slate-50 p-4 transition hover:border-violet-100 hover:bg-white dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-950"
+      title={`${metric.label}: ${metric.value}. ${metric.detail}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            {metric.label}
+          </p>
+          <AnimatedMetricValue
+            className="mt-2 text-xl font-bold tracking-tight text-slate-950 dark:text-slate-50"
+            value={metric.value}
+          />
+        </div>
+        <DeltaBadge tone={metric.deltaTone}>{metric.delta}</DeltaBadge>
+      </div>
+      <p className="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+        {metric.detail}
+      </p>
+      <div className="mt-4 h-2 overflow-hidden rounded-full bg-white dark:bg-slate-950">
+        <div
+          className="h-full rounded-full bg-violet-600 transition-all duration-300"
+          style={{ width: `${metric.share}%` }}
+        />
+      </div>
+      <p className="mt-2 text-xs font-bold text-slate-500">
+        {metric.service}
+      </p>
+    </div>
+  )
+}
+
+function CostCategoryRow({
+  row,
+  total,
+}: {
+  row: CostCategory
+  total: number
+}) {
+  const share = (row.amount / total) * 100
+
+  return (
+    <div title={`${row.label}: ${formatCompactCurrency(row.amount)}`}>
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <div className="flex items-center gap-2">
+          <span
+            className="size-2.5 rounded-sm"
+            style={{ backgroundColor: row.color }}
+          />
+          <span className="font-bold text-slate-700 dark:text-slate-200">
+            {row.label}
+          </span>
+        </div>
+        <div className="text-right">
+          <span className="font-bold text-slate-950 dark:text-slate-50">
+            {formatCompactCurrency(row.amount)}
+          </span>
+          <span className="ml-2 text-xs font-semibold text-slate-500">
+            {share.toFixed(1)}%
+          </span>
+        </div>
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-900">
+        <div
+          className="h-full rounded-full transition-all duration-300"
+          style={{ width: `${share}%`, backgroundColor: row.color }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function ServiceCostSplitRow({
+  row,
+  activeService,
+}: {
+  row: CostCategory
+  activeService: OperationsService
+}) {
+  const total = Math.max(row.yettey + row.vpick, 1)
+  const yetteyShare = (row.yettey / total) * 100
+  const vpickShare = 100 - yetteyShare
+
+  return (
+    <div title={`${row.label}: Yettey ${formatCompactCurrency(row.yettey)}, VPICK ${formatCompactCurrency(row.vpick)}`}>
+      <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+        <span className="font-bold text-slate-700 dark:text-slate-200">
+          {row.label}
+        </span>
+        <span className="text-xs font-semibold text-slate-500">
+          Yettey {yetteyShare.toFixed(1)}% / VPICK {vpickShare.toFixed(1)}%
+        </span>
+      </div>
+      <div className="flex h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-900">
+        <div
+          className={cn(
+            "h-full bg-violet-600 transition-all duration-300",
+            activeService === "VPICK" && "opacity-35"
+          )}
+          style={{ width: `${yetteyShare}%` }}
+        />
+        <div
+          className={cn(
+            "h-full bg-blue-500 transition-all duration-300",
+            activeService === "Yettey" && "opacity-35"
+          )}
+          style={{ width: `${vpickShare}%` }}
+        />
+      </div>
+      <div className="mt-2 flex items-center justify-between text-xs font-semibold text-slate-500">
+        <span>Yettey {formatCompactCurrency(row.yettey)}</span>
+        <span>VPICK {formatCompactCurrency(row.vpick)}</span>
+      </div>
+    </div>
   )
 }
 
@@ -860,26 +1090,6 @@ function InlineMetrics({ metrics }: { metrics: readonly SummaryMetric[] }) {
           </div>
         </div>
       ))}
-    </div>
-  )
-}
-
-function MetricTile({ metric }: { metric: SummaryMetric }) {
-  return (
-    <div
-      className="rounded-xl border border-slate-100 bg-slate-50 p-4 transition hover:border-violet-100 hover:bg-white dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-950"
-      title={`${metric.label}: ${formatMetricValue(metric)} (${metric.delta})`}
-    >
-      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-        {metric.label}
-      </p>
-      <AnimatedMetricValue
-        className="mt-2 text-xl font-bold tracking-tight text-slate-950 dark:text-slate-50"
-        value={formatMetricValue(metric)}
-      />
-      <div className="mt-2">
-        <DeltaBadge tone={metric.deltaTone}>{metric.delta}</DeltaBadge>
-      </div>
     </div>
   )
 }
@@ -1384,121 +1594,254 @@ function createDashboardDataset({
     userRelated,
     revenueRelated,
     planMix: buildPlanMix(service, compareMode),
-    yettey: buildYetteySummary(periodConfig.labels, shape, periodScale, serviceProfile, compareProfile),
-    vpick: buildVpickSummary(periodConfig.labels, shape, periodScale, serviceProfile, compareProfile),
+    operations: buildOperationsSummary(periodScale, serviceProfile, compareProfile),
   }
 }
 
-function buildYetteySummary(
-  labels: string[],
-  shape: number[],
+function buildOperationsSummary(
   periodScale: number,
   serviceProfile: (typeof serviceProfiles)[DashboardService],
   compareProfile: (typeof compareProfiles)[DashboardCompareMode]
-): ProductSummary {
-  const focus = serviceProfile.yetteyFocus
-  const storage = 8.2 * focus * Math.min(periodScale, 3.4)
-  const generations = Math.round(684920 * periodScale * focus)
-  const teams = Math.round(1284 * focus)
-  const projects = Math.round(19284 * periodScale * focus)
+): OperationsSummary {
+  const scale = clamp(periodScale, 0.2, 4.2)
+  const yetteyFocus = serviceProfile.yetteyFocus
+  const vpickFocus = serviceProfile.vpickFocus
+  const yetteyUsageWeight = 58 * yetteyFocus
+  const vpickUsageWeight = 42 * vpickFocus
+  const yetteyShare = Math.round(
+    clamp(
+      (yetteyUsageWeight / Math.max(yetteyUsageWeight + vpickUsageWeight, 1)) * 100,
+      18,
+      84
+    )
+  )
+  const vpickShare = 100 - yetteyShare
+
+  const yetteyUsage: UsageMetric[] = [
+    {
+      label: "AI Generation",
+      value: compactNumber(Math.round(684920 * scale * yetteyFocus)),
+      detail: "Image generation and editing jobs",
+      share: clamp(76 + compareProfile.signupDelta / 2, 42, 92),
+      delta: formatPercent(compareProfile.signupDelta + 17.8),
+      deltaTone: toneFromDelta(compareProfile.signupDelta + 17.8),
+      service: "Yettey",
+    },
+    {
+      label: "Storage Usage",
+      value: `${(8.2 * Math.min(scale, 3.4) * yetteyFocus).toFixed(1)} TB`,
+      detail: "DAM storage and project assets",
+      share: clamp(68 + compareProfile.visitorDelta / 3, 38, 94),
+      delta: formatPercent(compareProfile.visitorDelta * 0.6),
+      deltaTone: toneFromDelta(compareProfile.visitorDelta),
+      service: "Yettey",
+    },
+    {
+      label: "Active Projects",
+      value: formatNumber(Math.round(19284 * scale * yetteyFocus)),
+      detail: "Projects opened or updated",
+      share: clamp(62 + compareProfile.visitorDelta / 4, 32, 88),
+      delta: formatPercent(compareProfile.visitorDelta * 0.82),
+      deltaTone: toneFromDelta(compareProfile.visitorDelta),
+      service: "Yettey",
+    },
+    {
+      label: "Active Teams",
+      value: formatNumber(Math.round(1284 * yetteyFocus)),
+      detail: "Teams with at least one workspace action",
+      share: clamp(56 + compareProfile.paidDelta / 5, 28, 84),
+      delta: formatPercent(compareProfile.paidDelta * 0.25),
+      deltaTone: toneFromDelta(compareProfile.paidDelta),
+      service: "Yettey",
+    },
+    {
+      label: "DAM Assets",
+      value: compactNumber(Math.round(318400 * scale * yetteyFocus)),
+      detail: "Uploaded and generated assets",
+      share: clamp(64 + compareProfile.mrrDelta / 3, 34, 90),
+      delta: formatPercent(compareProfile.mrrDelta * 0.7),
+      deltaTone: toneFromDelta(compareProfile.mrrDelta),
+      service: "Yettey",
+    },
+    {
+      label: "Collaboration",
+      value: compactNumber(Math.round(82400 * scale * yetteyFocus)),
+      detail: "Comments, invites, and shared project actions",
+      share: clamp(52 + compareProfile.conversionDelta * 6, 24, 80),
+      delta: formatPercent(compareProfile.conversionDelta * 3.4),
+      deltaTone: toneFromDelta(compareProfile.conversionDelta),
+      service: "Yettey",
+    },
+  ]
+
+  const vpickUsage: UsageMetric[] = [
+    {
+      label: "Video Analysis",
+      value: formatNumber(Math.round(156840 * scale * vpickFocus)),
+      detail: "Completed video analysis runs",
+      share: clamp(70 + compareProfile.visitorDelta / 4, 36, 92),
+      delta: formatPercent(compareProfile.visitorDelta + 1.4),
+      deltaTone: toneFromDelta(compareProfile.visitorDelta + 1.4),
+      service: "VPICK",
+    },
+    {
+      label: "Shortform Generation",
+      value: formatNumber(Math.round(52480 * scale * vpickFocus)),
+      detail: "Generated shortform outputs",
+      share: clamp(62 + compareProfile.signupDelta / 2, 30, 86),
+      delta: formatPercent(compareProfile.signupDelta + 10.8),
+      deltaTone: toneFromDelta(compareProfile.signupDelta + 10.8),
+      service: "VPICK",
+    },
+    {
+      label: "Credit Consumption",
+      value: `${(8.2 * scale * vpickFocus).toFixed(1)}M`,
+      detail: "Credits consumed by processing jobs",
+      share: clamp(78 + compareProfile.paidDelta / 4, 42, 96),
+      delta: formatPercent(compareProfile.paidDelta * 0.52),
+      deltaTone: toneFromDelta(compareProfile.paidDelta),
+      service: "VPICK",
+    },
+    {
+      label: "Processing Time",
+      value: formatDuration(
+        clamp(138 - (vpickFocus - 1) * 14 + compareProfile.churnDelta * 8, 104, 196)
+      ),
+      detail: "Average job completion time",
+      share: clamp(66 - compareProfile.churnDelta * 8, 34, 86),
+      delta: compareProfile.churnDelta > 0 ? "+12s" : "-14s",
+      deltaTone: compareProfile.churnDelta > 0 ? "negative" : "positive",
+      service: "VPICK",
+    },
+    {
+      label: "Upload Conversion",
+      value: `${clamp(42.6 + compareProfile.conversionDelta * 1.8, 24, 68).toFixed(1)}%`,
+      detail: "Uploads that reach analysis start",
+      share: clamp(58 + compareProfile.conversionDelta * 5, 30, 86),
+      delta: formatPoints(compareProfile.conversionDelta),
+      deltaTone: toneFromDelta(compareProfile.conversionDelta),
+      service: "VPICK",
+    },
+    {
+      label: "Retry Jobs",
+      value: formatNumber(Math.round(4360 * scale * vpickFocus)),
+      detail: "Jobs that required retry processing",
+      share: clamp(22 + compareProfile.churnDelta * 10, 8, 48),
+      delta: compareProfile.churnDelta > 0 ? "+2.1%" : "-1.4%",
+      deltaTone: compareProfile.churnDelta > 0 ? "negative" : "positive",
+      service: "VPICK",
+    },
+  ]
+
+  const allUsage: UsageMetric[] = [
+    yetteyUsage[0],
+    vpickUsage[0],
+    vpickUsage[1],
+    yetteyUsage[1],
+    yetteyUsage[2],
+    yetteyUsage[3],
+  ].map((metric) => ({
+    ...metric,
+    service: metric.service,
+  }))
+
+  const costRows = scaleCostRows(
+    [
+      {
+        label: "AI API Cost",
+        yettey: 19921 * yetteyFocus,
+        vpick: 22394 * vpickFocus,
+        color: "#7c3aed",
+      },
+      {
+        label: "GPU Server Cost",
+        yettey: 10285 * yetteyFocus,
+        vpick: 28357 * vpickFocus,
+        color: "#2563eb",
+      },
+      {
+        label: "Video Processing Cost",
+        yettey: 1245 * yetteyFocus,
+        vpick: 18231 * vpickFocus,
+        color: "#10b981",
+      },
+      {
+        label: "Storage Cost",
+        yettey: 15842 * yetteyFocus,
+        vpick: 405 * vpickFocus,
+        color: "#f59e0b",
+      },
+      {
+        label: "CDN Cost",
+        yettey: 1928 * yetteyFocus,
+        vpick: 4884 * vpickFocus,
+        color: "#06b6d4",
+      },
+      {
+        label: "Other",
+        yettey: 2141 * yetteyFocus,
+        vpick: 1684 * vpickFocus,
+        color: "#94a3b8",
+      },
+    ],
+    scale
+  )
+
+  const yetteyCosts = costRows.map((row) => ({ ...row, amount: row.yettey }))
+  const vpickCosts = costRows.map((row) => ({ ...row, amount: row.vpick }))
+  const allTotal = sumCost(costRows, "amount")
+  const yetteyTotal = sumCost(costRows, "yettey")
+  const vpickTotal = sumCost(costRows, "vpick")
 
   return {
-    title: "Yettey Summary",
-    subtitle: "Storage, DAM depth, generation activity, team collaboration, and projects.",
-    href: analyticsBlocks.yettey.href,
-    status: focus > 1.1 ? "Leading" : focus < 0.7 ? "Reference" : "Healthy",
-    metrics: [
-      {
-        label: "Storage Usage",
-        value: `${storage.toFixed(1)} TB`,
-        delta: formatPercent(compareProfile.visitorDelta * 0.6),
-        deltaTone: toneFromDelta(compareProfile.visitorDelta),
-      },
-      {
-        label: "AI Generation",
-        value: compactNumber(generations),
-        delta: formatPercent(compareProfile.signupDelta + 17.8),
-        deltaTone: toneFromDelta(compareProfile.signupDelta + 17.8),
-      },
-      {
-        label: "Active Teams",
-        value: formatNumber(teams),
-        delta: formatPercent(compareProfile.paidDelta * 0.25),
-        deltaTone: toneFromDelta(compareProfile.paidDelta),
-      },
-      {
-        label: "Project Activity",
-        value: formatNumber(projects),
-        delta: formatPercent(compareProfile.visitorDelta * 0.82),
-        deltaTone: toneFromDelta(compareProfile.visitorDelta),
-      },
-    ],
-    trend: labels.map((label, index) => ({
-      period: label,
-      primary: levelSeries(generations, shape)[index],
-      secondary: levelSeries(projects, wobble(shape, 0.08))[index],
-    })),
-    legend: [
-      { label: "AI Generation", color: "#7c3aed" },
-      { label: "Projects", color: "#3b82f6" },
-    ],
+    usage: {
+      All: allUsage,
+      Yettey: yetteyUsage,
+      VPICK: vpickUsage,
+    },
+    cost: {
+      All: costRows,
+      Yettey: yetteyCosts,
+      VPICK: vpickCosts,
+    },
+    usageMix: {
+      All: [
+        { label: "Yettey", share: yetteyShare, color: "#7c3aed" },
+        { label: "VPICK", share: vpickShare, color: "#2563eb" },
+      ],
+      Yettey: [{ label: "Yettey", share: 100, color: "#7c3aed" }],
+      VPICK: [{ label: "VPICK", share: 100, color: "#2563eb" }],
+    },
+    totalCost: {
+      All: allTotal,
+      Yettey: yetteyTotal,
+      VPICK: vpickTotal,
+    },
   }
 }
 
-function buildVpickSummary(
-  labels: string[],
-  shape: number[],
-  periodScale: number,
-  serviceProfile: (typeof serviceProfiles)[DashboardService],
-  compareProfile: (typeof compareProfiles)[DashboardCompareMode]
-): ProductSummary {
-  const focus = serviceProfile.vpickFocus
-  const analysis = Math.round(156840 * periodScale * focus)
-  const shortform = Math.round(52480 * periodScale * focus)
-  const credits = 8.2 * periodScale * focus
-  const processing = clamp(138 - (focus - 1) * 14 + compareProfile.churnDelta * 8, 104, 196)
+function scaleCostRows(
+  rows: readonly Omit<CostCategory, "amount">[],
+  scale: number
+): CostCategory[] {
+  return rows.map((row) => {
+    const yettey = Math.round(row.yettey * scale)
+    const vpick = Math.round(row.vpick * scale)
 
-  return {
-    title: "VPICK Summary",
-    subtitle: "Video analysis, shortform generation, credit consumption, and processing latency.",
-    href: analyticsBlocks.vpick.href,
-    status: focus > 1.1 ? "Scaling" : focus < 0.7 ? "Reference" : "Healthy",
-    metrics: [
-      {
-        label: "Video Analysis",
-        value: formatNumber(analysis),
-        delta: formatPercent(compareProfile.visitorDelta + 1.4),
-        deltaTone: toneFromDelta(compareProfile.visitorDelta + 1.4),
-      },
-      {
-        label: "Shortform Gen.",
-        value: formatNumber(shortform),
-        delta: formatPercent(compareProfile.signupDelta + 10.8),
-        deltaTone: toneFromDelta(compareProfile.signupDelta + 10.8),
-      },
-      {
-        label: "Credit Usage",
-        value: `${credits.toFixed(1)}M`,
-        delta: formatPercent(compareProfile.paidDelta * 0.52),
-        deltaTone: toneFromDelta(compareProfile.paidDelta),
-      },
-      {
-        label: "Processing Time",
-        value: formatDuration(processing),
-        delta: compareProfile.churnDelta > 0 ? "+12s" : "-14s",
-        deltaTone: compareProfile.churnDelta > 0 ? "negative" : "positive",
-      },
-    ],
-    trend: labels.map((label, index) => ({
-      period: label,
-      primary: levelSeries(analysis, shape)[index],
-      secondary: levelSeries(shortform, wobble(shape, 0.12))[index],
-    })),
-    legend: [
-      { label: "Video Analysis", color: "#7c3aed" },
-      { label: "Shortform", color: "#3b82f6" },
-    ],
-  }
+    return {
+      ...row,
+      yettey,
+      vpick,
+      amount: yettey + vpick,
+    }
+  })
+}
+
+function sumCost(
+  rows: readonly CostCategory[],
+  key: "amount" | "yettey" | "vpick"
+) {
+  return rows.reduce((acc, row) => acc + row[key], 0)
 }
 
 function buildPlanMix(
