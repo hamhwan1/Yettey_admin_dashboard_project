@@ -2,8 +2,6 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -17,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { FileText, Globe2, Tag, UserRound } from "lucide-react"
+import { ArrowRight, CheckCircle2, FileText, Globe2, Tag, UserRound } from "lucide-react"
 
 import DataTable, { type DataTableColumn } from "@/components/admin/DataTable"
 import DateRangeControl from "@/components/admin/DateRangeControl"
@@ -37,19 +35,14 @@ import { cn } from "@/lib/utils"
 import {
   landingPagePerformance,
   loginProviderAnalytics,
-  monthlySignupAnalytics,
   regionBreakdown,
-  signupConversionDrivers,
-  signupFunnel,
   signupSourceBreakdown,
-  signupTrafficGroups,
   signupTrend,
   utmPerformance,
 } from "./signup-data"
 
 type DrawerItem = Record<string, string | number>
 
-type SourceRow = (typeof signupSourceBreakdown)[number]
 type UtmRow = (typeof utmPerformance)[number]
 type RegionRow = (typeof regionBreakdown)[number]
 type LandingRow = (typeof landingPagePerformance)[number]
@@ -165,31 +158,12 @@ export default function SignupIntelligenceDashboard() {
     [periodMultiplier]
   )
 
-  const monthlyRows = useMemo(
-    () =>
-      monthlySignupAnalytics.map((row) => ({
-        ...row,
-        signups: scale(row.signups, periodMultiplier),
-        organic: scale(row.organic, periodMultiplier),
-        paid: scale(row.paid, periodMultiplier),
-        referral: scale(row.referral, periodMultiplier),
-      })),
-    [periodMultiplier]
-  )
-
-  const trafficGroupRows = useMemo(
-    () =>
-      signupTrafficGroups.map((row) => ({
-        ...row,
-        visitors: scale(row.visitors, periodMultiplier),
-        signups: scale(row.signups, periodMultiplier),
-      })),
-    [periodMultiplier]
-  )
-
   const totalSignups = sourceRows.reduce((sum, row) => sum + row.signups, 0)
   const totalVisitors = sourceRows.reduce((sum, row) => sum + row.visitors, 0)
   const signupConversion = (totalSignups / Math.max(totalVisitors, 1)) * 100
+  const signupPageEntered = Math.round(totalSignups / 0.705)
+  const visitorToEntered = (signupPageEntered / Math.max(totalVisitors, 1)) * 100
+  const enteredToCompleted = (totalSignups / Math.max(signupPageEntered, 1)) * 100
   const organicSignups = sourceRows
     .filter((row) => row.group === "Organic")
     .reduce((sum, row) => sum + row.signups, 0)
@@ -205,12 +179,49 @@ export default function SignupIntelligenceDashboard() {
   const bestProvider = providerRows.reduce((best, row) =>
     row.signups > best.signups ? row : best
   )
+  const funnelSteps = useMemo(
+    () => [
+      {
+        label: "Landing Page Visitors",
+        value: totalVisitors,
+        rate: "100%",
+        note: "Entry traffic",
+        tone: "violet",
+      },
+      {
+        label: "Signup Page Entered",
+        value: signupPageEntered,
+        rate: `${visitorToEntered.toFixed(1)}%`,
+        note: `${(100 - visitorToEntered).toFixed(1)}% drop-off`,
+        tone: "blue",
+      },
+      {
+        label: "Signup Completed",
+        value: totalSignups,
+        rate: `${enteredToCompleted.toFixed(1)}%`,
+        note: `${(100 - enteredToCompleted).toFixed(1)}% drop-off`,
+        tone: "green",
+      },
+    ],
+    [enteredToCompleted, signupPageEntered, totalSignups, totalVisitors, visitorToEntered]
+  )
+  const sourceChartRows = useMemo(
+    () =>
+      sourceRows
+        .map((row) => ({
+          source: row.source,
+          signupRate: row.signupRate,
+          signups: row.signups,
+        }))
+        .sort((a, b) => b.signupRate - a.signupRate),
+    [sourceRows]
+  )
 
   const exportPayload = useMemo(
     () => ({
       title: "Signup Conversion Intelligence Report",
       subtitle:
-        "Signup conversion report covering trend, source quality, landing pages, login providers, countries, UTM, and funnel drop-off.",
+        "Signup acquisition and conversion report covering source, landing page, provider, country, UTM, and funnel performance.",
       filename: "signup-conversion-intelligence-report",
       filters: {
         "Date range": getDateRangeLabel(startDate, endDate),
@@ -268,9 +279,7 @@ export default function SignupIntelligenceDashboard() {
         { name: "Login Provider Analytics", rows: providerRows },
         { name: "Country Signup Analytics", rows: regionRows },
         { name: "UTM Performance", rows: utmRows },
-        { name: "Organic vs Paid", rows: trafficGroupRows },
-        { name: "Monthly Signup Analytics", rows: monthlyRows },
-        { name: "Conversion Funnel", rows: signupFunnel },
+        { name: "Signup Funnel", rows: funnelSteps },
       ],
     }),
     [
@@ -279,15 +288,14 @@ export default function SignupIntelligenceDashboard() {
       bestSource,
       compareMode,
       endDate,
+      funnelSteps,
       landingRows,
-      monthlyRows,
       providerRows,
       regionRows,
       signupConversion,
       sourceRows,
       startDate,
       totalSignups,
-      trafficGroupRows,
       trendRows,
       utmRows,
     ]
@@ -318,216 +326,119 @@ export default function SignupIntelligenceDashboard() {
       </section>
 
       <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
-        <div className="grid gap-0 xl:grid-cols-[0.88fr_1.12fr]">
+        <div className="grid divide-y divide-slate-100 md:grid-cols-5 md:divide-x md:divide-y-0">
+          <SummaryMetric
+            delta="+0.6pp"
+            label="Signup Conversion"
+            value={`${signupConversion.toFixed(2)}%`}
+          />
+          <SummaryMetric
+            label="Total Signups"
+            subtext={`vs ${getCompareModeLabel(compareMode).toLowerCase()}`}
+            value={formatNumber(totalSignups)}
+          />
+          <SummaryMetric
+            delta="+8.3%"
+            label="Organic Signups"
+            subtext={`${((organicSignups / Math.max(totalSignups, 1)) * 100).toFixed(1)}% of total`}
+            value={formatNumber(organicSignups)}
+          />
+          <SummaryMetric
+            delta="+6.1%"
+            label="Paid Signups"
+            subtext={`${((paidSignups / Math.max(totalSignups, 1)) * 100).toFixed(1)}% of total`}
+            value={formatNumber(paidSignups)}
+          />
+          <SummaryMetric
+            label="Top Provider"
+            subtext={`${bestProvider.share} share`}
+            value={bestProvider.provider}
+          />
+        </div>
+      </section>
+
+      <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
+        <div className="grid gap-0 xl:grid-cols-[1.22fr_0.78fr]">
           <div className="border-b border-slate-100 p-6 xl:border-b-0 xl:border-r">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  Signup Conversion
-                </p>
-                <div className="mt-3 flex flex-wrap items-end gap-3">
-                  <p className="text-5xl font-bold tracking-tight text-slate-950">
-                    {signupConversion.toFixed(2)}%
-                  </p>
-                  <StatusBadge tone="success">+0.6pp</StatusBadge>
+            <h2 className="text-xl font-semibold tracking-tight text-slate-950">
+              Signup Funnel Overview
+            </h2>
+            <div className="mt-6 grid items-center gap-4 lg:grid-cols-[1fr_auto_1fr_auto_1fr]">
+              {funnelSteps.map((step, index) => (
+                <div key={step.label} className="contents">
+                  <FunnelStepCard step={step} />
+                  {index < funnelSteps.length - 1 ? (
+                    <div className="hidden items-center justify-center lg:flex">
+                      <ArrowRight className="size-6 text-violet-500" />
+                    </div>
+                  ) : null}
                 </div>
-                <p className="mt-2 text-sm text-slate-500">
-                  Compared with {getCompareModeLabel(compareMode).toLowerCase()}.
-                </p>
-              </div>
-              <StatusBadge tone="success">Healthy</StatusBadge>
-            </div>
-
-            <div className="mt-8 grid gap-3 sm:grid-cols-2">
-              <MetricTile
-                label="Completed Signups"
-                value={formatNumber(totalSignups)}
-                detail={`${formatNumber(totalVisitors)} visitors`}
-              />
-              <MetricTile
-                label="Organic Signups"
-                value={formatNumber(organicSignups)}
-                detail={`${((organicSignups / Math.max(totalSignups, 1)) * 100).toFixed(1)}% share`}
-              />
-              <MetricTile
-                label="Paid Signups"
-                value={formatNumber(paidSignups)}
-                detail={`${((paidSignups / Math.max(totalSignups, 1)) * 100).toFixed(1)}% share`}
-              />
-              <MetricTile
-                label="Top Provider"
-                value={bestProvider.provider}
-                detail={`${bestProvider.share} signup share`}
-              />
-            </div>
-
-            <div className="mt-8 space-y-3">
-              <DriverRow
-                label="Top source"
-                value={bestSource.source}
-                detail={`${bestSource.signupConversion} signup conversion`}
-              />
-              <DriverRow
-                label="Top landing page"
-                value={bestLanding.landingPage}
-                detail={`${bestLanding.signupConversion} signup conversion`}
-              />
-              <DriverRow
-                label="Weakest source"
-                value="Unknown"
-                detail="Attribution cleanup needed"
-                tone="danger"
-              />
+              ))}
             </div>
           </div>
 
           <div className="p-6">
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-950">
-                  Signup Trend
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Visitors, signup starts, completed signups, and paid users over time.
-                </p>
-              </div>
-            </div>
-            <div className="h-[340px]">
-              {isMounted ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={trendRows}>
-                    <CartesianGrid stroke="#eef2f7" vertical={false} />
-                    <XAxis dataKey="date" tickLine={false} axisLine={false} />
-                    <YAxis yAxisId="count" tickLine={false} axisLine={false} width={70} />
-                    <YAxis
-                      yAxisId="rate"
-                      orientation="right"
-                      tickLine={false}
-                      axisLine={false}
-                      width={48}
-                    />
-                    <Tooltip />
-                    <Line yAxisId="count" dataKey="visitors" stroke="#0f172a" strokeWidth={2} dot={false} />
-                    <Line yAxisId="count" dataKey="signupStarted" stroke="#94a3b8" strokeWidth={2} dot={false} />
-                    <Line yAxisId="count" dataKey="signups" stroke="#7c3aed" strokeWidth={3} />
-                    <Line yAxisId="count" dataKey="paidUsers" stroke="#10b981" strokeWidth={2} />
-                    <Line yAxisId="rate" dataKey="signupConversion" stroke="#f59e0b" strokeWidth={2} />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <ChartSkeleton />
-              )}
+            <h3 className="text-sm font-semibold text-slate-950">
+              Funnel Conversion Rate
+            </h3>
+            <div className="mt-6 space-y-6">
+              <ConversionBar
+                label="Visitor -> Entered"
+                value={visitorToEntered}
+              />
+              <ConversionBar
+                label="Entered -> Completed"
+                value={enteredToCompleted}
+              />
+              <ConversionBar
+                label="Visitor -> Completed"
+                value={signupConversion}
+              />
             </div>
           </div>
         </div>
-
-        <div className="grid gap-0 border-t border-slate-100 md:grid-cols-3">
-          {signupConversionDrivers.map((driver) => (
-            <div key={driver.title} className="border-b border-slate-100 p-5 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-semibold text-slate-950">{driver.title}</p>
-                <StatusBadge tone={driver.tone === "negative" ? "danger" : "success"}>
-                  {driver.metric}
-                </StatusBadge>
-              </div>
-              <p className="mt-2 text-sm leading-6 text-slate-500">{driver.detail}</p>
-            </div>
-          ))}
-        </div>
       </section>
 
-      <div className="mb-8 grid gap-6 xl:grid-cols-2">
+      <div className="mb-8 grid gap-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)] xl:grid-cols-[1.1fr_0.9fr]">
         <ChartCard
-          title="Source Conversion"
-          description="Signup and paid conversion by acquisition source."
+          flush
+          title="Signup Trend"
         >
           {isMounted ? (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={sourceRows}>
+              <LineChart data={trendRows}>
                 <CartesianGrid stroke="#eef2f7" vertical={false} />
-                <XAxis dataKey="source" tickLine={false} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} width={56} />
+                <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                <YAxis tickLine={false} axisLine={false} width={72} />
                 <Tooltip />
-                <Bar dataKey="signupRate" fill="#7c3aed" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="paidRate" fill="#10b981" radius={[8, 8, 0, 0]} />
+                <Line dataKey="visitors" name="Visitors" stroke="#7c3aed" strokeWidth={2.5} dot={false} />
+                <Line dataKey="signupStarted" name="Signup Page Entered" stroke="#2563eb" strokeWidth={2.5} dot={false} />
+                <Line dataKey="signups" name="Signup Completed" stroke="#10b981" strokeWidth={3} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <ChartSkeleton />
+          )}
+        </ChartCard>
+
+        <ChartCard
+          flush
+          title="Signup by Source"
+        >
+          {isMounted ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={sourceChartRows} layout="vertical" margin={{ left: 16 }}>
+                <CartesianGrid stroke="#eef2f7" horizontal={false} />
+                <XAxis type="number" tickFormatter={(value) => `${value}%`} tickLine={false} axisLine={false} />
+                <YAxis dataKey="source" type="category" tickLine={false} axisLine={false} width={104} />
+                <Tooltip />
+                <Bar dataKey="signupRate" name="Signup Conversion" fill="#9f7aea" radius={[0, 8, 8, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
             <ChartSkeleton />
           )}
         </ChartCard>
-
-        <ChartCard
-          title="Monthly Signup Mix"
-          description="Organic, paid, and referral signup growth by month."
-        >
-          {isMounted ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monthlyRows}>
-                <CartesianGrid stroke="#eef2f7" vertical={false} />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} width={72} />
-                <Tooltip />
-                <Area dataKey="organic" stackId="1" stroke="#10b981" fill="#d1fae5" />
-                <Area dataKey="paid" stackId="1" stroke="#7c3aed" fill="#ede9fe" />
-                <Area dataKey="referral" stackId="1" stroke="#f59e0b" fill="#fef3c7" />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : (
-            <ChartSkeleton />
-          )}
-        </ChartCard>
-      </div>
-
-      <div className="mb-8 grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-        <section>
-          <SectionTitle
-            title="Source Detail"
-            description="Source-level visitors, signups, signup conversion, paid conversion, and retention."
-          />
-          <DataTable
-            columns={sourceColumns}
-            data={sourceRows}
-            summary={`Showing 1 to ${sourceRows.length} of ${sourceRows.length} source rows`}
-            compactPagination
-            onRowClick={(row) => setDrawer(row)}
-          />
-        </section>
-
-        <section>
-          <SectionTitle
-            title="Conversion Flow"
-            description="Visitor to signup start to signup completed."
-          />
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-            <div className="space-y-5">
-              {signupFunnel.map((step, index) => (
-                <div key={step.stage}>
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="font-semibold text-slate-950">{step.stage}</p>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {formatNumber(scale(step.value, periodMultiplier))} users
-                      </p>
-                    </div>
-                    <StatusBadge tone={index === 0 ? "success" : "neutral"}>
-                      {step.conversion}
-                    </StatusBadge>
-                  </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full bg-violet-600"
-                      style={{ width: step.conversion }}
-                    />
-                  </div>
-                  <p className="mt-2 text-xs font-medium text-slate-500">
-                    Drop-off: {step.dropOff}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
       </div>
 
       <SignupAcquisitionModule
@@ -604,7 +515,7 @@ function SignupAcquisitionModule({
             Signup Acquisition Intelligence
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Understand where signups come from across landing pages, providers, countries, and campaigns.
+            Landing, provider, country, and campaign performance in one module.
           </p>
         </div>
         <div className="grid overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-1 sm:grid-cols-4 lg:w-auto">
@@ -638,7 +549,7 @@ function SignupAcquisitionModule({
                 {config.distributionTitle}
               </p>
               <p className="mt-1 text-xs font-medium text-slate-500">
-                Top records by completed signup volume.
+                Completed signup volume and conversion quality.
               </p>
             </div>
             <span className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-600">
@@ -729,7 +640,7 @@ function SignupAcquisitionModule({
                 {config.trendTitle}
               </p>
               <p className="mt-1 text-xs font-medium text-slate-500">
-                Mock trend split by current tab selection.
+                Conversion movement by selected acquisition dimension.
               </p>
             </div>
             <span className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-600">
@@ -1067,78 +978,114 @@ function maxBy<T>(rows: T[], getValue: (row: T) => number) {
   return rows.reduce((best, row) => (getValue(row) > getValue(best) ? row : best))
 }
 
-function MetricTile({
+function SummaryMetric({
+  delta,
   label,
+  subtext,
   value,
-  detail,
 }: {
+  delta?: string
   label: string
+  subtext?: string
   value: string
-  detail: string
 }) {
   return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
-      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-bold tracking-tight text-slate-950">{value}</p>
-      <p className="mt-1 text-sm text-slate-500">{detail}</p>
+    <div className="p-6">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <p className="text-3xl font-bold tracking-tight text-slate-950">
+          {value}
+        </p>
+        {delta ? <StatusBadge tone="success">{delta}</StatusBadge> : null}
+      </div>
+      {subtext ? <p className="mt-3 text-sm font-medium text-slate-500">{subtext}</p> : null}
     </div>
   )
 }
 
-function DriverRow({
-  label,
-  value,
-  detail,
-  tone = "success",
+function FunnelStepCard({
+  step,
 }: {
-  label: string
-  value: string
-  detail: string
-  tone?: "success" | "danger"
+  step: {
+    label: string
+    value: number
+    rate: string
+    note: string
+    tone: string
+  }
 }) {
+  const toneClass =
+    step.tone === "green"
+      ? "border-emerald-100 bg-emerald-50/30 text-emerald-600"
+      : step.tone === "blue"
+        ? "border-blue-100 bg-blue-50/30 text-blue-600"
+        : "border-violet-100 bg-violet-50/40 text-violet-600"
+
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-100 p-4">
-      <div>
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
-        <p className="mt-1 font-semibold text-slate-950">{value}</p>
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className={cn("mb-6 flex size-10 items-center justify-center rounded-xl border", toneClass)}>
+        <CheckCircle2 className="size-5" />
       </div>
-      <StatusBadge tone={tone}>{detail}</StatusBadge>
+      <p className="text-sm font-semibold text-slate-950">{step.label}</p>
+      <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
+        {formatNumber(step.value)}
+      </p>
+      <div className="mt-5 flex items-center justify-between text-sm">
+        <span className="font-bold text-violet-600">{step.rate}</span>
+        <span className="text-slate-500">{step.note}</span>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className="h-full rounded-full bg-violet-600"
+          style={{ width: step.rate }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function ConversionBar({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between text-sm">
+        <span className="font-semibold text-slate-700">{label}</span>
+        <span className="font-bold text-slate-950">{value.toFixed(2)}%</span>
+      </div>
+      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className="h-full rounded-full bg-violet-600"
+          style={{ width: `${Math.min(value, 100)}%` }}
+        />
+      </div>
     </div>
   )
 }
 
 function ChartCard({
+  flush = false,
   title,
-  description,
   children,
 }: {
+  flush?: boolean
   title: string
-  description: string
   children: ReactNode
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+    <section
+      className={cn(
+        "bg-white p-6",
+        flush
+          ? "border-b border-slate-100 xl:border-b-0 xl:border-r xl:last:border-r-0"
+          : "rounded-2xl border border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]"
+      )}
+    >
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
-        <p className="mt-1 text-sm text-slate-500">{description}</p>
       </div>
       <div className="h-72">{children}</div>
     </section>
-  )
-}
-
-function SectionTitle({
-  title,
-  description,
-}: {
-  title: string
-  description?: string
-}) {
-  return (
-    <div className="mb-4">
-      <h2 className="text-xl font-semibold text-slate-950">{title}</h2>
-      {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
-    </div>
   )
 }
 
@@ -1153,24 +1100,6 @@ function percentValue(value: string) {
 function scale(value: number, multiplier: number) {
   return Math.round(value * multiplier)
 }
-
-const sourceColumns: DataTableColumn<SourceRow & { signupRate: number; paidRate: number }>[] = [
-  {
-    key: "source",
-    header: "Source",
-    render: (row) => <span className="font-semibold">{row.source}</span>,
-  },
-  { key: "group", header: "Group", render: (row) => row.group },
-  { key: "visitors", header: "Visitors", render: (row) => formatNumber(row.visitors) },
-  { key: "signups", header: "Signups", render: (row) => formatNumber(row.signups) },
-  {
-    key: "signupConversion",
-    header: "Signup Conv.",
-    render: (row) => <span className="font-semibold text-violet-600">{row.signupConversion}</span>,
-  },
-  { key: "paidConversion", header: "Paid Conv.", render: (row) => row.paidConversion },
-  { key: "retention", header: "Retention", render: (row) => row.retention },
-]
 
 const landingColumns: DataTableColumn<LandingRow & { signupRate: number; paidRate: number }>[] = [
   {
