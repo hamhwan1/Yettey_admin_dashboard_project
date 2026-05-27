@@ -76,6 +76,7 @@ type TopSummaryMetric = {
 type UserTrendPoint = {
   period: string
   visitors: number
+  previousVisitors: number
   signups: number
   paidUsers: number
 }
@@ -83,6 +84,7 @@ type UserTrendPoint = {
 type RevenueTrendPoint = {
   period: string
   mrr: number
+  previousMrr: number
   paidUsers: number
 }
 
@@ -105,7 +107,7 @@ type ProductSummary = {
   status: string
   metrics: SummaryMetric[]
   trend: ProductTrendPoint[]
-  legend: { label: string; color: string }[]
+  legend: { label: string; color: string; dashed?: boolean }[]
 }
 
 type DashboardDataset = {
@@ -424,6 +426,14 @@ export default function DashboardOverviewClient() {
                     type="monotone"
                   />
                   <Line
+                    dataKey="previousVisitors"
+                    dot={false}
+                    stroke="#a78bfa"
+                    strokeDasharray="5 5"
+                    strokeWidth={2}
+                    type="monotone"
+                  />
+                  <Line
                     dataKey="signups"
                     dot={{ r: 3 }}
                     stroke="#3b82f6"
@@ -444,7 +454,8 @@ export default function DashboardOverviewClient() {
             )
           }
           legend={[
-            { label: "Visitors", color: "#7c3aed" },
+            { label: "Current visitors", color: "#7c3aed" },
+            { label: "Previous visitors", color: "#a78bfa", dashed: true },
             { label: "Signups", color: "#3b82f6" },
             { label: "Paid Users", color: "#10b981" },
           ]}
@@ -496,6 +507,14 @@ export default function DashboardOverviewClient() {
                     type="monotone"
                   />
                   <Line
+                    dataKey="previousMrr"
+                    dot={false}
+                    stroke="#a78bfa"
+                    strokeDasharray="5 5"
+                    strokeWidth={2}
+                    type="monotone"
+                  />
+                  <Line
                     dataKey="paidUsers"
                     dot={false}
                     stroke="#0f172a"
@@ -508,7 +527,10 @@ export default function DashboardOverviewClient() {
               <BlockSkeleton />
             )
           }
-          legend={[{ label: "MRR", color: "#7c3aed" }]}
+          legend={[
+            { label: "Current MRR", color: "#7c3aed" },
+            { label: "Previous MRR", color: "#a78bfa", dashed: true },
+          ]}
           updating={isUpdating}
           sidePanel={
             <RevenueSidePanel
@@ -699,7 +721,7 @@ function ExecutiveAnalyticsBlock({
   status: string
   href: string
   summary: readonly SummaryMetric[]
-  legend: readonly { label: string; color: string }[]
+  legend: readonly { label: string; color: string; dashed?: boolean }[]
   chart: React.ReactNode
   sidePanel: React.ReactNode
   updating: boolean
@@ -742,7 +764,7 @@ function ProductSummaryBlock({
   href: string
   status: string
   metrics: readonly SummaryMetric[]
-  legend: readonly { label: string; color: string }[]
+  legend: readonly { label: string; color: string; dashed?: boolean }[]
   updating: boolean
   children: React.ReactNode
 }) {
@@ -866,7 +888,7 @@ function ChartLegend({
   items,
   compact = false,
 }: {
-  items: readonly { label: string; color: string }[]
+  items: readonly { label: string; color: string; dashed?: boolean }[]
   compact?: boolean
 }) {
   return (
@@ -879,8 +901,15 @@ function ChartLegend({
       {items.map((item) => (
         <div key={item.label} className="flex items-center gap-2">
           <span
-            className="size-2.5 rounded-full"
-            style={{ backgroundColor: item.color }}
+            className={cn(
+              "inline-block h-2.5 rounded-full",
+              item.dashed ? "w-5 border-t-2 border-dashed bg-transparent" : "w-2.5"
+            )}
+            style={
+              item.dashed
+                ? { borderTopColor: item.color }
+                : { backgroundColor: item.color }
+            }
           />
           <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
             {item.label}
@@ -1176,10 +1205,13 @@ function createDashboardDataset({
   const retention = serviceProfile.retention.map((value) =>
     Math.round(clamp(value + compareProfile.retentionShift, 8, 82))
   ) as [number, number, number]
+  const previousVisitors = previousPeriodValue(visitors, compareProfile.visitorDelta)
+  const previousMrr = previousPeriodValue(mrr, compareProfile.mrrDelta)
 
   const userTrend = periodConfig.labels.map((label, index) => ({
     period: label,
     visitors: distribute(visitors, shape)[index],
+    previousVisitors: distribute(previousVisitors, periodConfig.shape)[index],
     signups: distribute(signups, wobble(shape, 0.09))[index],
     paidUsers: distribute(paidUsers, wobble(shape, 0.16))[index],
   }))
@@ -1187,6 +1219,7 @@ function createDashboardDataset({
   const revenueTrend = periodConfig.labels.map((label, index) => ({
     period: label,
     mrr: levelSeries(mrr, shape)[index],
+    previousMrr: levelSeries(previousMrr, periodConfig.shape)[index],
     paidUsers: levelSeries(paidUsers, wobble(shape, 0.11))[index],
   }))
 
@@ -1542,6 +1575,10 @@ function levelSeries(total: number, shape: number[]) {
   const last = shape[shape.length - 1] || 1
 
   return shape.map((value) => Math.round(total * (value / last)))
+}
+
+function previousPeriodValue(current: number, deltaPercent: number) {
+  return Math.round(current / (1 + deltaPercent / 100))
 }
 
 function wobble(shape: number[], strength: number) {

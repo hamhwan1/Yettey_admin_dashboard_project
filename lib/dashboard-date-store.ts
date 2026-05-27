@@ -18,7 +18,7 @@ export const periodOptions: { label: string; value: DashboardPeriod }[] = [
 ]
 
 export const compareOptions: { label: string; value: DashboardCompareMode }[] = [
-  { label: "Compare previous period", value: "previous-period" },
+  { label: "Previous Period", value: "previous-period" },
   { label: "Same period last month", value: "same-period-last-month" },
   { label: "Same period last year", value: "same-period-last-year" },
 ]

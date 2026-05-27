@@ -1,9 +1,10 @@
 "use client"
 
-import { CalendarDays } from "lucide-react"
+import { CalendarDays, ChevronDown } from "lucide-react"
 
 import {
   compareOptions,
+  type DashboardCompareMode,
   getCompareModeLabel,
   getDateRangeLabel,
   periodOptions,
@@ -29,7 +30,7 @@ export default function DateRangeControl({
   if (compact) {
     return (
       <div className="space-y-4">
-        <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
           <div>
             <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
               Period
@@ -49,19 +50,12 @@ export default function DateRangeControl({
 
           <div>
             <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-              Compare
+              Comparison
             </p>
-            <div className="flex flex-wrap gap-2">
-              {compareOptions.map((option) => (
-                <button
-                  key={option.value}
-                  className={filterClass(compareMode === option.value)}
-                  onClick={() => setCompareMode(option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            <CompareSelect
+              value={compareMode}
+              onChange={(value) => setCompareMode(value)}
+            />
           </div>
         </div>
 
@@ -84,14 +78,14 @@ export default function DateRangeControl({
           <CalendarDays className="size-4 text-violet-600" />
           <span>{getDateRangeLabel(startDate, endDate)}</span>
           <span className="text-slate-400">/</span>
-          <span>{getCompareModeLabel(compareMode)}</span>
+          <span>Compared to {getCompareModeLabel(compareMode).toLowerCase()}</span>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr_1fr]">
+    <div className="grid gap-6 xl:grid-cols-[1.3fr_1fr_260px]">
       <div>
         <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
           Period
@@ -129,19 +123,12 @@ export default function DateRangeControl({
 
       <div>
         <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-          Compare
+          Comparison
         </p>
-        <div className="flex flex-wrap gap-2">
-          {compareOptions.map((option) => (
-            <button
-              key={option.value}
-              className={filterClass(compareMode === option.value)}
-              onClick={() => setCompareMode(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        <CompareSelect
+          value={compareMode}
+          onChange={(value) => setCompareMode(value)}
+        />
       </div>
 
       <div className="xl:col-span-3">
@@ -149,7 +136,7 @@ export default function DateRangeControl({
           <CalendarDays className="size-4 text-violet-600" />
           <span>{getDateRangeLabel(startDate, endDate)}</span>
           <span className="text-slate-400">/</span>
-          <span>{getCompareModeLabel(compareMode)}</span>
+          <span>Compared to {getCompareModeLabel(compareMode).toLowerCase()}</span>
         </div>
       </div>
     </div>
@@ -174,6 +161,32 @@ function DateInput({
         onChange={(event) => onChange(event.target.value)}
         className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 focus:border-violet-500 focus:outline-none focus:ring-4 focus:ring-violet-500/10"
       />
+    </label>
+  )
+}
+
+function CompareSelect({
+  value,
+  onChange,
+}: {
+  value: DashboardCompareMode
+  onChange: (value: DashboardCompareMode) => void
+}) {
+  return (
+    <label className="relative block">
+      <span className="sr-only">Comparison</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value as DashboardCompareMode)}
+        className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-10 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 focus:border-violet-500 focus:outline-none focus:ring-4 focus:ring-violet-500/10"
+      >
+        {compareOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
     </label>
   )
 }
