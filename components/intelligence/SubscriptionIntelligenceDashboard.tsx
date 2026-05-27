@@ -20,7 +20,6 @@ import DateRangeControl from "@/components/admin/DateRangeControl"
 import ExportActions from "@/components/admin/ExportActions"
 import PageHeader from "@/components/admin/PageHeader"
 import SideDrawer from "@/components/admin/SideDrawer"
-import StatCard from "@/components/admin/StatCard"
 import StatusBadge from "@/components/admin/StatusBadge"
 import { formatNumber } from "@/components/dashboard/dashboard-data"
 import DashboardLayout from "@/components/layout/DashboardLayout"
@@ -54,47 +53,43 @@ export default function SubscriptionIntelligenceDashboard() {
   const [drawer, setDrawer] = useState<DrawerItem | null>(null)
   const { period, startDate, endDate, compareMode } = useDashboardDateRange()
   const periodMultiplier = getPeriodMultiplier(period)
-  const activePaidUsers = Math.round(
-    planDistribution.reduce((sum, row) => sum + row.activeSubscribers, 0) *
-      periodMultiplier
-  )
+  const currentGrowthSnapshot =
+    paidUserGrowthTrend[paidUserGrowthTrend.length - 1]
+  const activePaidUsers = currentGrowthSnapshot.activePaid
   const newPaidUsers = Math.round(
     paidUserGrowthTrend.reduce((sum, row) => sum + row.newPaid, 0) *
       periodMultiplier
   )
   const monthlySubscribers = Math.round(
-    planDistribution.reduce((sum, row) => sum + row.monthly, 0) *
-      periodMultiplier
+    planDistribution.reduce((sum, row) => sum + row.monthly, 0)
   )
   const yearlySubscribers = Math.round(
-    planDistribution.reduce((sum, row) => sum + row.yearly, 0) *
-      periodMultiplier
+    planDistribution.reduce((sum, row) => sum + row.yearly, 0)
   )
   const churnUsers = Math.round(
     paidUserGrowthTrend.reduce((sum, row) => sum + row.churn, 0) *
       periodMultiplier
   )
-  const netPaidGrowth = Math.round(
-    paidUserGrowthTrend.reduce((sum, row) => sum + row.netGrowth, 0) *
-      periodMultiplier
-  )
+  const netPaidGrowth = newPaidUsers - churnUsers
   const topUpgradeFlow = upgradeDowngradeFlows[0]
-  const bestSource = paidAcquisitionSources[0]
-  const planRows = planDistribution.map((row) => ({
-    ...row,
-    activeSubscribers: Math.round(row.activeSubscribers * periodMultiplier),
-    monthly: Math.round(row.monthly * periodMultiplier),
-    yearly: Math.round(row.yearly * periodMultiplier),
-  }))
-  const acquisitionRows = paidAcquisitionSources.map((row) => ({
-    ...row,
-    paidUsers: Math.round(row.paidUsers * periodMultiplier),
-  }))
+  const planRows = planDistribution
+  const acquisitionRows = useMemo(
+    () =>
+      paidAcquisitionSources.map((row) => ({
+        ...row,
+        visitors: Math.round(row.visitors * periodMultiplier),
+        paidUsers: Math.round(row.paidUsers * periodMultiplier),
+      })),
+    [periodMultiplier]
+  )
+  const bestSource = acquisitionRows.reduce((best, row) =>
+    row.paidUsers > best.paidUsers ? row : best
+  )
   const exportPayload = useMemo(
     () => ({
       title: "Subscription Intelligence Report",
       subtitle:
-        "Paid conversion, acquisition quality, plan distribution, upgrade flow, lifecycle, behavior, and revenue intelligence report.",
+        "Subscription analytics report with metric definitions, paid acquisition, plan distribution, upgrade flow, lifecycle, behavior, and churn data.",
       filename: "subscription-intelligence-report",
       filters: {
         "Date range": getDateRangeLabel(startDate, endDate),
@@ -103,7 +98,7 @@ export default function SubscriptionIntelligenceDashboard() {
       kpis: [
         { label: "Active Paid Users", value: formatNumber(activePaidUsers), detail: "Current paid subscriber base" },
         { label: "New Paid Users", value: formatNumber(newPaidUsers), detail: "New paid conversions" },
-        { label: "Net Paid Growth", value: formatNumber(netPaidGrowth), detail: "New paid minus churn" },
+        { label: "Net Paid Growth", value: formatNumber(netPaidGrowth), detail: `${formatNumber(newPaidUsers)} - ${formatNumber(churnUsers)}` },
         { label: "Monthly Subscribers", value: formatNumber(monthlySubscribers), detail: "Monthly plans" },
         { label: "Yearly Subscribers", value: formatNumber(yearlySubscribers), detail: "Annual plans" },
         { label: "Churn Users", value: formatNumber(churnUsers), detail: "Cancelled paid users" },
@@ -173,8 +168,8 @@ export default function SubscriptionIntelligenceDashboard() {
           { label: "Subscriptions" },
         ]}
         eyebrow="Revenue Intelligence"
-        title="Subscription Intelligence Dashboard"
-        description="Analyze paid user acquisition, conversion timing, upgrades, retention, payment behavior, and subscription lifecycle."
+        title="Subscription Analytics Dashboard"
+        description="Subscription, payment, churn, plan, upgrade, and lifecycle metrics with explicit calculation rules."
         actions={<ExportActions payload={exportPayload} />}
       />
 
@@ -183,53 +178,70 @@ export default function SubscriptionIntelligenceDashboard() {
       </section>
 
       <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <StatCard
+        <MetricDefinitionCard
           label="Active Paid Users"
           value={formatNumber(activePaidUsers)}
-          detail="+9.4% vs baseline"
-          insight="Growth plan users are driving the strongest active paid expansion."
-          href="/dashboard/intelligence/subscriptions?metric=active-paid-users"
-          ctaLabel="View active paid detail"
+          description="현재 활성 구독 상태 유지 사용자"
+          calculation={[
+            "active subscription",
+            "payment valid",
+            "canceled/refunded 제외",
+          ]}
         />
-        <StatCard
+        <MetricDefinitionCard
           label="New Paid Users"
           value={formatNumber(newPaidUsers)}
-          detail="New paid conversions"
-          insight="Most paid conversions happen between D1 and D7 after signup."
-          href="/dashboard/intelligence/subscriptions?metric=new-paid-users"
-          ctaLabel="Open conversion timeline"
+          description="선택 기간 내 첫 유료 결제 사용자"
+          calculation={["free -> paid", "trial -> paid 포함"]}
         />
-        <StatCard
+        <MetricDefinitionCard
           label="Net Paid Growth"
           value={formatNumber(netPaidGrowth)}
-          detail="New paid minus churn"
-          insight="Net paid growth remains positive despite a small churn spike."
-          href="/dashboard/intelligence/subscriptions?metric=net-paid-growth"
-          ctaLabel="View net growth"
+          description="신규 유료 가입 - 이탈 사용자"
+          calculation={[
+            `${formatNumber(newPaidUsers)} 신규 유료 가입`,
+            `${formatNumber(churnUsers)} churn`,
+            `= +${formatNumber(netPaidGrowth)}`,
+          ]}
         />
-        <StatCard
-          label="Best Paid Source"
-          value={bestSource.source}
-          detail={`${bestSource.paidConversion} paid conversion`}
-          insight="YouTube users convert better and retain longer than paid ad cohorts."
-          href="/dashboard/intelligence/acquisition/youtube"
-          ctaLabel="Open source detail"
+        <MetricDefinitionCard
+          label="Monthly Subscribers"
+          value={formatNumber(monthlySubscribers)}
+          description="월간 결제 주기 활성 구독자"
+          calculation={["billing_cycle = monthly", "active subscription"]}
         />
-        <StatCard
-          label="Top Upgrade Flow"
-          value={topUpgradeFlow.flow}
-          detail={`${topUpgradeFlow.avgTiming} avg timing`}
-          insight="Users who export more than 10 assets upgrade 2.4x more frequently."
-          href="/dashboard/intelligence/subscriptions?metric=upgrade-flow"
-          ctaLabel="View upgrade flow"
+        <MetricDefinitionCard
+          label="Yearly Subscribers"
+          value={formatNumber(yearlySubscribers)}
+          description="연간 결제 주기 활성 구독자"
+          calculation={["billing_cycle = yearly", "active subscription"]}
         />
-        <StatCard
+        <MetricDefinitionCard
           label="Churn Users"
           value={formatNumber(churnUsers)}
-          detail="Cancelled paid subscribers"
-          insight="Paid Ads cohorts churn faster than referral and YouTube cohorts."
-          href="/dashboard/intelligence/subscriptions?metric=churn"
-          ctaLabel="Open churn analysis"
+          description="선택 기간 내 유료 구독 이탈 사용자"
+          calculation={["cancelled subscription", "expired unpaid", "refund-only 제외"]}
+        />
+      </div>
+
+      <div className="mb-8 grid gap-4 xl:grid-cols-2">
+        <DataFactCard
+          title="Highest Paid Acquisition Source"
+          primary={bestSource.source}
+          rows={[
+            ["Visitors", formatNumber(bestSource.visitors)],
+            ["Paid Users", formatNumber(bestSource.paidUsers)],
+            ["Paid Conversion", bestSource.paidConversion],
+          ]}
+        />
+        <DataFactCard
+          title="Top Upgrade Flow"
+          primary={topUpgradeFlow.flow}
+          rows={[
+            ["Upgrade Users", `${formatNumber(topUpgradeFlow.users)} users`],
+            ["Average Upgrade Timing", topUpgradeFlow.avgTiming],
+            ["Revenue Impact", topUpgradeFlow.revenueImpact],
+          ]}
         />
       </div>
 
@@ -379,23 +391,6 @@ export default function SubscriptionIntelligenceDashboard() {
         </TableBlock>
       </div>
 
-      <section className="rounded-2xl border border-violet-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <p className="text-xs font-bold uppercase tracking-wide text-violet-600">
-          Subscription Intelligence Insights
-        </p>
-        <div className="mt-4 grid gap-4 xl:grid-cols-3">
-          {[
-            "Users who export more than 10 assets upgrade 2.4x more frequently.",
-            "VPICK users who complete first AI generation upgrade earlier than browse-only users.",
-            "Referral and YouTube cohorts retain longer, while Paid Ads users churn faster.",
-          ].map((insight) => (
-            <div key={insight} className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm font-semibold leading-6 text-slate-800">
-              {insight}
-            </div>
-          ))}
-        </div>
-      </section>
-
       <SideDrawer
         open={Boolean(drawer)}
         title={drawer ? String(Object.values(drawer)[0]) : "Subscription detail"}
@@ -441,6 +436,75 @@ function ChartCard({
   )
 }
 
+function MetricDefinitionCard({
+  label,
+  value,
+  description,
+  calculation,
+}: {
+  label: string
+  value: string
+  description: string
+  calculation: string[]
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_10px_24px_rgba(15,23,42,0.04)]">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
+        {value}
+      </p>
+      <p className="mt-2 text-sm text-slate-600">{description}</p>
+      <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50 p-4">
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+          Calculation
+        </p>
+        <ul className="mt-3 space-y-2 text-sm text-slate-700">
+          {calculation.map((item) => (
+            <li key={item} className="flex gap-2">
+              <span className="mt-2 size-1.5 rounded-full bg-slate-400" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  )
+}
+
+function DataFactCard({
+  title,
+  primary,
+  rows,
+}: {
+  title: string
+  primary: string
+  rows: [string, string][]
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+        {title}
+      </p>
+      <p className="mt-3 text-2xl font-bold tracking-tight text-slate-950">
+        {primary}
+      </p>
+      <div className="mt-5 divide-y divide-slate-100 rounded-xl border border-slate-100">
+        {rows.map(([label, value]) => (
+          <div
+            key={label}
+            className="flex items-center justify-between gap-4 px-4 py-3 text-sm"
+          >
+            <span className="text-slate-500">{label}</span>
+            <span className="font-semibold text-slate-950">{value}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function TableBlock({
   title,
   children,
@@ -460,6 +524,7 @@ const acquisitionColumns: DataTableColumn<AcquisitionRow>[] = [
   { key: "source", header: "Source", render: (row) => <span className="font-semibold">{row.source}</span> },
   { key: "group", header: "Group", render: (row) => row.group },
   { key: "utmCampaign", header: "Campaign", render: (row) => row.utmCampaign },
+  { key: "visitors", header: "Visitors", render: (row) => formatNumber(row.visitors) },
   { key: "paidUsers", header: "Paid Users", render: (row) => formatNumber(row.paidUsers) },
   { key: "paidConversion", header: "Paid Conv.", render: (row) => <span className="font-semibold text-violet-600">{row.paidConversion}</span> },
   { key: "churnRate", header: "Churn", render: (row) => row.churnRate },
