@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   Cell,
   Line,
@@ -15,8 +17,20 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import {
+  AlertTriangle,
+  BarChart3,
+  ChartPie,
+  DollarSign,
+  FileText,
+  Megaphone,
+  RefreshCcw,
+  Target,
+  TrendingUp,
+  UserPlus,
+  Users,
+} from "lucide-react"
 
-import DataTable, { type DataTableColumn } from "@/components/admin/DataTable"
 import DateRangeControl from "@/components/admin/DateRangeControl"
 import ExportActions from "@/components/admin/ExportActions"
 import PageHeader from "@/components/admin/PageHeader"
@@ -36,47 +50,48 @@ import {
   paidConversionTimeline,
   paidUserGrowthTrend,
   planDistribution,
-  upgradeDowngradeFlows,
 } from "./subscription-data"
 
 type DrawerItem = Record<string, string | number>
+type GrowthRow = (typeof paidUserGrowthTrend)[number]
 type AcquisitionRow = (typeof paidAcquisitionSources)[number]
 type PlanRow = (typeof planDistribution)[number]
-type AcquisitionTab = "source" | "campaign" | "landing"
+type RevenueTab = "revenue" | "paidUsers" | "churn" | "conversion"
+type CompositionTab = "plans" | "sources" | "campaigns" | "landing"
 
-type SummaryMetric = {
+type RecentPayment = {
+  time: string
+  user: string
+  plan: string
+  amount: number
+  status: "Paid" | "Failed"
+  method: string
+}
+
+type TableColumn<T extends DrawerItem> = {
+  header: string
+  render: (row: T) => ReactNode
+}
+
+const chartColors = ["#7c3aed", "#2563eb", "#10b981", "#f59e0b", "#94a3b8"]
+const priorityPlans = ["Starter", "Growth", "Pro"]
+
+const revenueTabs: { id: RevenueTab; label: string; icon: typeof BarChart3 }[] = [
+  { id: "revenue", label: "Revenue", icon: TrendingUp },
+  { id: "paidUsers", label: "Paid Users", icon: Users },
+  { id: "churn", label: "Churn", icon: RefreshCcw },
+  { id: "conversion", label: "Conversion", icon: Target },
+]
+
+const compositionTabs: {
+  id: CompositionTab
   label: string
-  value: string
-  delta: string
-  tone: "success" | "danger" | "neutral"
-  detail: string
-  sparkline: number[]
-}
-
-type AcquisitionKpi = {
-  label: string
-  value: string
-  detail: string
-  tone?: "success" | "danger" | "neutral"
-}
-
-type AcquisitionTabConfig = {
-  title: string
-  description: string
-  totalPaidUsers: number
-  rows: DrawerItem[]
-  columns: DataTableColumn<DrawerItem>[]
-  distribution: { label: string; value: number; detail: string }[]
-  kpis: AcquisitionKpi[]
-  trend: { date: string; primary: number; secondary: number; tertiary: number }[]
-}
-
-const palette = ["#7c3aed", "#2563eb", "#10b981", "#f59e0b", "#94a3b8"]
-
-const acquisitionTabs: { id: AcquisitionTab; label: string }[] = [
-  { id: "source", label: "Source" },
-  { id: "campaign", label: "Campaign / UTM" },
-  { id: "landing", label: "Landing Pages" },
+  icon: typeof ChartPie
+}[] = [
+  { id: "plans", label: "Plans", icon: ChartPie },
+  { id: "sources", label: "Acquisition Sources", icon: Users },
+  { id: "campaigns", label: "Campaigns / UTM", icon: Megaphone },
+  { id: "landing", label: "Landing Pages", icon: FileText },
 ]
 
 const paidLandingPages = [
@@ -86,7 +101,7 @@ const paidLandingPages = [
     visitors: 18420,
     paidUsers: 821,
     paidConversion: "4.46%",
-    mrr: "$18.4K",
+    revenue: 18400,
     churnRate: "2.9%",
   },
   {
@@ -95,7 +110,7 @@ const paidLandingPages = [
     visitors: 14680,
     paidUsers: 612,
     paidConversion: "4.17%",
-    mrr: "$12.9K",
+    revenue: 12900,
     churnRate: "3.4%",
   },
   {
@@ -104,7 +119,7 @@ const paidLandingPages = [
     visitors: 22840,
     paidUsers: 704,
     paidConversion: "3.08%",
-    mrr: "$16.2K",
+    revenue: 16200,
     churnRate: "3.1%",
   },
   {
@@ -113,7 +128,7 @@ const paidLandingPages = [
     visitors: 9360,
     paidUsers: 460,
     paidConversion: "4.91%",
-    mrr: "$10.8K",
+    revenue: 10800,
     churnRate: "2.6%",
   },
   {
@@ -122,9 +137,20 @@ const paidLandingPages = [
     visitors: 8240,
     paidUsers: 318,
     paidConversion: "3.86%",
-    mrr: "$7.2K",
+    revenue: 7200,
     churnRate: "3.8%",
   },
+]
+
+const paymentUsers = [
+  "minjun.kim@example.com",
+  "jina.park@example.com",
+  "seoho.lee@example.com",
+  "danyang.choi@example.com",
+  "hyunwoo.yoon@example.com",
+  "minseo.kang@example.com",
+  "soyoung.han@example.com",
+  "jiwon.oh@example.com",
 ]
 
 export default function SubscriptionIntelligenceDashboard() {
@@ -160,133 +186,113 @@ export default function SubscriptionIntelligenceDashboard() {
         ...row,
         visitors: scale(row.visitors, periodMultiplier),
         paidUsers: scale(row.paidUsers, periodMultiplier),
+        revenue: scale(row.revenue, periodMultiplier),
       })),
     [periodMultiplier]
   )
 
-  const currentGrowthSnapshot = growthRows[growthRows.length - 1]
-  const activePaidUsers = currentGrowthSnapshot.activePaid
+  const planRows = useMemo(() => buildPlanRows(planDistribution), [])
+  const latestGrowth = growthRows[growthRows.length - 1]
+  const activePaidUsers = latestGrowth.activePaid
   const newPaidUsers = growthRows.reduce((sum, row) => sum + row.newPaid, 0)
   const churnUsers = growthRows.reduce((sum, row) => sum + row.churn, 0)
   const netPaidGrowth = newPaidUsers - churnUsers
-  const mrr = 95845 * periodMultiplier
-  const arpu = 6.38
-  const churnRate = 5.1
-  const topUpgradeFlow = upgradeDowngradeFlows[0]
-  const bestSource = maxBy(acquisitionRows, (row) => row.paidUsers)
+  const totalRevenue = Math.round(activePaidUsers * 210.45 * periodMultiplier)
+  const arpu = totalRevenue / Math.max(activePaidUsers, 1)
+  const failedPayments = Math.round(674 * periodMultiplier)
+  const totalRefunds = Math.round(totalRevenue * 0.096)
+  const grossRevenue = totalRevenue + totalRefunds
 
-  const summaryMetrics: SummaryMetric[] = useMemo(
-    () => [
-      {
-        label: "Active Paid Users",
-        value: formatNumber(activePaidUsers),
-        delta: "+12.6%",
-        tone: "success",
-        detail: "active subscription + payment valid",
-        sparkline: growthRows.map((row) => row.activePaid),
-      },
-      {
-        label: "New Paid Users",
-        value: formatNumber(newPaidUsers),
-        delta: "+15.3%",
-        tone: "success",
-        detail: "first paid conversion in selected period",
-        sparkline: growthRows.map((row) => row.newPaid),
-      },
-      {
-        label: "Net Paid Growth",
-        value: formatNumber(netPaidGrowth),
-        delta: "+18.7%",
-        tone: "success",
-        detail: `${formatNumber(newPaidUsers)} new - ${formatNumber(churnUsers)} churn`,
-        sparkline: growthRows.map((row) => row.netGrowth),
-      },
-      {
-        label: "MRR",
-        value: `$${formatNumber(Math.round(mrr))}`,
-        delta: "+14.2%",
-        tone: "success",
-        detail: "monthly recurring revenue",
-        sparkline: growthRows.map((row) => row.activePaid * 6.5),
-      },
-      {
-        label: "ARPU",
-        value: `$${arpu.toFixed(2)}`,
-        delta: "+8.6%",
-        tone: "success",
-        detail: "revenue per paid user",
-        sparkline: [5.6, 5.8, 6.0, 6.1, 6.2, 6.3, arpu],
-      },
-      {
-        label: "Churn Rate",
-        value: `${churnRate.toFixed(1)}%`,
-        delta: "-1.2pp",
-        tone: "danger",
-        detail: "cancelled paid users / active paid users",
-        sparkline: [6.4, 6.1, 5.8, 5.6, 5.4, 5.2, churnRate],
-      },
-    ],
-    [activePaidUsers, arpu, churnRate, churnUsers, growthRows, mrr, netPaidGrowth, newPaidUsers]
+  const recentPayments = useMemo(
+    () =>
+      planRows.slice(0, 8).map((plan, index): RecentPayment => ({
+        time: `2026-05-${String(27 - Math.floor(index / 2)).padStart(2, "0")} ${["14:32", "13:18", "11:05", "10:22", "09:44", "08:30", "07:58", "07:22"][index]}`,
+        user: paymentUsers[index % paymentUsers.length],
+        plan: plan.plan,
+        amount: Math.round(plan.arpu),
+        status: index === 4 ? "Failed" : "Paid",
+        method: "Card",
+      })),
+    [planRows]
   )
 
   const exportPayload = useMemo(
     () => ({
-      title: "Subscription Executive Analytics Report",
+      title: "Subscription Executive Dashboard Report",
       subtitle:
-        "Executive subscription view for paid users, revenue movement, plan mix, and acquisition quality.",
-      filename: "subscription-executive-analytics-report",
+        "Executive subscription report covering paid user growth, revenue, churn, plan mix, acquisition quality, and recent payments.",
+      filename: "subscription-executive-dashboard-report",
       filters: {
         "Date range": getDateRangeLabel(startDate, endDate),
         Compare: getCompareModeLabel(compareMode),
       },
-      kpis: summaryMetrics.map((metric) => ({
-        label: metric.label,
-        value: metric.value,
-        detail: `${metric.delta} / ${metric.detail}`,
-      })),
+      kpis: [
+        {
+          label: "Active Paid Users",
+          value: formatNumber(activePaidUsers),
+          detail: "Active subscription + valid payment",
+        },
+        {
+          label: "New Paid Users",
+          value: formatNumber(newPaidUsers),
+          detail: "First paid users in selected period",
+        },
+        {
+          label: "Net Paid Growth",
+          value: formatNumber(netPaidGrowth),
+          detail: "New paid users - churn users",
+        },
+        {
+          label: "ARPU",
+          value: currency(arpu),
+          detail: "Revenue / active paid users",
+        },
+        {
+          label: "Failed Payments",
+          value: formatNumber(failedPayments),
+          detail: "Payment failure count",
+        },
+      ],
       charts: [
         {
-          title: "Paid Growth Trend",
-          points: growthRows.map((point) => ({
-            label: point.date,
-            value: point.activePaid,
-            secondary: `${point.netGrowth} net paid growth`,
+          title: "Paid User Growth",
+          points: growthRows.map((row) => ({
+            label: row.date,
+            value: row.activePaid,
+            secondary: `${row.netGrowth} net paid growth`,
           })),
         },
         {
-          title: "Paid Conversion Timeline",
-          points: paidConversionTimeline.map((point) => ({
-            label: point.day,
-            value: point.cumulative,
-            secondary: `${point.distribution}% distribution`,
+          title: "Plan Mix",
+          points: planRows.map((row) => ({
+            label: row.plan,
+            value: row.activePaidUsers,
+            secondary: currency(row.revenue),
           })),
         },
       ],
       datasets: [
-        {
-          name: "Subscription Summary",
-          rows: summaryMetrics.map(({ label, value, delta, detail }) => ({
-            label,
-            value,
-            delta,
-            detail,
-          })),
-        },
-        { name: "Paid Growth Trend", rows: growthRows },
-        { name: "Paid Conversion Timeline", rows: paidConversionTimeline },
-        { name: "Plan Distribution", rows: planDistribution },
+        { name: "Paid User Growth", rows: growthRows },
+        { name: "Plan Composition", rows: planRows },
         { name: "Acquisition Sources", rows: acquisitionRows },
-        { name: "Paid Landing Pages", rows: landingRows },
+        { name: "Landing Pages", rows: landingRows },
+        { name: "Recent Payments", rows: recentPayments },
       ],
     }),
     [
+      activePaidUsers,
       acquisitionRows,
+      arpu,
       compareMode,
       endDate,
+      failedPayments,
       growthRows,
       landingRows,
+      netPaidGrowth,
+      newPaidUsers,
+      planRows,
+      recentPayments,
       startDate,
-      summaryMetrics,
     ]
   )
 
@@ -301,12 +307,11 @@ export default function SubscriptionIntelligenceDashboard() {
       <PageHeader
         breadcrumbs={[
           { label: "Dashboards" },
-          { label: "Intelligence" },
+          { label: "Revenue" },
           { label: "Subscriptions" },
         ]}
-        eyebrow="Revenue Intelligence"
         title="Subscription Analytics Dashboard"
-        description="Executive view for paid users, revenue, churn, plan mix, and acquisition quality."
+        description="Track paid subscription performance, churn, acquisition quality, and revenue health."
         actions={<ExportActions payload={exportPayload} />}
       />
 
@@ -314,177 +319,223 @@ export default function SubscriptionIntelligenceDashboard() {
         <DateRangeControl />
       </section>
 
-      <SubscriptionSummary metrics={summaryMetrics} isMounted={isMounted} />
+      <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
+        <div className="grid divide-y divide-slate-100 lg:grid-cols-3 lg:divide-x lg:divide-y-0 2xl:grid-cols-5">
+          <MetricCard
+            detail="Active subscription + valid payment"
+            icon={<Users className="size-5" />}
+            label="Active Paid Users"
+            onClick={() =>
+              setDrawer({
+                label: "Active Paid Users",
+                value: formatNumber(activePaidUsers),
+                calculation: "active subscription + payment valid",
+              })
+            }
+            tone="violet"
+            value={formatNumber(activePaidUsers)}
+          />
+          <MetricCard
+            detail="First paid users in period"
+            icon={<UserPlus className="size-5" />}
+            label="New Paid Users"
+            onClick={() =>
+              setDrawer({
+                label: "New Paid Users",
+                value: formatNumber(newPaidUsers),
+                calculation: "free/trial users converted to paid",
+              })
+            }
+            tone="blue"
+            value={formatNumber(newPaidUsers)}
+          />
+          <MetricCard
+            detail="New Paid - Churn Users"
+            icon={<TrendingUp className="size-5" />}
+            label="Net Paid Growth"
+            onClick={() =>
+              setDrawer({
+                label: "Net Paid Growth",
+                value: formatNumber(netPaidGrowth),
+                calculation: `${formatNumber(newPaidUsers)} new - ${formatNumber(churnUsers)} churn`,
+              })
+            }
+            tone="green"
+            value={formatNumber(netPaidGrowth)}
+          />
+          <MetricCard
+            detail="Revenue / Active Paid Users"
+            icon={<DollarSign className="size-5" />}
+            label="ARPU"
+            onClick={() =>
+              setDrawer({
+                label: "ARPU",
+                value: currency(arpu),
+                calculation: `${currency(totalRevenue)} / ${formatNumber(activePaidUsers)} active paid users`,
+              })
+            }
+            tone="amber"
+            value={currency(arpu)}
+          />
+          <MetricCard
+            detail="Payment failure count"
+            icon={<AlertTriangle className="size-5" />}
+            label="Failed Payments"
+            onClick={() =>
+              setDrawer({
+                label: "Failed Payments",
+                value: formatNumber(failedPayments),
+                calculation: "failed card and invoice payment attempts",
+              })
+            }
+            tone="rose"
+            value={formatNumber(failedPayments)}
+          />
+        </div>
+      </section>
 
-      <RevenueConversionSection
+      <RevenueIntelligence
         activePaidUsers={activePaidUsers}
-        bestSource={bestSource}
         churnUsers={churnUsers}
+        failedPayments={failedPayments}
+        grossRevenue={grossRevenue}
         growthRows={growthRows}
         isMounted={isMounted}
-        mrr={mrr}
         netPaidGrowth={netPaidGrowth}
         newPaidUsers={newPaidUsers}
-        topUpgradeFlow={topUpgradeFlow}
+        totalRefunds={totalRefunds}
+        totalRevenue={totalRevenue}
       />
 
-      <div className="mb-8 grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <PlanDistributionSection isMounted={isMounted} plans={planDistribution} />
-        <AcquisitionSourcesModule
-          acquisitionRows={acquisitionRows}
-          isMounted={isMounted}
-          landingRows={landingRows}
-          onRowClick={(row) => setDrawer(row)}
-        />
-      </div>
+      <CompositionIntelligence
+        acquisitionRows={acquisitionRows}
+        isMounted={isMounted}
+        landingRows={landingRows}
+        onRowClick={(row) => setDrawer(row)}
+        planRows={planRows}
+      />
 
-      <section className="mb-8 flex flex-col gap-4 rounded-2xl border border-violet-100 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(124,58,237,0.08)] sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="font-semibold text-slate-950">Need deeper insights?</p>
-          <p className="mt-1 text-sm text-slate-500">
-            Lifecycle cohorts, upgrade flows, country analysis, and behavior signals are moved to detailed analytics.
-          </p>
-        </div>
-        <button className="inline-flex h-11 items-center justify-center rounded-xl border border-violet-200 px-5 text-sm font-bold text-violet-600 transition hover:bg-violet-50">
-          View Detailed Analytics
-        </button>
-      </section>
+      <RecentPayments
+        onRowClick={(row) => setDrawer(row)}
+        payments={recentPayments}
+      />
 
       <SideDrawer
         open={Boolean(drawer)}
         title={drawer ? String(Object.values(drawer)[0]) : "Subscription detail"}
-        description="Mock subscription intelligence detail. Replace with customer, invoice, cohort, and event-level API data later."
+        description="Mock subscription detail. Replace with customer, invoice, cohort, and event API data later."
         onClose={() => setDrawer(null)}
       >
-        {drawer ? (
-          <div className="space-y-4">
-            {Object.entries(drawer).map(([key, value]) => (
-              <div key={key} className="rounded-xl border border-slate-100 p-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  {key}
-                </p>
-                <p className="mt-1 text-sm font-semibold text-slate-950">
-                  {String(value)}
-                </p>
-              </div>
-            ))}
-          </div>
-        ) : null}
+        {drawer ? <KeyValueGrid item={drawer} /> : null}
       </SideDrawer>
     </DashboardLayout>
   )
 }
 
-function SubscriptionSummary({
-  metrics,
-  isMounted,
-}: {
-  metrics: SummaryMetric[]
-  isMounted: boolean
-}) {
-  return (
-    <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
-      <div className="mb-6 flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-xl bg-violet-600 text-sm font-bold text-white">
-          1
-        </div>
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight text-slate-950">
-            Subscription Summary
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Paid user base, revenue, and churn health at a glance.
-          </p>
-        </div>
-      </div>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {metrics.map((metric) => (
-          <MetricCard key={metric.label} metric={metric} isMounted={isMounted} />
-        ))}
-      </div>
-    </section>
-  )
-}
-
 function MetricCard({
-  metric,
-  isMounted,
+  detail,
+  icon,
+  label,
+  onClick,
+  tone,
+  value,
 }: {
-  metric: SummaryMetric
-  isMounted: boolean
+  detail: string
+  icon: ReactNode
+  label: string
+  onClick: () => void
+  tone: "violet" | "blue" | "green" | "amber" | "rose"
+  value: string
 }) {
+  const toneClass = {
+    amber: "bg-amber-50 text-amber-600",
+    blue: "bg-blue-50 text-blue-600",
+    green: "bg-emerald-50 text-emerald-600",
+    rose: "bg-rose-50 text-rose-600",
+    violet: "bg-violet-50 text-violet-600",
+  }[tone]
+
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-            {metric.label}
-          </p>
-          <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
-            {metric.value}
-          </p>
-        </div>
-        <StatusBadge tone={metric.tone}>{metric.delta}</StatusBadge>
+    <button
+      className="group flex h-full min-h-44 flex-col items-start p-6 text-left transition hover:bg-slate-50"
+      onClick={onClick}
+    >
+      <div className={cn("flex size-10 items-center justify-center rounded-xl", toneClass)}>
+        {icon}
       </div>
-      <p className="mt-3 text-sm font-medium text-slate-500">{metric.detail}</p>
-      <div className="mt-4 h-10">
-        {isMounted ? (
-          <Sparkline values={metric.sparkline} tone={metric.tone} />
-        ) : (
-          <ChartSkeleton />
-        )}
+      <p className="mt-4 text-xs font-bold uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
+        {value}
+      </p>
+      <div className="mt-auto pt-4">
+        <StatusBadge tone={tone === "rose" ? "danger" : "success"}>
+          {tone === "rose" ? "-15.2%" : "+8.6%"}
+        </StatusBadge>
+        <p className="mt-3 text-sm font-medium text-slate-500">{detail}</p>
       </div>
-    </div>
+    </button>
   )
 }
 
-function RevenueConversionSection({
+function RevenueIntelligence({
   activePaidUsers,
-  bestSource,
   churnUsers,
+  failedPayments,
+  grossRevenue,
   growthRows,
   isMounted,
-  mrr,
   netPaidGrowth,
   newPaidUsers,
-  topUpgradeFlow,
+  totalRefunds,
+  totalRevenue,
 }: {
   activePaidUsers: number
-  bestSource: AcquisitionRow
   churnUsers: number
-  growthRows: typeof paidUserGrowthTrend
+  failedPayments: number
+  grossRevenue: number
+  growthRows: Array<GrowthRow & { newPaid: number; churn: number; netGrowth: number }>
   isMounted: boolean
-  mrr: number
   netPaidGrowth: number
   newPaidUsers: number
-  topUpgradeFlow: (typeof upgradeDowngradeFlows)[number]
+  totalRefunds: number
+  totalRevenue: number
 }) {
+  const [activeTab, setActiveTab] = useState<RevenueTab>("revenue")
+  const [cadence, setCadence] = useState("Daily")
+  const config = buildRevenueTabConfig({
+    activePaidUsers,
+    activeTab,
+    churnUsers,
+    failedPayments,
+    grossRevenue,
+    growthRows,
+    netPaidGrowth,
+    newPaidUsers,
+    totalRefunds,
+    totalRevenue,
+  })
+
   return (
-    <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-violet-600 text-sm font-bold text-white">
-            2
-          </div>
-          <div>
-            <h2 className="text-xl font-semibold tracking-tight text-slate-950">
-              Revenue & Conversion
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Paid growth, conversion timing, funnel quality, and top movement signals.
-            </p>
-          </div>
+    <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
+      <div className="flex flex-col gap-4 border-b border-slate-100 p-6 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight text-slate-950">
+            Revenue Intelligence
+          </h2>
         </div>
-        <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
-          {["Daily", "Weekly", "Monthly"].map((item, index) => (
+        <div className="inline-flex w-fit rounded-xl border border-slate-200 bg-slate-50 p-1">
+          {["Daily", "Weekly", "Monthly"].map((item) => (
             <button
               key={item}
               className={cn(
                 "h-9 rounded-lg px-4 text-sm font-semibold transition",
-                index === 1
+                cadence === item
                   ? "bg-violet-600 text-white shadow-sm shadow-violet-600/20"
                   : "text-slate-600 hover:bg-white"
               )}
+              onClick={() => setCadence(item)}
             >
               {item}
             </button>
@@ -492,533 +543,701 @@ function RevenueConversionSection({
         </div>
       </div>
 
-      <div className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <CompactMetric
-          delta="+14.2%"
-          isMounted={isMounted}
-          label="MRR Trend"
-          tone="success"
-          value={`$${formatNumber(Math.round(mrr))}`}
-          values={growthRows.map((row) => row.activePaid * 6.5)}
-        />
-        <CompactMetric
-          delta="+1.23pp"
-          isMounted={isMounted}
-          label="Paid Conversion Rate"
-          tone="success"
-          value="6.51%"
-          values={paidConversionTimeline.map((row) => row.cumulative)}
-        />
-        <CompactMetric
-          delta="+18.7%"
-          isMounted={isMounted}
-          label="Net Paid Growth"
-          tone="success"
-          value={formatNumber(netPaidGrowth)}
-          values={growthRows.map((row) => row.netGrowth)}
-        />
-        <CompactMetric
-          delta="-5.1%"
-          isMounted={isMounted}
-          label="Churn Users"
-          tone="danger"
-          value={formatNumber(churnUsers)}
-          values={growthRows.map((row) => row.churn)}
-        />
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <ChartPanel title="Paid Growth Trend">
-          {isMounted ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={growthRows}>
-                <CartesianGrid stroke="#eef2f7" vertical={false} />
-                <XAxis dataKey="date" tickLine={false} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} width={64} />
-                <Tooltip />
-                <Line dataKey="activePaid" name="Active Paid" stroke="#7c3aed" strokeWidth={3} />
-                <Line dataKey="newPaid" name="New Paid" stroke="#2563eb" strokeWidth={2.5} />
-                <Line dataKey="churn" name="Churned" stroke="#ef4444" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <ChartSkeleton />
-          )}
-        </ChartPanel>
-
-        <ChartPanel title="Paid Conversion Funnel">
-          <PaidConversionFunnel
-            activePaidUsers={activePaidUsers}
-            newPaidUsers={newPaidUsers}
-          />
-        </ChartPanel>
-      </div>
-
-      <div className="mt-6 grid gap-4 xl:grid-cols-2">
-        <FactPanel
-          title="Top Acquisition Source"
-          primary={bestSource.source}
-          rows={[
-            ["Visitors", formatNumber(bestSource.visitors)],
-            ["Paid Users", formatNumber(bestSource.paidUsers)],
-            ["Paid Conversion", bestSource.paidConversion],
-          ]}
-        />
-        <FactPanel
-          title="Top Upgrade Flow"
-          primary={topUpgradeFlow.flow}
-          rows={[
-            ["Upgrade Users", `${formatNumber(topUpgradeFlow.users)} users`],
-            ["Average Timing", topUpgradeFlow.avgTiming],
-            ["Revenue Impact", topUpgradeFlow.revenueImpact],
-          ]}
-        />
-      </div>
-    </section>
-  )
-}
-
-function PlanDistributionSection({
-  isMounted,
-  plans,
-}: {
-  isMounted: boolean
-  plans: PlanRow[]
-}) {
-  const totalSubscribers = plans.reduce((sum, row) => sum + row.activeSubscribers, 0)
-  const planMixTrend = buildPlanMixTrend(plans)
-
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-violet-600 text-sm font-bold text-white">
-            3
-          </div>
-          <div>
-            <h2 className="text-xl font-semibold tracking-tight text-slate-950">
-              Plan Distribution
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Current paid user mix and plan movement.
-            </p>
-          </div>
-        </div>
-        <StatusBadge tone="neutral">Last 30 Days</StatusBadge>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[210px_1fr]">
-        <div className="relative h-56">
-          {isMounted ? (
-            <>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={plans}
-                    dataKey="activeSubscribers"
-                    innerRadius={72}
-                    outerRadius={98}
-                    paddingAngle={3}
-                  >
-                    {plans.map((plan, index) => (
-                      <Cell key={plan.plan} fill={palette[index % palette.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => formatNumber(Number(value))} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-2xl font-bold text-slate-950">
-                  {formatNumber(totalSubscribers)}
-                </span>
-                <span className="text-xs font-bold text-slate-500">
-                  Total Paid Users
-                </span>
-              </div>
-            </>
-          ) : (
-            <ChartSkeleton />
-          )}
-        </div>
-
-        <div className="space-y-3">
-          {plans.map((plan, index) => {
-            const share = (plan.activeSubscribers / Math.max(totalSubscribers, 1)) * 100
+      <div className="border-b border-slate-100 px-6 pt-5">
+        <div className="inline-flex max-w-full overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1">
+          {revenueTabs.map((tab) => {
+            const Icon = tab.icon
 
             return (
-              <div key={`${plan.service}-${plan.plan}`}>
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="size-2.5 rounded-sm"
-                      style={{ backgroundColor: palette[index % palette.length] }}
-                    />
-                    <span className="font-semibold text-slate-800">
-                      {plan.plan}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-bold text-slate-950">
-                      {formatNumber(plan.activeSubscribers)}
-                    </span>
-                    <span className="ml-2 text-xs font-semibold text-slate-500">
-                      {share.toFixed(1)}%
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${share}%`,
-                      backgroundColor: palette[index % palette.length],
-                    }}
-                  />
-                </div>
-              </div>
+              <button
+                key={tab.id}
+                className={cn(
+                  "inline-flex h-10 min-w-32 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition",
+                  activeTab === tab.id
+                    ? "bg-violet-600 text-white shadow-sm shadow-violet-600/20"
+                    : "text-slate-600 hover:bg-white hover:text-slate-950"
+                )}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <Icon className="size-4" />
+                {tab.label}
+              </button>
             )
           })}
         </div>
       </div>
 
-      <div className="mt-6">
-        <p className="mb-3 text-sm font-semibold text-slate-950">
-          Plan Mix Over Time
-        </p>
-        <div className="h-48">
-          {isMounted ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={planMixTrend}>
-                <CartesianGrid stroke="#eef2f7" vertical={false} />
-                <XAxis dataKey="date" tickLine={false} axisLine={false} />
-                <YAxis tickFormatter={(value) => `${value}%`} tickLine={false} axisLine={false} width={48} />
-                <Tooltip />
-                {plans.map((plan, index) => (
-                  <Area
-                    key={plan.plan}
-                    dataKey={plan.plan}
-                    fill={palette[index % palette.length]}
-                    stackId="plans"
-                    stroke={palette[index % palette.length]}
-                    type="monotone"
-                  />
-                ))}
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : (
-            <ChartSkeleton />
-          )}
+      <div className="grid gap-0 xl:grid-cols-[260px_1fr]">
+        <div className="border-b border-slate-100 bg-slate-50/60 p-6 xl:border-b-0 xl:border-r">
+          <p className="text-sm font-semibold text-slate-600">{config.kicker}</p>
+          <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
+            {config.value}
+          </p>
+          <StatusBadge tone={config.tone}>{config.delta}</StatusBadge>
+          <div className="mt-6 space-y-4">
+            {config.details.map((item) => (
+              <div key={item.label} className="flex items-center justify-between gap-4">
+                <span className="text-sm font-medium text-slate-500">
+                  {item.label}
+                </span>
+                <span className="text-sm font-bold text-slate-950">
+                  {item.value}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
+
+        <div className="p-6">
+          <div className="h-[360px]">
+            {isMounted ? config.chart : <ChartSkeleton />}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid divide-y divide-slate-100 border-t border-slate-100 bg-violet-50/35 md:grid-cols-4 md:divide-x md:divide-y-0">
+        {config.footer.map((item) => (
+          <div key={item.label} className="p-5 text-center">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              {item.label}
+            </p>
+            <p className="mt-2 text-lg font-bold text-slate-950">{item.value}</p>
+          </div>
+        ))}
       </div>
     </section>
   )
 }
 
-function AcquisitionSourcesModule({
+function CompositionIntelligence({
   acquisitionRows,
   isMounted,
   landingRows,
   onRowClick,
+  planRows,
 }: {
-  acquisitionRows: AcquisitionRow[]
+  acquisitionRows: Array<AcquisitionRow & { visitors: number; paidUsers: number }>
   isMounted: boolean
-  landingRows: DrawerItem[]
+  landingRows: Array<(typeof paidLandingPages)[number]>
   onRowClick: (row: DrawerItem) => void
+  planRows: Array<DrawerItem & { plan: string; activePaidUsers: number; revenue: number; arpu: number; growth: string; churnRate: string }>
 }) {
-  const [activeTab, setActiveTab] = useState<AcquisitionTab>("source")
-  const config = useMemo(
-    () => buildAcquisitionConfig(activeTab, acquisitionRows, landingRows),
-    [activeTab, acquisitionRows, landingRows]
-  )
+  const [activeTab, setActiveTab] = useState<CompositionTab>("plans")
+  const config = buildCompositionConfig(activeTab, planRows, acquisitionRows, landingRows)
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-violet-600 text-sm font-bold text-white">
-            4
-          </div>
-          <div>
-            <h2 className="text-xl font-semibold tracking-tight text-slate-950">
-              Acquisition Sources
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Paid user quality by source, campaign, and landing page.
-            </p>
-          </div>
+    <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
+      <div className="flex flex-col gap-4 border-b border-slate-100 p-6 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight text-slate-950">
+            Paid User Composition Intelligence
+          </h2>
         </div>
-        <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
-          {acquisitionTabs.map((tab) => (
-            <button
-              key={tab.id}
-              className={cn(
-                "h-9 rounded-lg px-3 text-sm font-semibold transition",
-                activeTab === tab.id
-                  ? "bg-violet-600 text-white shadow-sm shadow-violet-600/20"
-                  : "text-slate-600 hover:bg-white"
-              )}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <StatusBadge tone="neutral">Last 30 Days</StatusBadge>
+      </div>
+
+      <div className="border-b border-slate-100 px-6 pt-5">
+        <div className="inline-flex max-w-full overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1">
+          {compositionTabs.map((tab) => {
+            const Icon = tab.icon
+
+            return (
+              <button
+                key={tab.id}
+                className={cn(
+                  "inline-flex h-10 min-w-36 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition",
+                  activeTab === tab.id
+                    ? "bg-violet-600 text-white shadow-sm shadow-violet-600/20"
+                    : "text-slate-600 hover:bg-white hover:text-slate-950"
+                )}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <Icon className="size-4" />
+                {tab.label}
+              </button>
+            )
+          })}
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_220px]">
-        <div>
-          <p className="mb-4 text-sm font-semibold text-slate-950">
-            {config.title}
-          </p>
-          <div className="space-y-4">
-            {config.distribution.map((row) => {
-              const share = (row.value / Math.max(config.totalPaidUsers, 1)) * 100
-
-              return (
-                <div key={row.label}>
-                  <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                    <span className="font-semibold text-slate-700">{row.label}</span>
-                    <span className="font-bold text-slate-950">
-                      {formatNumber(row.value)} ({share.toFixed(1)}%)
+      <div className="grid gap-0 xl:grid-cols-[0.86fr_1.14fr]">
+        <div className="border-b border-slate-100 p-6 xl:border-b-0 xl:border-r">
+          <h3 className="text-sm font-semibold text-slate-950">
+            {config.visualTitle}
+          </h3>
+          <div className="mt-6 grid gap-6 md:grid-cols-[220px_1fr] xl:grid-cols-1 2xl:grid-cols-[220px_1fr]">
+            <div className="relative h-56">
+              {isMounted ? (
+                <>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={config.distribution}
+                        dataKey="value"
+                        innerRadius={74}
+                        outerRadius={104}
+                        paddingAngle={3}
+                      >
+                        {config.distribution.map((row, index) => (
+                          <Cell key={row.label} fill={chartColors[index % chartColors.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => formatNumber(Number(value))} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-2xl font-bold text-slate-950">
+                      {formatNumber(config.total)}
+                    </span>
+                    <span className="text-xs font-bold text-slate-500">
+                      {config.totalLabel}
                     </span>
                   </div>
-                  <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full bg-violet-600"
-                      style={{ width: `${share}%` }}
-                    />
+                </>
+              ) : (
+                <ChartSkeleton />
+              )}
+            </div>
+
+            <div className="space-y-4 self-center">
+              {config.distribution.map((row, index) => {
+                const share = (row.value / Math.max(config.total, 1)) * 100
+
+                return (
+                  <div key={row.label}>
+                    <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          className="size-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: chartColors[index % chartColors.length] }}
+                        />
+                        <span className="truncate font-semibold text-slate-800">
+                          {row.label}
+                        </span>
+                      </div>
+                      <span className="font-bold text-slate-950">
+                        {formatNumber(row.value)} ({share.toFixed(1)}%)
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${share}%`,
+                          backgroundColor: chartColors[index % chartColors.length],
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
-        </div>
 
-        <div className="relative h-56">
-          {isMounted ? (
-            <>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={config.distribution}
-                    dataKey="value"
-                    innerRadius={68}
-                    outerRadius={96}
-                    paddingAngle={3}
-                  >
-                    {config.distribution.map((row, index) => (
-                      <Cell key={row.label} fill={palette[index % palette.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => formatNumber(Number(value))} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-xl font-bold text-slate-950">
-                  {formatNumber(config.totalPaidUsers)}
-                </span>
-                <span className="text-xs font-bold text-slate-500">
-                  Paid Users
-                </span>
+          {activeTab === "plans" ? (
+            <div className="mt-6">
+              <h3 className="mb-3 text-sm font-semibold text-slate-950">
+                Plan Mix Trend
+              </h3>
+              <div className="h-40">
+                {isMounted ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={buildPlanMixTrend(planRows)}>
+                      <CartesianGrid stroke="#eef2f7" vertical={false} />
+                      <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                      <YAxis tickFormatter={(value) => `${value}%`} tickLine={false} axisLine={false} width={42} />
+                      <Tooltip />
+                      {planRows.map((plan, index) => (
+                        <Area
+                          key={plan.plan}
+                          dataKey={plan.plan}
+                          fill={chartColors[index % chartColors.length]}
+                          stackId="plan"
+                          stroke={chartColors[index % chartColors.length]}
+                        />
+                      ))}
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <ChartSkeleton />
+                )}
               </div>
-            </>
-          ) : (
-            <ChartSkeleton />
-          )}
+            </div>
+          ) : null}
         </div>
-      </div>
 
-      <div className="mt-6 grid gap-3 md:grid-cols-3">
-        {config.kpis.map((metric) => (
-          <div key={metric.label} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              {metric.label}
-            </p>
-            <p className="mt-2 text-xl font-bold text-slate-950">{metric.value}</p>
-            <p className="mt-1 text-sm text-slate-500">{metric.detail}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-6">
-        <DataTable
-          columns={config.columns}
-          data={config.rows}
-          summary={`Showing 1 to ${config.rows.length} of ${config.rows.length} rows`}
-          compactPagination
-          onRowClick={onRowClick}
-        />
+        <div className="p-6">
+          <h3 className="mb-4 text-sm font-semibold text-slate-950">
+            {config.tableTitle}
+          </h3>
+          <SimpleTable
+            columns={config.columns}
+            onRowClick={onRowClick}
+            rows={config.rows}
+          />
+        </div>
       </div>
     </section>
   )
 }
 
-function CompactMetric({
-  delta,
-  isMounted,
-  label,
-  tone,
-  value,
-  values,
+function RecentPayments({
+  onRowClick,
+  payments,
 }: {
-  delta: string
-  isMounted: boolean
-  label: string
-  tone: "success" | "danger" | "neutral"
-  value: string
-  values: number[]
+  onRowClick: (row: DrawerItem) => void
+  payments: RecentPayment[]
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-        {label}
-      </p>
-      <div className="mt-3 flex items-end justify-between gap-4">
+    <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
+      <div className="flex items-center justify-between gap-4 border-b border-slate-100 p-6">
         <div>
-          <p className="text-2xl font-bold text-slate-950">{value}</p>
-          <StatusBadge tone={tone}>{delta}</StatusBadge>
+          <h2 className="text-xl font-semibold tracking-tight text-slate-950">
+            Latest Payments
+          </h2>
         </div>
-        <div className="h-10 w-24">
-          {isMounted ? <Sparkline values={values} tone={tone} /> : <ChartSkeleton />}
-        </div>
+        <button className="text-sm font-bold text-violet-600 transition hover:text-violet-700">
+          View all payments
+        </button>
       </div>
-    </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-6 py-4">Payment Time</th>
+              <th className="px-6 py-4">User</th>
+              <th className="px-6 py-4">Plan</th>
+              <th className="px-6 py-4">Amount</th>
+              <th className="px-6 py-4">Status</th>
+              <th className="px-6 py-4">Method</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {payments.map((payment) => (
+              <tr
+                key={`${payment.time}-${payment.user}`}
+                className="cursor-pointer transition hover:bg-violet-50/50"
+                onClick={() => onRowClick(payment)}
+              >
+                <td className="whitespace-nowrap px-6 py-4 font-medium text-slate-700">
+                  {payment.time}
+                </td>
+                <td className="whitespace-nowrap px-6 py-4 text-slate-700">
+                  {payment.user}
+                </td>
+                <td className="whitespace-nowrap px-6 py-4">
+                  <StatusBadge tone={payment.plan === "Pro" ? "success" : "neutral"}>
+                    {payment.plan}
+                  </StatusBadge>
+                </td>
+                <td className="whitespace-nowrap px-6 py-4 font-semibold text-slate-950">
+                  {currency(payment.amount)}
+                </td>
+                <td className="whitespace-nowrap px-6 py-4">
+                  <StatusBadge tone={payment.status === "Failed" ? "danger" : "success"}>
+                    {payment.status}
+                  </StatusBadge>
+                </td>
+                <td className="whitespace-nowrap px-6 py-4 text-slate-700">
+                  {payment.method}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 
-function ChartPanel({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 p-5">
-      <h3 className="mb-4 text-sm font-semibold text-slate-950">{title}</h3>
-      <div className="h-80">{children}</div>
-    </div>
-  )
-}
-
-function PaidConversionFunnel({
+function buildRevenueTabConfig({
   activePaidUsers,
+  activeTab,
+  churnUsers,
+  failedPayments,
+  grossRevenue,
+  growthRows,
+  netPaidGrowth,
   newPaidUsers,
+  totalRefunds,
+  totalRevenue,
 }: {
   activePaidUsers: number
+  activeTab: RevenueTab
+  churnUsers: number
+  failedPayments: number
+  grossRevenue: number
+  growthRows: Array<GrowthRow & { newPaid: number; churn: number; netGrowth: number }>
+  netPaidGrowth: number
   newPaidUsers: number
+  totalRefunds: number
+  totalRevenue: number
 }) {
-  const rows = [
-    { label: "Visitors", value: 112540, rate: "100%", width: 100 },
-    { label: "Signups", value: 23476, rate: "20.8%", width: 72 },
-    { label: "Paid Users", value: newPaidUsers, rate: "39.2%", width: 46 },
-    { label: "Conversion Rate", value: 6.51, rate: "6.51%", width: 18 },
-  ]
+  const revenueTrend = growthRows.map((row, index) => {
+    const gross = Math.round(row.activePaid * 210.45 * (0.92 + index * 0.035))
+    const refunds = Math.round(gross * (0.06 + (index % 3) * 0.006))
 
-  return (
-    <div className="grid h-full gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-      <div className="space-y-4 self-center">
-        {rows.map((row) => (
-          <div key={row.label} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  {row.label}
-                </p>
-                <p className="mt-1 text-xl font-bold text-slate-950">
-                  {typeof row.value === "number" && row.value > 100
-                    ? formatNumber(row.value)
-                    : row.value}
-                </p>
+    return {
+      date: row.date,
+      grossRevenue: gross,
+      netRevenue: gross - refunds,
+      refunds,
+    }
+  })
+  const highestDay = maxBy(revenueTrend, (row) => row.netRevenue)
+  const lowestDay = minBy(revenueTrend, (row) => row.netRevenue)
+  const paidConversion = (newPaidUsers / Math.max(newPaidUsers + churnUsers, 1)) * 100
+
+  if (activeTab === "paidUsers") {
+    return {
+      kicker: "Active Paid Users",
+      value: formatNumber(activePaidUsers),
+      delta: "+6.2%",
+      tone: "success" as const,
+      details: [
+        { label: "New Paid Users", value: formatNumber(newPaidUsers) },
+        { label: "Net Paid Growth", value: formatNumber(netPaidGrowth) },
+        { label: "Churn Users", value: formatNumber(churnUsers) },
+      ],
+      chart: (
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={growthRows}>
+            <CartesianGrid stroke="#eef2f7" vertical={false} />
+            <XAxis dataKey="date" tickLine={false} axisLine={false} />
+            <YAxis tickLine={false} axisLine={false} width={72} />
+            <Tooltip />
+            <Line dataKey="activePaid" name="Active Paid Users" stroke="#7c3aed" strokeWidth={3} />
+            <Line dataKey="newPaid" name="New Paid Users" stroke="#2563eb" strokeWidth={2.5} />
+          </LineChart>
+        </ResponsiveContainer>
+      ),
+      footer: [
+        { label: "New Paid Users", value: formatNumber(newPaidUsers) },
+        { label: "Net Paid Growth", value: formatNumber(netPaidGrowth) },
+        { label: "Average New Paid / Day", value: formatNumber(Math.round(newPaidUsers / Math.max(growthRows.length, 1))) },
+        { label: "Latest Active Paid", value: formatNumber(activePaidUsers) },
+      ],
+    }
+  }
+
+  if (activeTab === "churn") {
+    return {
+      kicker: "Churn Users",
+      value: formatNumber(churnUsers),
+      delta: "-5.1%",
+      tone: "danger" as const,
+      details: [
+        { label: "Churn Rate", value: `${((churnUsers / Math.max(activePaidUsers, 1)) * 100).toFixed(1)}%` },
+        { label: "Failed Payments", value: formatNumber(failedPayments) },
+        { label: "Active Paid Users", value: formatNumber(activePaidUsers) },
+      ],
+      chart: (
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={growthRows}>
+            <CartesianGrid stroke="#eef2f7" vertical={false} />
+            <XAxis dataKey="date" tickLine={false} axisLine={false} />
+            <YAxis tickLine={false} axisLine={false} width={72} />
+            <Tooltip />
+            <Bar dataKey="churn" name="Churn Users" fill="#ef4444" radius={[8, 8, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      ),
+      footer: [
+        { label: "Churn Users", value: formatNumber(churnUsers) },
+        { label: "Churn Rate", value: `${((churnUsers / Math.max(activePaidUsers, 1)) * 100).toFixed(1)}%` },
+        { label: "Payment Failures", value: formatNumber(failedPayments) },
+        { label: "Recovery Priority", value: "High" },
+      ],
+    }
+  }
+
+  if (activeTab === "conversion") {
+    return {
+      kicker: "Paid Conversion",
+      value: `${paidConversion.toFixed(1)}%`,
+      delta: "+3.7%",
+      tone: "success" as const,
+      details: [
+        { label: "New Paid Users", value: formatNumber(newPaidUsers) },
+        { label: "Churn Users", value: formatNumber(churnUsers) },
+        { label: "Net Paid Growth", value: formatNumber(netPaidGrowth) },
+      ],
+      chart: (
+        <div className="grid h-full items-center gap-6 md:grid-cols-[0.82fr_1.18fr]">
+          <div className="space-y-4">
+            {[
+              { label: "New Paid Users", value: newPaidUsers, rate: "100%" },
+              { label: "Net Paid Growth", value: netPaidGrowth, rate: `${((netPaidGrowth / Math.max(newPaidUsers, 1)) * 100).toFixed(1)}%` },
+              { label: "Active Paid Base", value: activePaidUsers, rate: "Active" },
+            ].map((row) => (
+              <div key={row.label} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      {row.label}
+                    </p>
+                    <p className="mt-1 text-xl font-bold text-slate-950">
+                      {formatNumber(row.value)}
+                    </p>
+                  </div>
+                  <StatusBadge tone="neutral">{row.rate}</StatusBadge>
+                </div>
               </div>
-              <span className="text-sm font-bold text-slate-600">{row.rate}</span>
-            </div>
+            ))}
           </div>
-        ))}
-      </div>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={paidConversionTimeline}>
+              <CartesianGrid stroke="#eef2f7" vertical={false} />
+              <XAxis dataKey="day" tickLine={false} axisLine={false} />
+              <YAxis tickFormatter={(value) => `${value}%`} tickLine={false} axisLine={false} width={48} />
+              <Tooltip />
+              <Line dataKey="cumulative" name="Cumulative Paid Conversion" stroke="#7c3aed" strokeWidth={3} />
+              <Line dataKey="distribution" name="Distribution" stroke="#10b981" strokeWidth={2.5} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      ),
+      footer: [
+        { label: "Paid Conversion", value: `${paidConversion.toFixed(1)}%` },
+        { label: "New Paid Users", value: formatNumber(newPaidUsers) },
+        { label: "Net Paid Growth", value: formatNumber(netPaidGrowth) },
+        { label: "ARPU", value: currency(totalRevenue / Math.max(activePaidUsers, 1)) },
+      ],
+    }
+  }
 
-      <div className="flex flex-col items-center justify-center gap-2">
-        {rows.map((row, index) => (
-          <div
-            key={row.label}
-            className="h-14 rounded-sm bg-violet-500/70"
-            style={{
-              width: `${row.width}%`,
-              clipPath:
-                index === rows.length - 1
-                  ? "polygon(42% 0, 58% 0, 58% 100%, 42% 100%)"
-                  : "polygon(10% 0, 90% 0, 78% 100%, 22% 100%)",
-              opacity: 1 - index * 0.12,
-            }}
-            title={`${row.label}: ${row.rate}`}
-          />
-        ))}
-        <p className="mt-2 text-xs font-semibold text-slate-500">
-          Current active paid users: {formatNumber(activePaidUsers)}
-        </p>
-      </div>
-    </div>
-  )
+  return {
+    kicker: "Total Revenue",
+    value: currency(totalRevenue),
+    delta: "+8.6%",
+    tone: "success" as const,
+    details: [
+      { label: "Gross Revenue", value: currency(grossRevenue) },
+      { label: "Refunds", value: `-${currency(totalRefunds)}` },
+      { label: "Net Revenue", value: currency(totalRevenue) },
+    ],
+    chart: (
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={revenueTrend}>
+          <defs>
+            <linearGradient id="subscriptionRevenueFill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.22} />
+              <stop offset="95%" stopColor="#7c3aed" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke="#eef2f7" vertical={false} />
+          <XAxis dataKey="date" tickLine={false} axisLine={false} />
+          <YAxis tickLine={false} axisLine={false} width={72} />
+          <Tooltip formatter={(value) => currency(Number(value))} />
+          <Area dataKey="netRevenue" fill="url(#subscriptionRevenueFill)" name="Net Revenue" stroke="#7c3aed" strokeWidth={3} type="monotone" />
+          <Line dataKey="grossRevenue" name="Gross Revenue" stroke="#0f172a" strokeWidth={2} dot={false} />
+          <Line dataKey="refunds" name="Refunds" stroke="#0ea5e9" strokeWidth={2} dot={false} />
+        </AreaChart>
+      </ResponsiveContainer>
+    ),
+    footer: [
+      { label: "Average Daily Revenue", value: currency(totalRevenue / Math.max(growthRows.length, 1)) },
+      { label: "Highest Day", value: `${highestDay.date} ${currency(highestDay.netRevenue)}` },
+      { label: "Lowest Day", value: `${lowestDay.date} ${currency(lowestDay.netRevenue)}` },
+      { label: "Growth Rate", value: "+8.6%" },
+    ],
+  }
 }
 
-function FactPanel({
-  title,
-  primary,
+function buildCompositionConfig(
+  activeTab: CompositionTab,
+  planRows: Array<DrawerItem & { plan: string; activePaidUsers: number; revenue: number; arpu: number; growth: string; churnRate: string }>,
+  acquisitionRows: Array<AcquisitionRow & { visitors: number; paidUsers: number }>,
+  landingRows: Array<(typeof paidLandingPages)[number]>
+) {
+  if (activeTab === "sources") {
+    const total = acquisitionRows.reduce((sum, row) => sum + row.paidUsers, 0)
+    const rows = acquisitionRows.map((row) => ({ ...row })) as DrawerItem[]
+
+    return {
+      visualTitle: "Paid Users by Source",
+      tableTitle: "Source Performance Summary",
+      total,
+      totalLabel: "Paid Users",
+      rows,
+      distribution: acquisitionRows.map((row) => ({
+        label: row.source,
+        value: row.paidUsers,
+      })),
+      columns: sourceColumns,
+    }
+  }
+
+  if (activeTab === "campaigns") {
+    const rows = acquisitionRows.map((row) => ({
+      campaign: row.utmCampaign,
+      source: row.source,
+      paidUsers: row.paidUsers,
+      paidConversion: row.paidConversion,
+      retention: row.retention,
+      churnRate: row.churnRate,
+      arpu: row.arpu,
+    }))
+    const total = rows.reduce((sum, row) => sum + row.paidUsers, 0)
+
+    return {
+      visualTitle: "Paid Users by Campaign",
+      tableTitle: "Campaign / UTM Performance",
+      total,
+      totalLabel: "Paid Users",
+      rows: rows as DrawerItem[],
+      distribution: rows.map((row) => ({
+        label: row.campaign,
+        value: row.paidUsers,
+      })),
+      columns: campaignColumns,
+    }
+  }
+
+  if (activeTab === "landing") {
+    const total = landingRows.reduce((sum, row) => sum + row.paidUsers, 0)
+
+    return {
+      visualTitle: "Paid Users by Landing Page",
+      tableTitle: "Landing Page Performance",
+      total,
+      totalLabel: "Paid Users",
+      rows: landingRows as DrawerItem[],
+      distribution: landingRows.map((row) => ({
+        label: row.landingPage,
+        value: row.paidUsers,
+      })),
+      columns: landingColumns,
+    }
+  }
+
+  const total = planRows.reduce((sum, row) => sum + row.activePaidUsers, 0)
+
+  return {
+    visualTitle: "Plan Mix (Active Paid Users)",
+    tableTitle: "Plan Performance Summary",
+    total,
+    totalLabel: "Active Paid",
+    rows: planRows,
+    distribution: planRows.map((row) => ({
+      label: row.plan,
+      value: row.activePaidUsers,
+    })),
+    columns: planColumns,
+  }
+}
+
+function SimpleTable<T extends DrawerItem>({
+  columns,
+  onRowClick,
   rows,
 }: {
-  title: string
-  primary: string
-  rows: [string, string][]
+  columns: TableColumn<T>[]
+  onRowClick: (row: DrawerItem) => void
+  rows: T[]
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 p-5">
-      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-        {title}
-      </p>
-      <p className="mt-2 text-2xl font-bold text-slate-950">{primary}</p>
-      <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        {rows.map(([label, value]) => (
-          <div key={label} className="rounded-xl bg-slate-50 p-3">
-            <p className="text-xs font-bold text-slate-500">{label}</p>
-            <p className="mt-1 text-sm font-semibold text-slate-950">{value}</p>
-          </div>
-        ))}
+    <div className="overflow-hidden rounded-2xl border border-slate-200">
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+            <tr>
+              {columns.map((column) => (
+                <th key={column.header} className="px-5 py-4">
+                  {column.header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {rows.map((row, index) => (
+              <tr
+                key={index}
+                className="cursor-pointer transition hover:bg-violet-50/50"
+                onClick={() => onRowClick(row)}
+              >
+                {columns.map((column) => (
+                  <td key={column.header} className="whitespace-nowrap px-5 py-4 text-slate-700">
+                    {column.render(row)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )
 }
 
-function Sparkline({
-  values,
-  tone,
-}: {
-  values: number[]
-  tone: "success" | "danger" | "neutral"
-}) {
-  const data = values.map((value, index) => ({ index, value }))
-  const stroke = tone === "danger" ? "#ef4444" : tone === "success" ? "#10b981" : "#7c3aed"
-
+function KeyValueGrid({ item }: { item: DrawerItem }) {
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={data}>
-        <XAxis dataKey="index" hide />
-        <YAxis hide domain={["dataMin", "dataMax"]} />
-        <Line dataKey="value" dot={false} stroke={stroke} strokeWidth={2.5} type="monotone" />
-      </LineChart>
-    </ResponsiveContainer>
+    <div className="space-y-4">
+      {Object.entries(item).map(([key, value]) => (
+        <div key={key} className="rounded-xl border border-slate-100 p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            {key}
+          </p>
+          <p className="mt-1 text-sm font-semibold text-slate-950">
+            {String(value)}
+          </p>
+        </div>
+      ))}
+    </div>
   )
 }
 
-function ChartSkeleton() {
-  return <div className="h-full rounded-xl bg-slate-100" />
+function buildPlanRows(plans: PlanRow[]) {
+  const focused = plans
+    .map((plan) => {
+      const arpuMap: Record<string, number> = {
+        Basic: 183.88,
+        Growth: 333.9,
+        Professional: 112.71,
+        Pro: 420,
+        Starter: 210.38,
+      }
+      const growthMap: Record<string, string> = {
+        Basic: "-1.2%",
+        Growth: "+9.8%",
+        Professional: "-2.5%",
+        Pro: "+6.1%",
+        Starter: "+7.6%",
+      }
+
+      return {
+        plan: plan.plan,
+        activePaidUsers: plan.activeSubscribers,
+        revenue: Math.round(plan.activeSubscribers * (arpuMap[plan.plan] ?? 160)),
+        arpu: arpuMap[plan.plan] ?? 160,
+        growth: growthMap[plan.plan] ?? "+3.2%",
+        churnRate: plan.churnRate,
+      }
+    })
+    .sort((a, b) => {
+      const aIndex = priorityPlans.indexOf(a.plan)
+      const bIndex = priorityPlans.indexOf(b.plan)
+
+      return (aIndex === -1 ? 99 : aIndex) - (bIndex === -1 ? 99 : bIndex)
+    })
+
+  return focused
 }
 
-function buildPlanMixTrend(plans: PlanRow[]) {
+function buildPlanMixTrend(
+  planRows: Array<DrawerItem & { plan: string; activePaidUsers: number }>
+) {
   const dates = ["Apr 27", "May 4", "May 11", "May 18", "May 25"]
-  const total = plans.reduce((sum, row) => sum + row.activeSubscribers, 0)
+  const total = planRows.reduce((sum, row) => sum + row.activePaidUsers, 0)
 
   return dates.map((date, dateIndex) => {
     const row: Record<string, string | number> = { date }
 
-    plans.forEach((plan, planIndex) => {
-      const baseShare = (plan.activeSubscribers / total) * 100
+    planRows.forEach((plan, planIndex) => {
+      const baseShare = (plan.activePaidUsers / Math.max(total, 1)) * 100
       row[plan.plan] = Math.max(
         2,
-        Number((baseShare + dateIndex * (0.6 - planIndex * 0.12)).toFixed(1))
+        Number((baseShare + dateIndex * (0.5 - planIndex * 0.1)).toFixed(1))
       )
     })
 
@@ -1026,123 +1245,81 @@ function buildPlanMixTrend(plans: PlanRow[]) {
   })
 }
 
-function buildAcquisitionConfig(
-  tab: AcquisitionTab,
-  acquisitionRows: AcquisitionRow[],
-  landingRows: DrawerItem[]
-): AcquisitionTabConfig {
-  if (tab === "campaign") {
-    const rows = acquisitionRows.map((row) => ({
-      campaign: row.utmCampaign,
-      source: row.source,
-      paidUsers: row.paidUsers,
-      paidConversion: row.paidConversion,
-      churnRate: row.churnRate,
-      arpu: row.arpu,
-    }))
-    const best = maxBy(rows, (row) => Number(row.paidConversion.replace("%", "")))
-    const totalPaidUsers = rows.reduce((sum, row) => sum + row.paidUsers, 0)
+function ChartSkeleton() {
+  return <div className="h-full rounded-xl bg-slate-100" />
+}
 
-    return {
-      title: "Top Campaigns by Paid Users",
-      description: "Campaign paid conversion and churn quality.",
-      totalPaidUsers,
-      rows,
-      columns: campaignColumns,
-      distribution: rows.map((row) => ({
-        label: String(row.campaign),
-        value: Number(row.paidUsers),
-        detail: String(row.paidConversion),
-      })),
-      kpis: [
-        { label: "Best Campaign", value: String(best.campaign), detail: best.paidConversion },
-        { label: "Top Source", value: String(best.source), detail: `${formatNumber(best.paidUsers)} users` },
-        { label: "Campaign Churn", value: best.churnRate, detail: "best campaign" },
-      ],
-      trend: [],
-    }
-  }
-
-  if (tab === "landing") {
-    const best = maxBy(landingRows, (row) => Number(String(row.paidConversion).replace("%", "")))
-    const totalPaidUsers = landingRows.reduce((sum, row) => sum + Number(row.paidUsers), 0)
-
-    return {
-      title: "Top Landing Pages by Paid Users",
-      description: "Landing pages that convert visitors into paid subscribers.",
-      totalPaidUsers,
-      rows: landingRows,
-      columns: landingColumns,
-      distribution: landingRows.map((row) => ({
-        label: String(row.landingPage),
-        value: Number(row.paidUsers),
-        detail: String(row.paidConversion),
-      })),
-      kpis: [
-        { label: "Top Landing Page", value: String(best.landingPage), detail: `${formatNumber(Number(best.paidUsers))} users` },
-        { label: "Paid Conversion", value: String(best.paidConversion), detail: String(best.intent) },
-        { label: "MRR", value: String(best.mrr), detail: "top landing" },
-      ],
-      trend: [],
-    }
-  }
-
-  const best = maxBy(acquisitionRows, (row) => row.paidUsers)
-  const totalPaidUsers = acquisitionRows.reduce((sum, row) => sum + row.paidUsers, 0)
-
-  return {
-    title: "Top Acquisition Sources by Paid Users",
-    description: "Source-level paid conversion and retention.",
-    totalPaidUsers,
-    rows: acquisitionRows,
-    columns: sourceColumns,
-    distribution: acquisitionRows.map((row) => ({
-      label: row.source,
-      value: row.paidUsers,
-      detail: row.paidConversion,
-    })),
-    kpis: [
-      { label: "Top Source", value: best.source, detail: `${formatNumber(best.paidUsers)} users` },
-      { label: "Paid Conversion", value: best.paidConversion, detail: best.utmCampaign },
-      { label: "Retention", value: best.retention, detail: best.group },
-    ],
-    trend: [],
-  }
+function currency(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    currency: "USD",
+    maximumFractionDigits: 0,
+    style: "currency",
+  }).format(value)
 }
 
 function maxBy<T>(rows: T[], getValue: (row: T) => number) {
   return rows.reduce((best, row) => (getValue(row) > getValue(best) ? row : best))
 }
 
+function minBy<T>(rows: T[], getValue: (row: T) => number) {
+  return rows.reduce((best, row) => (getValue(row) < getValue(best) ? row : best))
+}
+
 function scale(value: number, multiplier: number) {
   return Math.round(value * multiplier)
 }
 
-const sourceColumns: DataTableColumn<DrawerItem>[] = [
-  { key: "source", header: "Source", render: (row) => <span className="font-semibold">{row.source}</span> },
-  { key: "group", header: "Group", render: (row) => row.group },
-  { key: "utmCampaign", header: "Campaign", render: (row) => row.utmCampaign },
-  { key: "visitors", header: "Visitors", render: (row) => formatNumber(Number(row.visitors)) },
-  { key: "paidUsers", header: "Paid Users", render: (row) => formatNumber(Number(row.paidUsers)) },
-  { key: "paidConversion", header: "Paid Conv.", render: (row) => <span className="font-semibold text-violet-600">{row.paidConversion}</span> },
-  { key: "churnRate", header: "Churn", render: (row) => row.churnRate },
+const planColumns: TableColumn<DrawerItem>[] = [
+  {
+    header: "Plan",
+    render: (row) => <span className="font-semibold text-slate-950">{row.plan}</span>,
+  },
+  {
+    header: "Active Paid Users",
+    render: (row) => formatNumber(Number(row.activePaidUsers)),
+  },
+  {
+    header: "Revenue",
+    render: (row) => currency(Number(row.revenue)),
+  },
+  {
+    header: "ARPU",
+    render: (row) => currency(Number(row.arpu)),
+  },
+  {
+    header: "Growth",
+    render: (row) => (
+      <span className={String(row.growth).startsWith("-") ? "font-semibold text-rose-500" : "font-semibold text-emerald-600"}>
+        {row.growth}
+      </span>
+    ),
+  },
+  { header: "Churn Rate", render: (row) => row.churnRate },
 ]
 
-const campaignColumns: DataTableColumn<DrawerItem>[] = [
-  { key: "campaign", header: "Campaign", render: (row) => <span className="font-semibold">{row.campaign}</span> },
-  { key: "source", header: "Source", render: (row) => row.source },
-  { key: "paidUsers", header: "Paid Users", render: (row) => formatNumber(Number(row.paidUsers)) },
-  { key: "paidConversion", header: "Paid Conv.", render: (row) => <span className="font-semibold text-violet-600">{row.paidConversion}</span> },
-  { key: "churnRate", header: "Churn", render: (row) => row.churnRate },
-  { key: "arpu", header: "ARPU", render: (row) => row.arpu },
+const sourceColumns: TableColumn<DrawerItem>[] = [
+  { header: "Source", render: (row) => <span className="font-semibold text-slate-950">{row.source}</span> },
+  { header: "Paid Users", render: (row) => formatNumber(Number(row.paidUsers)) },
+  { header: "Paid Conv.", render: (row) => <span className="font-semibold text-violet-600">{row.paidConversion}</span> },
+  { header: "Retention", render: (row) => row.retention },
+  { header: "Churn", render: (row) => row.churnRate },
+  { header: "ARPU", render: (row) => row.arpu },
 ]
 
-const landingColumns: DataTableColumn<DrawerItem>[] = [
-  { key: "landingPage", header: "Landing Page", render: (row) => <span className="font-semibold">{row.landingPage}</span> },
-  { key: "intent", header: "Intent", render: (row) => row.intent },
-  { key: "visitors", header: "Visitors", render: (row) => formatNumber(Number(row.visitors)) },
-  { key: "paidUsers", header: "Paid Users", render: (row) => formatNumber(Number(row.paidUsers)) },
-  { key: "paidConversion", header: "Paid Conv.", render: (row) => <span className="font-semibold text-violet-600">{row.paidConversion}</span> },
-  { key: "mrr", header: "MRR", render: (row) => row.mrr },
-  { key: "churnRate", header: "Churn", render: (row) => row.churnRate },
+const campaignColumns: TableColumn<DrawerItem>[] = [
+  { header: "Campaign", render: (row) => <span className="font-semibold text-slate-950">{row.campaign}</span> },
+  { header: "Source", render: (row) => row.source },
+  { header: "Paid Users", render: (row) => formatNumber(Number(row.paidUsers)) },
+  { header: "Paid Conv.", render: (row) => <span className="font-semibold text-violet-600">{row.paidConversion}</span> },
+  { header: "Retention", render: (row) => row.retention },
+  { header: "Churn", render: (row) => row.churnRate },
+]
+
+const landingColumns: TableColumn<DrawerItem>[] = [
+  { header: "Landing Page", render: (row) => <span className="font-semibold text-slate-950">{row.landingPage}</span> },
+  { header: "Intent", render: (row) => row.intent },
+  { header: "Paid Users", render: (row) => formatNumber(Number(row.paidUsers)) },
+  { header: "Paid Conv.", render: (row) => <span className="font-semibold text-violet-600">{row.paidConversion}</span> },
+  { header: "Revenue", render: (row) => currency(Number(row.revenue)) },
+  { header: "Churn", render: (row) => row.churnRate },
 ]

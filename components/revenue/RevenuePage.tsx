@@ -2,13 +2,20 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
+import {
+  AlertTriangle,
+  CreditCard,
+  DollarSign,
+  TrendingUp,
+  UserPlus,
+  Users,
+} from "lucide-react"
 
-import DataTable, { type DataTableColumn } from "@/components/admin/DataTable"
 import DateRangeControl from "@/components/admin/DateRangeControl"
 import ExportActions from "@/components/admin/ExportActions"
 import PageHeader from "@/components/admin/PageHeader"
 import SideDrawer from "@/components/admin/SideDrawer"
-import StatCard from "@/components/admin/StatCard"
+import StatusBadge from "@/components/admin/StatusBadge"
 import DashboardLayout from "@/components/layout/DashboardLayout"
 import {
   getCompareModeLabel,
@@ -26,7 +33,6 @@ import {
   getRevenueRows,
   getRevenueSummary,
   getSubscriberTrend,
-  type RevenueDailyRow,
   type RevenueService,
 } from "./revenue-data"
 
@@ -34,12 +40,20 @@ type RevenuePageProps = {
   service: RevenueService
 }
 
+type RecentPayment = {
+  time: string
+  user: string
+  plan: string
+  amount: number
+  status: "Paid" | "Failed"
+  method: string
+  service: string
+}
+
 type DrawerState =
-  | { type: "payment"; item: RevenueDailyRow }
-  | { type: "plan"; item: { plan: string; revenue: number; activePaidUsers: number } }
+  | { type: "payment"; item: RecentPayment }
   | { type: "metric"; item: { label: string; value: string; detail: string } }
-  | { type: "failed"; rows: RevenueDailyRow[] }
-  | { type: "cancelled"; rows: RevenueDailyRow[] }
+  | { type: "failed"; rows: RecentPayment[] }
   | null
 
 const serviceFilters: { label: string; value: RevenueService; href: string }[] = [
@@ -48,47 +62,72 @@ const serviceFilters: { label: string; value: RevenueService; href: string }[] =
   { label: "VPICK", value: "VPICK", href: "/dashboard/revenue/vpick" },
 ]
 
-const planFilters = ["All", "Free", "Starter", "Growth", "Pro", "Enterprise"]
+const paymentUsers = [
+  "minjun.kim@example.com",
+  "jina.park@example.com",
+  "seoho.lee@example.com",
+  "danyang.choi@example.com",
+  "hyunwoo.yoon@example.com",
+  "minseo.kang@example.com",
+  "soyoung.han@example.com",
+  "jiwon.oh@example.com",
+]
 
 export default function RevenuePage({ service }: RevenuePageProps) {
-  const [plan, setPlan] = useState("All")
-  const [page, setPage] = useState(1)
   const [drawer, setDrawer] = useState<DrawerState>(null)
   const { period, startDate, endDate, compareMode, resetDateRange } =
     useDashboardDateRange()
   const periodMultiplier = getPeriodMultiplier(period)
 
-  const rows = useMemo(() => {
-    const source = getRevenueRows(service).filter(
-      (row) => plan === "All" || row.plan === plan
-    )
-
-    return source.map((row) => ({
-      ...row,
-      newPaidUsers: Math.round(row.newPaidUsers * periodMultiplier),
-      activePaidUsers: Math.round(row.activePaidUsers * periodMultiplier),
-      cancelledSubscribers: Math.round(
-        row.cancelledSubscribers * periodMultiplier
-      ),
-      grossRevenue: Math.round(row.grossRevenue * periodMultiplier),
-      refunds: Math.round(row.refunds * periodMultiplier),
-      netRevenue: Math.round(row.netRevenue * periodMultiplier),
-      failedPayments: Math.round(row.failedPayments * periodMultiplier),
-    }))
-  }, [periodMultiplier, plan, service])
+  const rows = useMemo(
+    () =>
+      getRevenueRows(service).map((row) => ({
+        ...row,
+        newPaidUsers: Math.round(row.newPaidUsers * periodMultiplier),
+        activePaidUsers: Math.round(row.activePaidUsers * periodMultiplier),
+        cancelledSubscribers: Math.round(
+          row.cancelledSubscribers * periodMultiplier
+        ),
+        grossRevenue: Math.round(row.grossRevenue * periodMultiplier),
+        refunds: Math.round(row.refunds * periodMultiplier),
+        netRevenue: Math.round(row.netRevenue * periodMultiplier),
+        failedPayments: Math.round(row.failedPayments * periodMultiplier),
+      })),
+    [periodMultiplier, service]
+  )
 
   const summary = getRevenueSummary(rows)
   const planBreakdown = getPlanBreakdown(rows)
-  const pageTitle = service === "Overall" ? "Revenue Analytics" : `${service} Revenue`
+  const dailyTrend = getDailyTrend(rows)
+  const subscriberTrend = getSubscriberTrend(rows)
+  const netPaidGrowth = summary.newPaidUsers - summary.cancelledSubscribers
+  const pageTitle = service === "Overall" ? "Revenue Overview" : `${service} Revenue`
+
+  const recentPayments = useMemo(
+    () =>
+      [...rows]
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 8)
+        .map((row, index): RecentPayment => ({
+          time: `${row.date} ${["14:32", "13:18", "11:05", "10:22", "09:44", "08:30", "07:58", "07:22"][index]}`,
+          user: paymentUsers[index % paymentUsers.length],
+          plan: row.plan,
+          amount: Math.max(row.netRevenue, 0),
+          status: row.failedPayments > 7 && index % 3 === 1 ? "Failed" : "Paid",
+          method: "Card",
+          service: row.service,
+        })),
+    [rows]
+  )
+
   const exportPayload = useMemo(
     () => ({
       title: `${pageTitle} Report`,
       subtitle:
-        "Revenue, paid user movement, cancellation, refund, net revenue, and failed payment report.",
-      filename: `${service.toLowerCase()}-revenue-report`,
+        "Executive revenue report covering revenue health, paid growth, churn, plan performance, and recent payments.",
+      filename: `${service.toLowerCase()}-revenue-overview-report`,
       filters: {
         Service: service,
-        Plan: plan,
         "Date range": getDateRangeLabel(startDate, endDate),
         Compare: getCompareModeLabel(compareMode),
       },
@@ -99,162 +138,74 @@ export default function RevenuePage({ service }: RevenuePageProps) {
           detail: "Net revenue after refunds",
         },
         {
-          label: "New Paid Users",
-          value: formatNumber(summary.newPaidUsers),
-          detail: "New paid conversions",
-        },
-        {
           label: "Active Paid Users",
           value: formatNumber(summary.activePaidUsers),
-          detail: "Basis for net paid users",
+          detail: "Active paid subscription users",
         },
         {
-          label: "Cancelled Subscribers",
-          value: formatNumber(summary.cancelledSubscribers),
-          detail: "Separate cancellation count",
+          label: "New Paid Users",
+          value: formatNumber(summary.newPaidUsers),
+          detail: "Selected period first paid users",
         },
         {
-          label: "Churn Rate",
-          value: `${summary.churnRate.toFixed(1)}%`,
-          detail: "Cancelled / active paid users",
-        },
-        {
-          label: "Net Paid Users",
-          value: formatNumber(summary.netPaidUsers),
-          detail: "Equals active paid users",
+          label: "Net Paid Growth",
+          value: formatNumber(netPaidGrowth),
+          detail: "New paid users - churn users",
         },
         {
           label: "ARPU",
           value: formatCurrency(summary.arpu),
-          detail: "Net revenue per active paid user",
+          detail: "Revenue / active paid users",
         },
         {
           label: "Failed Payments",
           value: formatNumber(summary.failedPayments),
-          detail: "Payment recovery queue",
+          detail: "Payment failure count",
         },
       ],
       charts: [
         {
-          title: "Revenue by Plan",
-          points: planBreakdown.map((item) => ({
-            label: item.plan,
-            value: item.revenue,
-            secondary: `${item.activePaidUsers} active users`,
+          title: "Daily Net Revenue",
+          points: dailyTrend.map((row) => ({
+            label: row.date,
+            value: row.netRevenue,
+            secondary: `${formatCurrency(row.grossRevenue)} gross`,
           })),
         },
         {
-          title: "Daily Net Revenue",
-          points: rows.map((row) => ({
-            label: row.date,
-            value: row.netRevenue,
-            secondary: `${row.failedPayments} failed payments`,
+          title: "Plan Revenue",
+          points: planBreakdown.map((row) => ({
+            label: row.plan,
+            value: row.revenue,
+            secondary: `${formatNumber(row.activePaidUsers)} active paid users`,
           })),
         },
       ],
       datasets: [
-        {
-          name: "Plan-level Payment Table",
-          rows: rows.map((row) => ({
-            Date: row.date,
-            Service: row.service,
-            Plan: row.plan,
-            "New Paid Users": row.newPaidUsers,
-            "Active Paid Users": row.activePaidUsers,
-            "Cancelled Subscribers": row.cancelledSubscribers,
-            "Gross Revenue": row.grossRevenue,
-            Refunds: row.refunds,
-            "Net Revenue": row.netRevenue,
-            "Failed Payments": row.failedPayments,
-          })),
-        },
-        {
-          name: "Revenue by Plan",
-          rows: planBreakdown.map((item) => ({
-            Plan: item.plan,
-            Revenue: item.revenue,
-            "Active Paid Users": item.activePaidUsers,
-          })),
-        },
+        { name: "Daily Revenue Trend", rows: dailyTrend },
+        { name: "Subscriber Trend", rows: subscriberTrend },
+        { name: "Plan Distribution", rows: planBreakdown },
+        { name: "Recent Payments", rows: recentPayments },
       ],
     }),
     [
       compareMode,
+      dailyTrend,
       endDate,
+      netPaidGrowth,
       pageTitle,
-      plan,
       planBreakdown,
-      rows,
+      recentPayments,
       service,
       startDate,
+      subscriberTrend,
       summary,
     ]
   )
+
   const openMetric = (label: string, value: string, detail: string) => {
     setDrawer({ type: "metric", item: { label, value, detail } })
   }
-
-  const columns: DataTableColumn<RevenueDailyRow>[] = [
-    { key: "date", header: "Date", render: (row) => row.date },
-    { key: "service", header: "Service", render: (row) => row.service },
-    {
-      key: "plan",
-      header: "Plan",
-      render: (row) => (
-        <button
-          className="font-semibold text-violet-600 transition hover:text-violet-700"
-          onClick={(event) => {
-            event.stopPropagation()
-            const planItem = planBreakdown.find((item) => item.plan === row.plan)
-            if (planItem) {
-              setDrawer({ type: "plan", item: planItem })
-            }
-          }}
-        >
-          {row.plan}
-        </button>
-      ),
-    },
-    {
-      key: "newPaidUsers",
-      header: "New Paid Users",
-      render: (row) => formatNumber(row.newPaidUsers),
-    },
-    {
-      key: "activePaidUsers",
-      header: "Active Paid Users",
-      render: (row) => formatNumber(row.activePaidUsers),
-    },
-    {
-      key: "cancelledSubscribers",
-      header: "Cancelled Subscribers",
-      render: (row) => formatNumber(row.cancelledSubscribers),
-    },
-    {
-      key: "grossRevenue",
-      header: "Gross Revenue",
-      render: (row) => formatCurrency(row.grossRevenue),
-    },
-    {
-      key: "refunds",
-      header: "Refunds",
-      render: (row) => (
-        <span className="text-rose-500">{formatCurrency(row.refunds)}</span>
-      ),
-    },
-    {
-      key: "netRevenue",
-      header: "Net Revenue",
-      render: (row) => (
-        <span className="font-semibold">{formatCurrency(row.netRevenue)}</span>
-      ),
-    },
-    {
-      key: "failedPayments",
-      header: "Failed Payments",
-      render: (row) => formatNumber(row.failedPayments),
-    },
-  ]
 
   return (
     <DashboardLayout>
@@ -262,16 +213,16 @@ export default function RevenuePage({ service }: RevenuePageProps) {
         breadcrumbs={[
           { label: "Dashboards" },
           { label: "Revenue" },
-          { label: service },
+          { label: service === "Overall" ? "Overview" : service },
         ]}
         title={pageTitle}
-        description="Interactive mock analysis for service revenue, paid user movement, cancellations, refunds, and failed payments."
+        description="Track paid subscription performance and revenue health."
         actions={<ExportActions payload={exportPayload} />}
       />
 
       <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <div className="mb-6 grid gap-6 xl:grid-cols-[1fr_1.4fr]">
-          <FilterGroup label="Service">
+        <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-wrap gap-2">
             {serviceFilters.map((item) => (
               <Link
                 key={item.value}
@@ -281,215 +232,222 @@ export default function RevenuePage({ service }: RevenuePageProps) {
                 {item.label}
               </Link>
             ))}
-          </FilterGroup>
-          <FilterGroup label="Plan">
-            {planFilters.map((item) => (
-              <button
-                key={item}
-                className={filterClass(plan === item)}
-                onClick={() => {
-                  setPlan(item)
-                  setPage(1)
-                }}
-              >
-                {item}
-              </button>
-            ))}
-          </FilterGroup>
+          </div>
+          <button
+            className="w-fit rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-950"
+            onClick={resetDateRange}
+          >
+            Reset Date
+          </button>
         </div>
         <DateRangeControl />
-        <button
-          className="mt-5 rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-950"
-          onClick={() => {
-            resetDateRange()
-            setPlan("All")
-            setPage(1)
-          }}
-        >
-          Reset All
-        </button>
       </section>
 
-      <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <button
-          className="h-full text-left"
-          onClick={() =>
-            openMetric(
-              "Total Revenue",
-              formatCurrency(summary.totalRevenue),
-              "Net revenue after refunds"
-            )
-          }
-        >
-          <StatCard
-            label="Total Revenue"
-            value={formatCurrency(summary.totalRevenue)}
+      <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
+        <div className="grid divide-y divide-slate-100 lg:grid-cols-3 lg:divide-x lg:divide-y-0 2xl:grid-cols-6">
+          <RevenueMetricCard
             detail="Net revenue after refunds"
-            insight="Revenue trend is separated into gross, refunds, and net movement."
-            ctaLabel="View revenue detail"
-            interactive
+            icon={<DollarSign className="size-5" />}
+            label="Total Revenue"
+            onClick={() =>
+              openMetric(
+                "Total Revenue",
+                formatCurrency(summary.totalRevenue),
+                "Net revenue after refunds"
+              )
+            }
+            tone="violet"
+            value={formatCurrency(summary.totalRevenue)}
           />
-        </button>
-        <button
-          className="h-full text-left"
-          onClick={() =>
-            openMetric(
-              "New Paid Users",
-              formatNumber(summary.newPaidUsers),
-              "New paid conversions"
-            )
-          }
-        >
-          <StatCard
-            label="New Paid Users"
-            value={formatNumber(summary.newPaidUsers)}
-            detail="New paid conversions"
-            insight="New paid users are the leading indicator for plan-level growth."
-            ctaLabel="View paid conversion detail"
-            interactive
-          />
-        </button>
-        <button
-          className="h-full text-left"
-          onClick={() =>
-            openMetric(
-              "Active Paid Users",
-              formatNumber(summary.activePaidUsers),
-              "Basis for net paid users"
-            )
-          }
-        >
-          <StatCard
+          <RevenueMetricCard
+            detail="Current valid paid users"
+            icon={<Users className="size-5" />}
             label="Active Paid Users"
+            onClick={() =>
+              openMetric(
+                "Active Paid Users",
+                formatNumber(summary.activePaidUsers),
+                "Active subscription + valid payment"
+              )
+            }
+            tone="blue"
             value={formatNumber(summary.activePaidUsers)}
-            detail="Basis for net paid users"
-            insight="Active paid users are the source of truth for net paid users."
-            ctaLabel="Open paid user detail"
-            interactive
           />
-        </button>
-        <button
-          className="h-full text-left"
-          onClick={() => setDrawer({ type: "cancelled", rows })}
-        >
-          <StatCard
-            label="Cancelled Subscribers"
-            value={formatNumber(summary.cancelledSubscribers)}
-            detail="Open cancellation list"
-            insight="Cancellations are tracked separately from inactive free users."
-            ctaLabel="View cancellation list"
-            interactive
+          <RevenueMetricCard
+            detail="First paid users in period"
+            icon={<UserPlus className="size-5" />}
+            label="New Paid Users"
+            onClick={() =>
+              openMetric(
+                "New Paid Users",
+                formatNumber(summary.newPaidUsers),
+                "Selected period first paid conversions"
+              )
+            }
+            tone="blue"
+            value={formatNumber(summary.newPaidUsers)}
           />
-        </button>
-        <button
-          className="h-full text-left"
-          onClick={() =>
-            openMetric(
-              "Churn Rate",
-              `${summary.churnRate.toFixed(1)}%`,
-              "Cancelled / active paid users"
-            )
-          }
-        >
-          <StatCard
-            label="Churn Rate"
-            value={`${summary.churnRate.toFixed(1)}%`}
-            detail="Cancelled / active paid users"
-            insight="Churn should be interpreted alongside failed payments and refunds."
-            ctaLabel="Open churn detail"
-            interactive
+          <RevenueMetricCard
+            detail="New paid - churn users"
+            icon={<TrendingUp className="size-5" />}
+            label="Net Paid Growth"
+            onClick={() =>
+              openMetric(
+                "Net Paid Growth",
+                formatNumber(netPaidGrowth),
+                "New paid users - churn users"
+              )
+            }
+            tone="green"
+            value={formatNumber(netPaidGrowth)}
           />
-        </button>
-        <button
-          className="h-full text-left"
-          onClick={() =>
-            openMetric(
-              "Net Paid Users",
-              formatNumber(summary.netPaidUsers),
-              "Equals active paid users"
-            )
-          }
-        >
-          <StatCard
-            label="Net Paid Users"
-            value={formatNumber(summary.netPaidUsers)}
-            detail="Equals active paid users"
-            insight="Net paid users are counted from active paid subscriptions."
-            ctaLabel="View net paid user detail"
-            interactive
-          />
-        </button>
-        <button
-          className="h-full text-left"
-          onClick={() =>
-            openMetric(
-              "ARPU",
-              formatCurrency(summary.arpu),
-              "Net revenue per active paid user"
-            )
-          }
-        >
-          <StatCard
+          <RevenueMetricCard
+            detail="Revenue / active paid users"
+            icon={<CreditCard className="size-5" />}
             label="ARPU"
+            onClick={() =>
+              openMetric(
+                "ARPU",
+                formatCurrency(summary.arpu),
+                "Revenue / active paid users"
+              )
+            }
+            tone="amber"
             value={formatCurrency(summary.arpu)}
-            detail="Net revenue per active paid user"
-            insight="ARPU helps compare plan quality and expansion potential."
-            ctaLabel="Open ARPU detail"
-            interactive
           />
-        </button>
-        <button
-          className="h-full text-left"
-          onClick={() => setDrawer({ type: "failed", rows })}
-        >
-          <StatCard
+          <RevenueMetricCard
+            detail="Payment failure count"
+            icon={<AlertTriangle className="size-5" />}
             label="Failed Payments"
+            onClick={() =>
+              setDrawer({
+                type: "failed",
+                rows: recentPayments.filter((payment) => payment.status === "Failed"),
+              })
+            }
+            tone="rose"
             value={formatNumber(summary.failedPayments)}
-            detail="Open failed payment list"
-            insight="Failed payments are an operational risk for revenue recovery."
-            ctaLabel="View failed payments"
-            interactive
           />
-        </button>
-      </div>
+        </div>
+      </section>
 
       <div className="mb-8">
         <RevenueCharts
-          dailyTrend={getDailyTrend(rows)}
+          dailyTrend={dailyTrend}
           planBreakdown={planBreakdown}
-          subscriberTrend={getSubscriberTrend(rows)}
+          subscriberTrend={subscriberTrend}
+          summary={summary}
         />
       </div>
 
-      <DataTable
-        columns={columns}
-        data={rows}
-        summary={`Showing page ${page} of 4 plan-level payment pages`}
-        page={page}
-        totalPages={4}
-        onPageChange={setPage}
-        onRowClick={(item) => setDrawer({ type: "payment", item })}
-      />
+      <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
+        <div className="flex items-center justify-between gap-4 border-b border-slate-100 p-6">
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight text-slate-950">
+              Latest Payments
+            </h2>
+          </div>
+          <button className="text-sm font-bold text-violet-600 transition hover:text-violet-700">
+            View all payments
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-6 py-4">Payment Time</th>
+                <th className="px-6 py-4">User</th>
+                <th className="px-6 py-4">Plan</th>
+                <th className="px-6 py-4">Amount</th>
+                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4">Method</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {recentPayments.slice(0, 8).map((payment) => (
+                <tr
+                  key={`${payment.time}-${payment.user}-${payment.plan}`}
+                  className="cursor-pointer transition hover:bg-violet-50/50"
+                  onClick={() => setDrawer({ type: "payment", item: payment })}
+                >
+                  <td className="whitespace-nowrap px-6 py-4 font-medium text-slate-700">
+                    {payment.time}
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4 text-slate-700">
+                    {payment.user}
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4">
+                    <StatusBadge tone={payment.plan === "Pro" ? "success" : "neutral"}>
+                      {payment.plan}
+                    </StatusBadge>
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4 font-semibold text-slate-950">
+                    {formatCurrency(payment.amount)}
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4">
+                    <StatusBadge tone={payment.status === "Failed" ? "danger" : "success"}>
+                      {payment.status}
+                    </StatusBadge>
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4 text-slate-700">
+                    {payment.method}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <RevenueDrawer drawer={drawer} onClose={() => setDrawer(null)} />
     </DashboardLayout>
   )
 }
 
-function FilterGroup({
+function RevenueMetricCard({
+  detail,
+  icon,
   label,
-  children,
+  onClick,
+  tone,
+  value,
 }: {
+  detail: string
+  icon: React.ReactNode
   label: string
-  children: React.ReactNode
+  onClick: () => void
+  tone: "violet" | "blue" | "green" | "amber" | "rose"
+  value: string
 }) {
+  const toneClass = {
+    amber: "bg-amber-50 text-amber-600",
+    blue: "bg-blue-50 text-blue-600",
+    green: "bg-emerald-50 text-emerald-600",
+    rose: "bg-rose-50 text-rose-600",
+    violet: "bg-violet-50 text-violet-600",
+  }[tone]
+
   return (
-    <div>
-      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+    <button
+      className="group flex h-full min-h-44 flex-col items-start p-6 text-left transition hover:bg-slate-50"
+      onClick={onClick}
+    >
+      <div className={cn("flex size-10 items-center justify-center rounded-xl", toneClass)}>
+        {icon}
+      </div>
+      <p className="mt-4 text-xs font-bold uppercase tracking-wide text-slate-500">
         {label}
       </p>
-      <div className="flex flex-wrap gap-2">{children}</div>
-    </div>
+      <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
+        {value}
+      </p>
+      <div className="mt-auto pt-4">
+        <StatusBadge tone={tone === "rose" ? "danger" : "success"}>
+          {tone === "rose" ? "-15.2%" : "+8.6%"}
+        </StatusBadge>
+        <p className="mt-3 text-sm font-medium text-slate-500">{detail}</p>
+      </div>
+    </button>
   )
 }
 
@@ -514,39 +472,37 @@ function RevenueDrawer({
       open={Boolean(drawer)}
       title={
         drawer?.type === "payment"
-          ? `${drawer.item.service} ${drawer.item.plan} Payment`
-          : drawer?.type === "plan"
-            ? `${drawer.item.plan} Revenue`
-            : drawer?.type === "metric"
-              ? drawer.item.label
-              : drawer?.type === "failed"
-                ? "Failed Payments"
-                : drawer?.type === "cancelled"
-                  ? "Cancelled Subscribers"
-                  : "Revenue Detail"
+          ? `${drawer.item.plan} Payment`
+          : drawer?.type === "metric"
+            ? drawer.item.label
+            : drawer?.type === "failed"
+              ? "Failed Payments"
+              : "Revenue Detail"
       }
-      description="Interactive mock drawer for API-backed details later."
+      description="Mock revenue detail. Replace with payment, invoice, and subscription API data later."
       onClose={onClose}
     >
       {drawer?.type === "payment" ? <KeyValueGrid item={drawer.item} /> : null}
-      {drawer?.type === "plan" ? <KeyValueGrid item={drawer.item} /> : null}
       {drawer?.type === "metric" ? <KeyValueGrid item={drawer.item} /> : null}
-      {drawer?.type === "failed" || drawer?.type === "cancelled" ? (
+      {drawer?.type === "failed" ? (
         <div className="space-y-3">
-          {drawer.rows.slice(0, 5).map((row) => (
-            <div
-              key={`${row.date}-${row.service}-${row.plan}`}
-              className="rounded-xl border border-slate-100 p-4"
-            >
-              <p className="font-semibold text-slate-950">
-                {row.date} / {row.service} / {row.plan}
-              </p>
-              <p className="mt-1 text-sm text-slate-500">
-                Failed payments: {row.failedPayments} / Cancelled:{" "}
-                {row.cancelledSubscribers}
-              </p>
-            </div>
-          ))}
+          {drawer.rows.length ? (
+            drawer.rows.map((payment) => (
+              <div
+                key={`${payment.time}-${payment.user}`}
+                className="rounded-xl border border-slate-100 p-4"
+              >
+                <p className="font-semibold text-slate-950">{payment.user}</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {payment.time} / {payment.plan} / {formatCurrency(payment.amount)}
+                </p>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-slate-500">
+              No failed payment rows in the current mock slice.
+            </p>
+          )}
         </div>
       ) : null}
     </SideDrawer>

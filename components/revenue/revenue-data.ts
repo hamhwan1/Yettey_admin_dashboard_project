@@ -159,7 +159,15 @@ export function formatNumber(value: number) {
 export function getRevenueSummary(rows: RevenueDailyRow[]) {
   const totalRevenue = rows.reduce((sum, row) => sum + row.netRevenue, 0)
   const newPaidUsers = rows.reduce((sum, row) => sum + row.newPaidUsers, 0)
-  const activePaidUsers = rows.at(-1)?.activePaidUsers ?? 0
+  const activeByServicePlan = rows.reduce<Record<string, number>>((acc, row) => {
+    const key = `${row.service}-${row.plan}`
+    acc[key] = Math.max(acc[key] ?? 0, row.activePaidUsers)
+    return acc
+  }, {})
+  const activePaidUsers = Object.values(activeByServicePlan).reduce(
+    (sum, value) => sum + value,
+    0
+  )
   const cancelledSubscribers = rows.reduce(
     (sum, row) => sum + row.cancelledSubscribers,
     0
@@ -202,24 +210,30 @@ export function getDailyTrend(rows: RevenueDailyRow[]) {
 }
 
 export function getPlanBreakdown(rows: RevenueDailyRow[]) {
-  return Object.values(
-    rows.reduce<Record<string, { plan: string; revenue: number; activePaidUsers: number }>>(
-      (acc, row) => {
-        acc[row.plan] ??= {
-          plan: row.plan,
-          revenue: 0,
-          activePaidUsers: 0,
-        }
-        acc[row.plan].revenue += row.netRevenue
-        acc[row.plan].activePaidUsers = Math.max(
-          acc[row.plan].activePaidUsers,
-          row.activePaidUsers
-        )
-        return acc
-      },
-      {}
+  const breakdown = rows.reduce<
+    Record<string, { plan: string; revenue: number; activePaidUsers: number; servicePlanUsers: Record<string, number> }>
+  >((acc, row) => {
+    acc[row.plan] ??= {
+      plan: row.plan,
+      revenue: 0,
+      activePaidUsers: 0,
+      servicePlanUsers: {},
+    }
+    acc[row.plan].revenue += row.netRevenue
+    acc[row.plan].servicePlanUsers[row.service] = Math.max(
+      acc[row.plan].servicePlanUsers[row.service] ?? 0,
+      row.activePaidUsers
     )
-  )
+    return acc
+  }, {})
+
+  return Object.values(breakdown).map(({ servicePlanUsers, ...item }) => ({
+    ...item,
+    activePaidUsers: Object.values(servicePlanUsers).reduce(
+      (sum, value) => sum + value,
+      0
+    ),
+  }))
 }
 
 export function getSubscriberTrend(rows: RevenueDailyRow[]) {
