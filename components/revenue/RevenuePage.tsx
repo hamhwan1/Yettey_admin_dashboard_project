@@ -22,6 +22,7 @@ import {
   getDateRangeLabel,
   useDashboardDateRange,
 } from "@/lib/dashboard-date-store"
+import { metricValueTypography } from "@/lib/metric-typography"
 import { getPlanPrice } from "@/lib/pricing-plans"
 import { cn } from "@/lib/utils"
 import RevenueCharts from "./RevenueCharts"
@@ -431,7 +432,7 @@ function RevenueMetricCard({
       <p className="mt-4 text-xs font-bold uppercase tracking-wide text-slate-500">
         {label}
       </p>
-      <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
+      <p className={cn("mt-3 text-slate-950", metricValueTypography(value))}>
         {value}
       </p>
       <div className="mt-auto pt-4">

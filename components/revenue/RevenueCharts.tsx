@@ -20,6 +20,7 @@ import {
 import { BarChart3, CreditCard, RefreshCcw, TrendingUp } from "lucide-react"
 
 import StatusBadge from "@/components/admin/StatusBadge"
+import { metricValueTypography } from "@/lib/metric-typography"
 import { cn } from "@/lib/utils"
 import { formatCurrency, formatNumber } from "./revenue-data"
 
@@ -194,7 +195,7 @@ export default function RevenueCharts({
             <p className="text-sm font-semibold text-slate-600">
               {tabConfig.kicker}
             </p>
-            <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
+            <p className={cn("mt-3 text-slate-950", metricValueTypography(tabConfig.value))}>
               {tabConfig.value}
             </p>
             <StatusBadge tone={tabConfig.tone}>{tabConfig.delta}</StatusBadge>
