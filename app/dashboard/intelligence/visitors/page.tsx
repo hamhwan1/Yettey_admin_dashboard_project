@@ -1,5 +1,5 @@
-import IntelligenceDashboard from "@/components/intelligence/IntelligenceDashboard"
+import VisitorAnalyticsDashboard from "@/components/intelligence/VisitorAnalyticsDashboard"
 
 export default function VisitorAnalyticsPage() {
-  return <IntelligenceDashboard dashboardKey="visitors" />
+  return <VisitorAnalyticsDashboard />
 }
