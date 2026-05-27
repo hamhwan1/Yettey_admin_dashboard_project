@@ -3,7 +3,7 @@ export type ServiceFilter = "Overall" | "Yettey" | "VPICK"
 export type ExecutiveKpi = {
   label: string
   baseValue: number
-  format: "number" | "compactCurrency" | "currency" | "percent" | "retention"
+  format: "number" | "currency" | "percent" | "retention"
   retention?: {
     d1: number
     d7: number
@@ -54,7 +54,7 @@ export const executiveKpis: ExecutiveKpi[] = [
   {
     label: "MRR",
     baseValue: 1342060000,
-    format: "compactCurrency",
+    format: "currency",
     delta: "+22.0%",
     deltaTone: "positive",
     status: "Healthy",
@@ -219,7 +219,7 @@ export const analyticsBlocks = {
     href: "/dashboard/revenue",
     status: "Healthy",
     summary: [
-      { label: "MRR", value: 1342060000, format: "compactCurrency", delta: "+22.0%" },
+      { label: "MRR", value: 1342060000, format: "currency", delta: "+22.0%" },
       { label: "Paid Users", value: 14694, format: "number", delta: "+9.4%" },
       { label: "ARPU", value: 91337, format: "currency", delta: "+4.8%" },
       { label: "Churn", value: 3.8, format: "percent", delta: "-0.7%" },
@@ -343,7 +343,7 @@ export const overviewKpis = [
   },
   {
     label: "Revenue",
-    value: "₩1.34B",
+    value: "₩1,342,060,000",
     detail: "Open revenue analysis",
     insight: "Credit-heavy accounts are showing higher upgrade intent this period.",
     href: "/dashboard/revenue",

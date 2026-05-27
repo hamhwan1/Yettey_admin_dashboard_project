@@ -22,7 +22,7 @@ export const currentPlans: CurrentPlan[] = [
     limits: ["4 projects", "2 users"],
     name: "Starter",
     price: 49000,
-    priceLabel: "₩49,000 / mo",
+    priceLabel: `${formatKrw(49000)} / mo`,
     product: "Yettey",
   },
   {
@@ -30,7 +30,7 @@ export const currentPlans: CurrentPlan[] = [
     limits: ["10 projects", "3 users"],
     name: "Growth",
     price: 99000,
-    priceLabel: "₩99,000 / mo",
+    priceLabel: `${formatKrw(99000)} / mo`,
     product: "Yettey",
   },
   {
@@ -38,7 +38,7 @@ export const currentPlans: CurrentPlan[] = [
     limits: ["Unlimited projects", "10 users"],
     name: "Pro",
     price: 249000,
-    priceLabel: "₩249,000 / mo",
+    priceLabel: `${formatKrw(249000)} / mo`,
     product: "Yettey",
   },
   {
@@ -51,7 +51,7 @@ export const currentPlans: CurrentPlan[] = [
     ],
     name: "Basic",
     price: 20000,
-    priceLabel: "₩20,000 / mo, VAT included",
+    priceLabel: `${formatKrw(20000)} / mo, VAT included`,
     product: "VPICK",
   },
   {
@@ -65,7 +65,7 @@ export const currentPlans: CurrentPlan[] = [
     ],
     name: "Professional",
     price: 40000,
-    priceLabel: "₩40,000 / mo, VAT included",
+    priceLabel: `${formatKrw(40000)} / mo, VAT included`,
     product: "VPICK",
   },
 ]
@@ -94,19 +94,7 @@ export function getPlanPrice(plan: CurrentPlanName) {
   return planPrices[plan]
 }
 
-export function formatKrw(value: number, compact = false) {
-  if (compact && Math.abs(value) >= 1000000000) {
-    return `₩${(value / 1000000000).toFixed(2)}B`
-  }
-
-  if (compact && Math.abs(value) >= 1000000) {
-    return `₩${(value / 1000000).toFixed(1)}M`
-  }
-
-  if (compact && Math.abs(value) >= 1000) {
-    return `₩${(value / 1000).toFixed(0)}K`
-  }
-
+export function formatKrw(value: number) {
   return new Intl.NumberFormat("ko-KR", {
     currency: "KRW",
     maximumFractionDigits: 0,

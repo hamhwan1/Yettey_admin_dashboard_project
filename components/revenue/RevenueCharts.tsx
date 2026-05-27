@@ -256,7 +256,7 @@ export default function RevenueCharts({
                 </PieChart>
               </ResponsiveContainer>
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-xl font-bold text-slate-950">
+                <span className={cn("text-slate-950", metricValueTypography(formatCurrency(summary.totalRevenue)))}>
                   {formatCurrency(summary.totalRevenue)}
                 </span>
                 <span className="text-xs font-bold text-slate-500">
@@ -310,7 +310,12 @@ export default function RevenueCharts({
               <LineChart data={buildPlanTrend(planRows, chartDailyTrend)}>
                 <CartesianGrid stroke="#eef2f7" vertical={false} />
                 <XAxis dataKey="date" tickLine={false} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} width={72} />
+                <YAxis
+                  tickFormatter={(value) => formatCurrency(Number(value))}
+                  tickLine={false}
+                  axisLine={false}
+                  width={112}
+                />
                 <Tooltip formatter={(value) => formatCurrency(Number(value))} />
                 {planRows.map((plan, index) => (
                   <Line
@@ -488,7 +493,12 @@ function buildRevenueTabConfig(
           </defs>
           <CartesianGrid stroke="#eef2f7" vertical={false} />
           <XAxis dataKey="date" tickLine={false} axisLine={false} />
-          <YAxis tickLine={false} axisLine={false} width={72} />
+          <YAxis
+            tickFormatter={(value) => formatCurrency(Number(value))}
+            tickLine={false}
+            axisLine={false}
+            width={112}
+          />
           <Tooltip formatter={(value) => formatCurrency(Number(value))} />
           <Area
             dataKey="netRevenue"

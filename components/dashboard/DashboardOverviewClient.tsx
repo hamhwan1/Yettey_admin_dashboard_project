@@ -41,6 +41,7 @@ import {
   type DashboardService,
   useDashboardServiceFilter,
 } from "@/lib/dashboard-service-store"
+import { metricValueTypography } from "@/lib/metric-typography"
 import { formatKrw } from "@/lib/pricing-plans"
 import { cn } from "@/lib/utils"
 import { analyticsBlocks, formatNumber } from "./dashboard-data"
@@ -50,7 +51,7 @@ type DeltaTone = "positive" | "negative" | "neutral"
 type SummaryMetric = {
   label: string
   value: string | number
-  format?: "number" | "compactCurrency" | "currency" | "percent" | "duration"
+  format?: "number" | "currency" | "percent" | "duration"
   delta: string
   deltaTone?: DeltaTone
 }
@@ -516,9 +517,10 @@ export default function DashboardOverviewClient() {
                     tick={{ fill: "#64748b", fontSize: 12 }}
                     tickLine={false}
                     axisLine={false}
-                    width={64}
+                    tickFormatter={(value) => formatKrw(Number(value))}
+                    width={112}
                   />
-                  <Tooltip />
+                  <Tooltip formatter={formatRevenueTooltip} />
                   <Area
                     dataKey="mrr"
                     stroke="#7c3aed"
@@ -596,7 +598,7 @@ function TopSummaryBlock({
                 {metric.label}
               </p>
               <AnimatedMetricValue
-                className="mt-2 text-2xl font-bold tracking-tight text-slate-950 dark:text-slate-50"
+                className={cn("mt-2 text-slate-950 dark:text-slate-50", metricValueTypography(metric.value))}
                 value={metric.value}
               />
             </div>
@@ -796,8 +798,8 @@ function OperationsSummaryBlock({
                 Total cost
               </p>
               <AnimatedMetricValue
-                className="mt-1 text-xl font-bold text-slate-950 dark:text-slate-50"
-                value={formatCompactCurrency(totalCost)}
+                className={cn("mt-1 text-slate-950 dark:text-slate-50", metricValueTypography(formatKrw(totalCost)))}
+                value={formatKrw(totalCost)}
               />
             </div>
           </div>
@@ -819,15 +821,15 @@ function OperationsSummaryBlock({
                           <Cell key={row.label} fill={row.color} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value) => formatCompactCurrency(Number(value))} />
+                      <Tooltip formatter={(value) => formatKrw(Number(value))} />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                     <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
                       Cost
                     </span>
-                    <span className="text-xl font-bold text-slate-950 dark:text-slate-50">
-                      {formatCompactCurrency(totalCost)}
+                    <span className={cn("text-slate-950 dark:text-slate-50", metricValueTypography(formatKrw(totalCost)))}>
+                      {formatKrw(totalCost)}
                     </span>
                   </div>
                 </>
@@ -921,7 +923,7 @@ function CostCategoryRow({
   const share = (row.amount / total) * 100
 
   return (
-    <div title={`${row.label}: ${formatCompactCurrency(row.amount)}`}>
+    <div title={`${row.label}: ${formatKrw(row.amount)}`}>
       <div className="flex items-center justify-between gap-3 text-sm">
         <div className="flex items-center gap-2">
           <span
@@ -934,7 +936,7 @@ function CostCategoryRow({
         </div>
         <div className="text-right">
           <span className="font-bold text-slate-950 dark:text-slate-50">
-            {formatCompactCurrency(row.amount)}
+            {formatKrw(row.amount)}
           </span>
           <span className="ml-2 text-xs font-semibold text-slate-500">
             {share.toFixed(1)}%
@@ -963,7 +965,7 @@ function ServiceCostSplitRow({
   const vpickShare = 100 - yetteyShare
 
   return (
-    <div title={`${row.label}: Yettey ${formatCompactCurrency(row.yettey)}, VPICK ${formatCompactCurrency(row.vpick)}`}>
+    <div title={`${row.label}: Yettey ${formatKrw(row.yettey)}, VPICK ${formatKrw(row.vpick)}`}>
       <div className="mb-2 flex items-center justify-between gap-3 text-sm">
         <span className="font-bold text-slate-700 dark:text-slate-200">
           {row.label}
@@ -989,8 +991,8 @@ function ServiceCostSplitRow({
         />
       </div>
       <div className="mt-2 flex items-center justify-between text-xs font-semibold text-slate-500">
-        <span>Yettey {formatCompactCurrency(row.yettey)}</span>
-        <span>VPICK {formatCompactCurrency(row.vpick)}</span>
+        <span>Yettey {formatKrw(row.yettey)}</span>
+        <span>VPICK {formatKrw(row.vpick)}</span>
       </div>
     </div>
   )
@@ -1041,27 +1043,31 @@ function BlockHeader({
 function InlineMetrics({ metrics }: { metrics: readonly SummaryMetric[] }) {
   return (
     <div className="grid gap-4 sm:grid-cols-3">
-      {metrics.map((metric) => (
-        <div
-          key={metric.label}
-          className="border-r border-slate-100 pr-4 last:border-r-0 dark:border-slate-800"
-          title={`${metric.label}: ${formatMetricValue(metric)} (${metric.delta})`}
-        >
-          <div className="flex items-center gap-1.5">
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-              {metric.label}
-            </p>
-            <Info className="size-3 text-slate-400" />
+      {metrics.map((metric) => {
+        const value = formatMetricValue(metric)
+
+        return (
+          <div
+            key={metric.label}
+            className="border-r border-slate-100 pr-4 last:border-r-0 dark:border-slate-800"
+            title={`${metric.label}: ${value} (${metric.delta})`}
+          >
+            <div className="flex items-center gap-1.5">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                {metric.label}
+              </p>
+              <Info className="size-3 text-slate-400" />
+            </div>
+            <div className="mt-2 flex flex-wrap items-baseline gap-2">
+              <AnimatedMetricValue
+                className={cn("text-slate-950 dark:text-slate-50", metricValueTypography(value))}
+                value={value}
+              />
+              <DeltaBadge tone={metric.deltaTone}>{metric.delta}</DeltaBadge>
+            </div>
           </div>
-          <div className="mt-2 flex flex-wrap items-baseline gap-2">
-            <AnimatedMetricValue
-              className="text-2xl font-bold tracking-tight text-slate-950 dark:text-slate-50"
-              value={formatMetricValue(metric)}
-            />
-            <DeltaBadge tone={metric.deltaTone}>{metric.delta}</DeltaBadge>
-          </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -1432,7 +1438,7 @@ function createDashboardDataset({
     },
     {
       label: "MRR",
-      value: formatCompactCurrency(mrr),
+      value: formatKrw(mrr),
       delta: formatPercent(compareProfile.mrrDelta),
       deltaTone: toneFromDelta(compareProfile.mrrDelta),
       href: "/dashboard/revenue",
@@ -1468,7 +1474,7 @@ function createDashboardDataset({
     {
       label: "MRR",
       value: mrr,
-      format: "compactCurrency",
+      format: "currency",
       delta: formatPercent(compareProfile.mrrDelta),
       deltaTone: toneFromDelta(compareProfile.mrrDelta),
     },
@@ -1940,10 +1946,6 @@ function formatMetricValue(metric: SummaryMetric) {
     return formatNumber(metric.value)
   }
 
-  if (metric.format === "compactCurrency" && typeof metric.value === "number") {
-    return formatCompactCurrency(metric.value)
-  }
-
   if (metric.format === "currency" && typeof metric.value === "number") {
     return formatKrw(metric.value)
   }
@@ -1955,8 +1957,18 @@ function formatMetricValue(metric: SummaryMetric) {
   return String(metric.value)
 }
 
-function formatCompactCurrency(value: number) {
-  return formatKrw(value, true)
+function formatRevenueTooltip(value: unknown, name: unknown) {
+  if (typeof value !== "number") {
+    return String(value)
+  }
+
+  const key = String(name).toLowerCase()
+
+  if (key.includes("mrr")) {
+    return formatKrw(value)
+  }
+
+  return formatNumber(value)
 }
 
 function compactNumber(value: number) {
