@@ -1427,7 +1427,7 @@ function createDashboardDataset({
       value: formatNumber(paidUsers),
       delta: formatPercent(compareProfile.paidDelta),
       deltaTone: toneFromDelta(compareProfile.paidDelta),
-      href: "/dashboard/intelligence/subscriptions",
+      href: "/dashboard/revenue",
       sparkline: userTrend.map((row) => row.paidUsers),
     },
     {

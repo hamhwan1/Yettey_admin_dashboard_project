@@ -425,7 +425,7 @@ function getMetricHref(dashboardKey: DashboardKey, label: string) {
   }
 
   if (dashboardKey === "subscriptions") {
-    return `/dashboard/intelligence/subscriptions?metric=${slug}`
+    return `/dashboard/revenue?metric=${slug}`
   }
 
   if (dashboardKey === "ai-operations") {
