@@ -27,6 +27,7 @@ import { ArrowRight, CircleGauge, Info, TrendingUp } from "lucide-react"
 import DateRangeControl from "@/components/admin/DateRangeControl"
 import ExportActions from "@/components/admin/ExportActions"
 import PageHeader from "@/components/admin/PageHeader"
+import ServiceSegmentFilter from "@/components/admin/ServiceSegmentFilter"
 import DashboardLayout from "@/components/layout/DashboardLayout"
 import type { ExportRow } from "@/lib/export-files"
 import {
@@ -36,10 +37,13 @@ import {
   getDateRangeLabel,
   useDashboardDateRange,
 } from "@/lib/dashboard-date-store"
+import {
+  type DashboardService,
+  useDashboardServiceFilter,
+} from "@/lib/dashboard-service-store"
 import { cn } from "@/lib/utils"
 import { analyticsBlocks, formatNumber } from "./dashboard-data"
 
-type DashboardService = "Overall" | "Yettey" | "VPICK"
 type DeltaTone = "positive" | "negative" | "neutral"
 
 type SummaryMetric = {
@@ -136,7 +140,6 @@ type DashboardDataset = {
 }
 
 const chartColors = ["#7c3aed", "#3b82f6", "#10b981", "#94a3b8"]
-const services: DashboardService[] = ["Overall", "Yettey", "VPICK"]
 
 const serviceProfiles: Record<
   DashboardService,
@@ -272,9 +275,9 @@ const periodConfigs: Record<
 }
 
 export default function DashboardOverviewClient() {
-  const [service, setService] = useState<DashboardService>("Overall")
   const [isMounted, setIsMounted] = useState(false)
   const [isServicePending, startServiceTransition] = useTransition()
+  const { resetService, service, setService } = useDashboardServiceFilter()
   const { period, startDate, endDate, compareMode, resetDateRange } =
     useDashboardDateRange()
   const filterKey = `${service}-${period}-${compareMode}-${startDate}-${endDate}`
@@ -380,7 +383,7 @@ export default function DashboardOverviewClient() {
       />
 
       <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950">
-        <ServiceTabs
+        <ServiceSegmentFilter
           service={service}
           onChange={(nextService) =>
             startServiceTransition(() => setService(nextService))
@@ -392,7 +395,7 @@ export default function DashboardOverviewClient() {
         <button
           className="mt-5 rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-950 dark:hover:bg-slate-900 dark:hover:text-slate-100"
           onClick={() => {
-            startServiceTransition(() => setService("Overall"))
+            startServiceTransition(() => resetService())
             resetDateRange()
           }}
         >
@@ -565,38 +568,6 @@ export default function DashboardOverviewClient() {
         />
       </div>
     </DashboardLayout>
-  )
-}
-
-function ServiceTabs({
-  service,
-  onChange,
-}: {
-  service: DashboardService
-  onChange: (service: DashboardService) => void
-}) {
-  return (
-    <div>
-      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-        Service
-      </p>
-      <div className="flex flex-wrap gap-2">
-        {services.map((item) => (
-          <button
-            key={item}
-            className={cn(
-              "h-9 rounded-lg px-3 text-sm font-semibold transition hover:bg-slate-100 hover:text-slate-950",
-              service === item
-                ? "bg-violet-600 text-white shadow-sm shadow-violet-600/20 hover:bg-violet-600 hover:text-white"
-                : "text-slate-600 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-slate-50"
-            )}
-            onClick={() => onChange(item)}
-          >
-            {item}
-          </button>
-        ))}
-      </div>
-    </div>
   )
 }
 

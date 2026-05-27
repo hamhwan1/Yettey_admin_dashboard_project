@@ -21,6 +21,7 @@ import DataTable, { type DataTableColumn } from "@/components/admin/DataTable"
 import DateRangeControl from "@/components/admin/DateRangeControl"
 import ExportActions from "@/components/admin/ExportActions"
 import PageHeader from "@/components/admin/PageHeader"
+import ServiceSegmentFilter from "@/components/admin/ServiceSegmentFilter"
 import SideDrawer from "@/components/admin/SideDrawer"
 import StatusBadge from "@/components/admin/StatusBadge"
 import DashboardLayout from "@/components/layout/DashboardLayout"
@@ -31,6 +32,10 @@ import {
   getPeriodMultiplier,
   useDashboardDateRange,
 } from "@/lib/dashboard-date-store"
+import {
+  type DashboardService,
+  useDashboardServiceFilter,
+} from "@/lib/dashboard-service-store"
 import { cn } from "@/lib/utils"
 import {
   landingPagePerformance,
@@ -84,78 +89,270 @@ const acquisitionTabs: {
   { id: "utm", label: "UTM Campaigns", icon: Tag },
 ]
 
+const signupServiceProfiles: Record<
+  DashboardService,
+  {
+    visitorFactor: number
+    signupFactor: number
+    paidFactor: number
+    sourceBias: Record<string, number>
+    landingBias: Record<string, number>
+    providerBias: Record<string, number>
+    regionBias: Record<string, number>
+    utmBias: Record<string, number>
+  }
+> = {
+  Overall: {
+    visitorFactor: 1,
+    signupFactor: 1,
+    paidFactor: 1,
+    sourceBias: {},
+    landingBias: {},
+    providerBias: {},
+    regionBias: {},
+    utmBias: {},
+  },
+  Yettey: {
+    visitorFactor: 0.62,
+    signupFactor: 0.66,
+    paidFactor: 0.7,
+    sourceBias: {
+      Direct: 1.12,
+      "Google Search": 1.18,
+      Instagram: 0.82,
+      Organic: 1.16,
+      "Paid Ads": 0.76,
+      Referral: 1.08,
+      Unknown: 0.84,
+      YouTube: 0.78,
+    },
+    landingBias: {
+      "/ai-video-generator": 0.74,
+      "/pricing": 1.14,
+      "/studio": 1.24,
+      "/thumbnail-generator": 1.18,
+      "/vpick-shortform": 0.56,
+    },
+    providerBias: {
+      Email: 1.06,
+      Google: 1.08,
+      Kakao: 1.02,
+      Naver: 1.12,
+    },
+    regionBias: {
+      Indonesia: 0.82,
+      Japan: 1.02,
+      "South Korea": 1.18,
+      "United States": 0.94,
+      Vietnam: 0.88,
+    },
+    utmBias: {
+      google: 1.16,
+      instagram: 0.78,
+      kakao: 0.86,
+      naver: 1.2,
+      youtube: 0.74,
+    },
+  },
+  VPICK: {
+    visitorFactor: 0.38,
+    signupFactor: 0.34,
+    paidFactor: 0.3,
+    sourceBias: {
+      Direct: 0.82,
+      "Google Search": 0.76,
+      Instagram: 1.2,
+      Organic: 0.74,
+      "Paid Ads": 1.18,
+      Referral: 0.88,
+      Unknown: 1,
+      YouTube: 1.34,
+    },
+    landingBias: {
+      "/ai-video-generator": 1.28,
+      "/pricing": 0.86,
+      "/studio": 0.72,
+      "/thumbnail-generator": 0.9,
+      "/vpick-shortform": 1.46,
+    },
+    providerBias: {
+      Email: 0.9,
+      Google: 0.96,
+      Kakao: 1.16,
+      Naver: 0.82,
+    },
+    regionBias: {
+      Indonesia: 1.16,
+      Japan: 1.14,
+      "South Korea": 0.9,
+      "United States": 1.08,
+      Vietnam: 1.22,
+    },
+    utmBias: {
+      google: 0.78,
+      instagram: 1.18,
+      kakao: 1.32,
+      naver: 0.84,
+      youtube: 1.42,
+    },
+  },
+}
+
 export default function SignupIntelligenceDashboard() {
   const [isMounted, setIsMounted] = useState(false)
   const [drawer, setDrawer] = useState<DrawerItem | null>(null)
-  const { period, startDate, endDate, compareMode } = useDashboardDateRange()
+  const { period, startDate, endDate, compareMode, resetDateRange } =
+    useDashboardDateRange()
+  const { resetService, service, setService } = useDashboardServiceFilter()
   const periodMultiplier = getPeriodMultiplier(period)
+  const serviceProfile = signupServiceProfiles[service]
 
   const trendRows = useMemo(
     () =>
-      signupTrend.map((row) => ({
-        ...row,
-        visitors: scale(row.visitors, periodMultiplier),
-        signupStarted: scale(row.signupStarted, periodMultiplier),
-        signups: scale(row.signups, periodMultiplier),
-        paidUsers: scale(row.paidUsers, periodMultiplier),
-      })),
-    [periodMultiplier]
+      signupTrend.map((row, index) => {
+        const visitors = scale(
+          row.visitors,
+          periodMultiplier * serviceProfile.visitorFactor * (0.96 + index * 0.012)
+        )
+        const signups = scale(
+          row.signups,
+          periodMultiplier * serviceProfile.signupFactor * (0.98 + index * 0.01)
+        )
+        const signupStarted = scale(
+          row.signupStarted,
+          periodMultiplier * serviceProfile.signupFactor * 1.04
+        )
+
+        return {
+          ...row,
+          paidUsers: scale(row.paidUsers, periodMultiplier * serviceProfile.paidFactor),
+          signupConversion: Number(((signups / Math.max(visitors, 1)) * 100).toFixed(1)),
+          signupStarted,
+          signups,
+          visitors,
+        }
+      }),
+    [periodMultiplier, serviceProfile]
   )
 
   const sourceRows = useMemo(
     () =>
-      signupSourceBreakdown.map((row) => ({
-        ...row,
-        visitors: scale(row.visitors, periodMultiplier),
-        signups: scale(row.signups, periodMultiplier),
-        signupRate: percentValue(row.signupConversion),
-        paidRate: percentValue(row.paidConversion),
-      })),
-    [periodMultiplier]
+      signupSourceBreakdown.map((row) => {
+        const bias = serviceProfile.sourceBias[row.source] ?? 1
+        const visitors = scale(row.visitors, periodMultiplier * serviceProfile.visitorFactor * bias)
+        const signups = scale(row.signups, periodMultiplier * serviceProfile.signupFactor * bias)
+        const signupRate = (signups / Math.max(visitors, 1)) * 100
+        const paidRate = clamp(
+          percentValue(row.paidConversion) * serviceProfile.paidFactor * (1 / Math.max(serviceProfile.signupFactor, 0.1)),
+          0.8,
+          8.5
+        )
+
+        return {
+          ...row,
+          paidConversion: `${paidRate.toFixed(2)}%`,
+          paidRate,
+          signups,
+          signupConversion: `${signupRate.toFixed(2)}%`,
+          signupRate,
+          visitors,
+        }
+      }),
+    [periodMultiplier, serviceProfile]
   )
 
   const landingRows = useMemo(
     () =>
-      landingPagePerformance.map((row) => ({
-        ...row,
-        visitors: scale(row.visitors, periodMultiplier),
-        signups: scale(row.signups, periodMultiplier),
-        signupRate: percentValue(row.signupConversion),
-        paidRate: percentValue(row.paidConversion),
-      })),
-    [periodMultiplier]
+      landingPagePerformance.map((row) => {
+        const bias = serviceProfile.landingBias[row.landingPage] ?? 1
+        const visitors = scale(row.visitors, periodMultiplier * serviceProfile.visitorFactor * bias)
+        const signups = scale(row.signups, periodMultiplier * serviceProfile.signupFactor * bias)
+        const signupRate = (signups / Math.max(visitors, 1)) * 100
+        const paidRate = clamp(
+          percentValue(row.paidConversion) * serviceProfile.paidFactor * (1 / Math.max(serviceProfile.signupFactor, 0.1)),
+          0.8,
+          9.5
+        )
+
+        return {
+          ...row,
+          paidConversion: `${paidRate.toFixed(2)}%`,
+          paidRate,
+          signups,
+          signupConversion: `${signupRate.toFixed(2)}%`,
+          signupRate,
+          visitors,
+        }
+      }),
+    [periodMultiplier, serviceProfile]
   )
 
   const providerRows = useMemo(
-    () =>
-      loginProviderAnalytics.map((row) => ({
+    () => {
+      const rows = loginProviderAnalytics.map((row) => {
+        const bias = serviceProfile.providerBias[row.provider] ?? 1
+
+        return {
+          ...row,
+          completionRate: percentValue(row.signupCompletion),
+          signups: scale(row.signups, periodMultiplier * serviceProfile.signupFactor * bias),
+          signupStarted: scale(
+            row.signupStarted,
+            periodMultiplier * serviceProfile.signupFactor * bias
+          ),
+        }
+      })
+      const providerTotal = rows.reduce((sum, row) => sum + row.signups, 0)
+
+      return rows.map((row) => ({
         ...row,
-        signupStarted: scale(row.signupStarted, periodMultiplier),
-        signups: scale(row.signups, periodMultiplier),
-        completionRate: percentValue(row.signupCompletion),
-      })),
-    [periodMultiplier]
+        share: `${((row.signups / Math.max(providerTotal, 1)) * 100).toFixed(1)}%`,
+      }))
+    },
+    [periodMultiplier, serviceProfile]
   )
 
   const regionRows = useMemo(
     () =>
-      regionBreakdown.map((row) => ({
-        ...row,
-        signups: scale(row.signups, periodMultiplier),
-        signupRate: percentValue(row.conversion),
-        paidRate: percentValue(row.paidConversion),
-      })),
-    [periodMultiplier]
+      regionBreakdown.map((row) => {
+        const bias = serviceProfile.regionBias[row.country] ?? 1
+        const signupRate = percentValue(row.conversion) * (0.96 + bias * 0.04)
+        const paidRate = percentValue(row.paidConversion) * (0.9 + serviceProfile.paidFactor * 0.1)
+
+        return {
+          ...row,
+          paidConversion: `${paidRate.toFixed(2)}%`,
+          paidRate,
+          signups: scale(row.signups, periodMultiplier * serviceProfile.signupFactor * bias),
+          signupRate,
+          conversion: `${signupRate.toFixed(2)}%`,
+        }
+      }),
+    [periodMultiplier, serviceProfile]
   )
 
   const utmRows = useMemo(
     () =>
-      utmPerformance.map((row) => ({
-        ...row,
-        visitors: scale(row.visitors, periodMultiplier),
-        signups: scale(row.signups, periodMultiplier),
-      })),
-    [periodMultiplier]
+      utmPerformance.map((row) => {
+        const bias = serviceProfile.utmBias[row.utmSource] ?? 1
+        const visitors = scale(row.visitors, periodMultiplier * serviceProfile.visitorFactor * bias)
+        const signups = scale(row.signups, periodMultiplier * serviceProfile.signupFactor * bias)
+        const signupRate = (signups / Math.max(visitors, 1)) * 100
+        const paidRate = clamp(
+          percentValue(row.paidConversion) * serviceProfile.paidFactor * (1 / Math.max(serviceProfile.signupFactor, 0.1)),
+          0.8,
+          8.5
+        )
+
+        return {
+          ...row,
+          paidConversion: `${paidRate.toFixed(2)}%`,
+          signups,
+          signupConversion: `${signupRate.toFixed(2)}%`,
+          visitors,
+        }
+      }),
+    [periodMultiplier, serviceProfile]
   )
 
   const totalSignups = sourceRows.reduce((sum, row) => sum + row.signups, 0)
@@ -224,6 +421,7 @@ export default function SignupIntelligenceDashboard() {
         "Signup acquisition and conversion report covering source, landing page, provider, country, UTM, and funnel performance.",
       filename: "signup-conversion-intelligence-report",
       filters: {
+        Service: service,
         "Date range": getDateRangeLabel(startDate, endDate),
         Compare: getCompareModeLabel(compareMode),
       },
@@ -292,6 +490,7 @@ export default function SignupIntelligenceDashboard() {
       landingRows,
       providerRows,
       regionRows,
+      service,
       signupConversion,
       sourceRows,
       startDate,
@@ -322,7 +521,20 @@ export default function SignupIntelligenceDashboard() {
       />
 
       <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <DateRangeControl />
+        <ServiceSegmentFilter service={service} onChange={setService} />
+        <div className="mt-5">
+          <DateRangeControl />
+        </div>
+        <button
+          className="mt-5 rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-950"
+          onClick={() => {
+            resetService()
+            resetDateRange()
+          }}
+          type="button"
+        >
+          Reset filters
+        </button>
       </section>
 
       <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
@@ -1095,6 +1307,10 @@ function ChartSkeleton() {
 
 function percentValue(value: string) {
   return Number(value.replace("%", ""))
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
 }
 
 function scale(value: number, multiplier: number) {

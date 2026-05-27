@@ -34,6 +34,7 @@ import {
 import DateRangeControl from "@/components/admin/DateRangeControl"
 import ExportActions from "@/components/admin/ExportActions"
 import PageHeader from "@/components/admin/PageHeader"
+import ServiceSegmentFilter from "@/components/admin/ServiceSegmentFilter"
 import SideDrawer from "@/components/admin/SideDrawer"
 import StatusBadge from "@/components/admin/StatusBadge"
 import { formatNumber } from "@/components/dashboard/dashboard-data"
@@ -44,6 +45,10 @@ import {
   getPeriodMultiplier,
   useDashboardDateRange,
 } from "@/lib/dashboard-date-store"
+import {
+  type DashboardService,
+  useDashboardServiceFilter,
+} from "@/lib/dashboard-service-store"
 import { cn } from "@/lib/utils"
 import {
   paidAcquisitionSources,
@@ -142,6 +147,73 @@ const paidLandingPages = [
   },
 ]
 
+const subscriptionServiceProfiles: Record<
+  DashboardService,
+  {
+    activeFactor: number
+    newPaidFactor: number
+    churnFactor: number
+    failedPaymentFactor: number
+    refundRate: number
+    sourceBias: Record<string, number>
+    landingBias: Record<string, number>
+  }
+> = {
+  Overall: {
+    activeFactor: 1,
+    churnFactor: 1,
+    failedPaymentFactor: 1,
+    landingBias: {},
+    newPaidFactor: 1,
+    refundRate: 0.096,
+    sourceBias: {},
+  },
+  Yettey: {
+    activeFactor: 0.796,
+    churnFactor: 0.68,
+    failedPaymentFactor: 0.62,
+    landingBias: {
+      "/ai-video-generator": 0.74,
+      "/pricing": 1.18,
+      "/studio": 1.24,
+      "/thumbnail-generator": 1.12,
+      "/vpick-shortform": 0.52,
+    },
+    newPaidFactor: 0.72,
+    refundRate: 0.082,
+    sourceBias: {
+      Direct: 1.12,
+      "Google Search": 1.18,
+      Instagram: 0.78,
+      "Paid Ads": 0.74,
+      Referral: 1.16,
+      YouTube: 0.82,
+    },
+  },
+  VPICK: {
+    activeFactor: 0.204,
+    churnFactor: 0.32,
+    failedPaymentFactor: 0.38,
+    landingBias: {
+      "/ai-video-generator": 1.26,
+      "/pricing": 0.86,
+      "/studio": 0.72,
+      "/thumbnail-generator": 0.9,
+      "/vpick-shortform": 1.48,
+    },
+    newPaidFactor: 0.28,
+    refundRate: 0.124,
+    sourceBias: {
+      Direct: 0.82,
+      "Google Search": 0.78,
+      Instagram: 1.2,
+      "Paid Ads": 1.18,
+      Referral: 0.86,
+      YouTube: 1.34,
+    },
+  },
+}
+
 const paymentUsers = [
   "minjun.kim@example.com",
   "jina.park@example.com",
@@ -156,63 +228,110 @@ const paymentUsers = [
 export default function SubscriptionIntelligenceDashboard() {
   const [isMounted, setIsMounted] = useState(false)
   const [drawer, setDrawer] = useState<DrawerItem | null>(null)
-  const { period, startDate, endDate, compareMode } = useDashboardDateRange()
+  const { period, startDate, endDate, compareMode, resetDateRange } =
+    useDashboardDateRange()
+  const { resetService, service, setService } = useDashboardServiceFilter()
   const periodMultiplier = getPeriodMultiplier(period)
+  const serviceProfile = subscriptionServiceProfiles[service]
 
   const growthRows = useMemo(
     () =>
       paidUserGrowthTrend.map((row) => ({
         ...row,
-        newPaid: scale(row.newPaid, periodMultiplier),
-        churn: scale(row.churn, periodMultiplier),
-        netGrowth: scale(row.netGrowth, periodMultiplier),
+        activePaid: scale(row.activePaid, serviceProfile.activeFactor),
+        churn: scale(row.churn, periodMultiplier * serviceProfile.churnFactor),
+        monthly: scale(row.monthly, serviceProfile.activeFactor),
+        netGrowth: scale(row.netGrowth, periodMultiplier * serviceProfile.newPaidFactor),
+        newPaid: scale(row.newPaid, periodMultiplier * serviceProfile.newPaidFactor),
+        yearly: scale(row.yearly, serviceProfile.activeFactor),
       })),
-    [periodMultiplier]
+    [periodMultiplier, serviceProfile]
   )
 
   const acquisitionRows = useMemo(
     () =>
-      paidAcquisitionSources.map((row) => ({
-        ...row,
-        visitors: scale(row.visitors, periodMultiplier),
-        paidUsers: scale(row.paidUsers, periodMultiplier),
-      })),
-    [periodMultiplier]
+      paidAcquisitionSources.map((row) => {
+        const bias = serviceProfile.sourceBias[row.source] ?? 1
+        const visitors = scale(row.visitors, periodMultiplier * serviceProfile.activeFactor * bias)
+        const paidUsers = scale(row.paidUsers, periodMultiplier * serviceProfile.newPaidFactor * bias)
+        const paidConversion = (paidUsers / Math.max(visitors, 1)) * 100
+        const retention = clamp(
+          percentValue(row.retention) * (0.92 + serviceProfile.activeFactor * 0.08),
+          24,
+          72
+        )
+        const churnRate = clamp(
+          percentValue(row.churnRate) * (1.08 - serviceProfile.activeFactor * 0.08),
+          1.6,
+          7.2
+        )
+
+        return {
+          ...row,
+          arpu: currency(parseCurrency(row.arpu) * (0.82 + serviceProfile.activeFactor * 0.18)),
+          churnRate: `${churnRate.toFixed(1)}%`,
+          paidConversion: `${paidConversion.toFixed(2)}%`,
+          paidUsers,
+          retention: `${retention.toFixed(0)}%`,
+          visitors,
+        }
+      }),
+    [periodMultiplier, serviceProfile]
   )
 
   const landingRows = useMemo(
     () =>
-      paidLandingPages.map((row) => ({
-        ...row,
-        visitors: scale(row.visitors, periodMultiplier),
-        paidUsers: scale(row.paidUsers, periodMultiplier),
-        revenue: scale(row.revenue, periodMultiplier),
-      })),
-    [periodMultiplier]
+      paidLandingPages.map((row) => {
+        const bias = serviceProfile.landingBias[row.landingPage] ?? 1
+        const visitors = scale(row.visitors, periodMultiplier * serviceProfile.activeFactor * bias)
+        const paidUsers = scale(row.paidUsers, periodMultiplier * serviceProfile.newPaidFactor * bias)
+        const revenue = scale(row.revenue, periodMultiplier * serviceProfile.activeFactor * bias)
+        const paidConversion = (paidUsers / Math.max(visitors, 1)) * 100
+        const churnRate = clamp(
+          percentValue(row.churnRate) * (1.08 - serviceProfile.activeFactor * 0.08),
+          1.6,
+          7.2
+        )
+
+        return {
+          ...row,
+          churnRate: `${churnRate.toFixed(1)}%`,
+          paidConversion: `${paidConversion.toFixed(2)}%`,
+          paidUsers,
+          revenue,
+          visitors,
+        }
+      }),
+    [periodMultiplier, serviceProfile]
   )
 
-  const planRows = useMemo(() => buildPlanRows(planDistribution), [])
-  const latestGrowth = growthRows[growthRows.length - 1]
-  const activePaidUsers = latestGrowth.activePaid
+  const planRows = useMemo(() => buildPlanRows(planDistribution, service), [service])
+  const activePaidUsers = planRows.reduce((sum, row) => sum + row.activePaidUsers, 0)
   const newPaidUsers = growthRows.reduce((sum, row) => sum + row.newPaid, 0)
   const churnUsers = growthRows.reduce((sum, row) => sum + row.churn, 0)
   const netPaidGrowth = newPaidUsers - churnUsers
-  const totalRevenue = Math.round(activePaidUsers * 210.45 * periodMultiplier)
+  const totalRevenue = Math.round(
+    planRows.reduce((sum, row) => sum + row.revenue, 0) * periodMultiplier
+  )
   const arpu = totalRevenue / Math.max(activePaidUsers, 1)
-  const failedPayments = Math.round(674 * periodMultiplier)
-  const totalRefunds = Math.round(totalRevenue * 0.096)
+  const failedPayments = Math.round(674 * periodMultiplier * serviceProfile.failedPaymentFactor)
+  const totalRefunds = Math.round(totalRevenue * serviceProfile.refundRate)
   const grossRevenue = totalRevenue + totalRefunds
 
   const recentPayments = useMemo(
     () =>
-      planRows.slice(0, 8).map((plan, index): RecentPayment => ({
-        time: `2026-05-${String(27 - Math.floor(index / 2)).padStart(2, "0")} ${["14:32", "13:18", "11:05", "10:22", "09:44", "08:30", "07:58", "07:22"][index]}`,
-        user: paymentUsers[index % paymentUsers.length],
-        plan: plan.plan,
-        amount: Math.round(plan.arpu),
-        status: index === 4 ? "Failed" : "Paid",
-        method: "Card",
-      })),
+      Array.from({ length: 8 }, (_, index): RecentPayment => {
+        const plan = planRows[index % planRows.length]
+
+        return {
+          time: `2026-05-${String(27 - Math.floor(index / 2)).padStart(2, "0")} ${["14:32", "13:18", "11:05", "10:22", "09:44", "08:30", "07:58", "07:22"][index]}`,
+          user: paymentUsers[index % paymentUsers.length],
+          plan: plan.plan,
+          amount: Math.round(plan.arpu),
+          status: index === 4 ? "Failed" : "Paid",
+          method: "Card",
+        }
+      }),
     [planRows]
   )
 
@@ -223,6 +342,7 @@ export default function SubscriptionIntelligenceDashboard() {
         "Executive subscription report covering paid user growth, revenue, churn, plan mix, acquisition quality, and recent payments.",
       filename: "subscription-executive-dashboard-report",
       filters: {
+        Service: service,
         "Date range": getDateRangeLabel(startDate, endDate),
         Compare: getCompareModeLabel(compareMode),
       },
@@ -292,6 +412,7 @@ export default function SubscriptionIntelligenceDashboard() {
       newPaidUsers,
       planRows,
       recentPayments,
+      service,
       startDate,
     ]
   )
@@ -316,7 +437,20 @@ export default function SubscriptionIntelligenceDashboard() {
       />
 
       <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <DateRangeControl />
+        <ServiceSegmentFilter service={service} onChange={setService} />
+        <div className="mt-5">
+          <DateRangeControl />
+        </div>
+        <button
+          className="mt-5 rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-950"
+          onClick={() => {
+            resetService()
+            resetDateRange()
+          }}
+          type="button"
+        >
+          Reset filters
+        </button>
       </section>
 
       <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
@@ -1187,8 +1321,9 @@ function KeyValueGrid({ item }: { item: DrawerItem }) {
   )
 }
 
-function buildPlanRows(plans: PlanRow[]) {
+function buildPlanRows(plans: PlanRow[], service: DashboardService) {
   const focused = plans
+    .filter((plan) => service === "Overall" || plan.service === service)
     .map((plan) => {
       const arpuMap: Record<string, number> = {
         Basic: 183.88,
@@ -1255,6 +1390,18 @@ function currency(value: number) {
     maximumFractionDigits: 0,
     style: "currency",
   }).format(value)
+}
+
+function parseCurrency(value: string) {
+  return Number(value.replace(/[^0-9.-]/g, ""))
+}
+
+function percentValue(value: string) {
+  return Number(value.replace("%", ""))
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
 }
 
 function maxBy<T>(rows: T[], getValue: (row: T) => number) {
