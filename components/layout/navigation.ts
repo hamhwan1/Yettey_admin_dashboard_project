@@ -16,7 +16,6 @@ import {
   Settings,
   Sparkles,
   UserPlus,
-  UserRound,
   Users,
 } from "lucide-react"
 
@@ -104,11 +103,6 @@ export const sidebarNavigation: Record<TopMenuKey, SidebarItem[]> = {
       title: "Users",
       href: "/users",
       icon: Users,
-    },
-    {
-      title: "User Detail",
-      href: "/users/detail",
-      icon: UserRound,
     },
   ],
   content: [
