@@ -32,6 +32,7 @@ type AuthProvider = "Google" | "Kakao" | "Naver" | "Email"
 type UserRole = "User" | "Admin" | "Owner"
 type CreditType = "Subscription Credits" | "Purchased Credits"
 type NoteTab = "inquiries" | "internal"
+type AdminNoteType = "Internal Note" | "Support Action" | "Billing Note" | "Risk Monitoring"
 type ProjectRole = "Owner" | "Admin" | "Editor" | "Viewer"
 type BillingEventType =
   | "Subscription Renewal"
@@ -200,8 +201,15 @@ type CustomerInquiry = {
 type InternalNote = {
   author: string
   body: string
-  noteType: "Internal Note" | "Support Action" | "Risk Flag"
+  noteType: AdminNoteType | "Risk Flag"
+  tags?: string[]
   timestamp: string
+}
+
+type NoteDraft = {
+  body: string
+  noteType: AdminNoteType
+  tags: string
 }
 
 const users: Record<string, UserDetail> = {
@@ -756,7 +764,15 @@ function UserDetailWorkspace({ user }: { user: UserDetail }) {
   const [currentPlan, setCurrentPlan] = useState(user.plan)
   const [billingHistory, setBillingHistory] = useState(user.billingHistory)
   const [planChangeLogs, setPlanChangeLogs] = useState(user.planChangeLogs)
+  const [customerInquiries] = useState(user.customerInquiries)
+  const [internalNotes, setInternalNotes] = useState(user.internalNotes)
   const [selectedReceipt, setSelectedReceipt] = useState<ReceiptInfo | null>(null)
+  const [noteDialogOpen, setNoteDialogOpen] = useState(false)
+  const [noteDraft, setNoteDraft] = useState<NoteDraft>({
+    body: "",
+    noteType: "Internal Note",
+    tags: "",
+  })
   const [planChangeStage, setPlanChangeStage] = useState<PlanChangeStage | null>(null)
   const [planChangeForm, setPlanChangeForm] = useState<PlanChangeForm>({
     adminNote: "",
@@ -771,6 +787,8 @@ function UserDetailWorkspace({ user }: { user: UserDetail }) {
       ...user,
       billingHistory,
       creditHistory,
+      customerInquiries,
+      internalNotes,
       language,
       name: displayName,
       plan: currentPlan,
@@ -782,7 +800,9 @@ function UserDetailWorkspace({ user }: { user: UserDetail }) {
       billingHistory,
       creditHistory,
       currentPlan,
+      customerInquiries,
       displayName,
+      internalNotes,
       language,
       planChangeLogs,
       purchasedCredits,
@@ -918,6 +938,36 @@ function UserDetailWorkspace({ user }: { user: UserDetail }) {
     resetPlanChangeDialog()
   }
 
+  function resetNoteDialog() {
+    setNoteDialogOpen(false)
+    setNoteDraft({
+      body: "",
+      noteType: "Internal Note",
+      tags: "",
+    })
+  }
+
+  function addInternalNote() {
+    if (noteDraft.body.trim().length === 0) {
+      return
+    }
+
+    setInternalNotes((current) => [
+      {
+        author: "Sarah Mitchell",
+        body: noteDraft.body.trim(),
+        noteType: noteDraft.noteType,
+        tags: noteDraft.tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+        timestamp: formatAuditTimestamp(new Date()),
+      },
+      ...current,
+    ])
+    resetNoteDialog()
+  }
+
   return (
     <DashboardLayout>
       <PageHeader
@@ -974,6 +1024,7 @@ function UserDetailWorkspace({ user }: { user: UserDetail }) {
       <NotesSection
         customerInquiries={displayUser.customerInquiries}
         internalNotes={displayUser.internalNotes}
+        onAddNote={() => setNoteDialogOpen(true)}
       />
 
       <GrantCreditsDialog
@@ -1003,6 +1054,13 @@ function UserDetailWorkspace({ user }: { user: UserDetail }) {
         onReview={() => setPlanChangeStage("confirm")}
       />
       <ReceiptDialog receipt={selectedReceipt} onClose={() => setSelectedReceipt(null)} />
+      <AddNoteDialog
+        draft={noteDraft}
+        isOpen={noteDialogOpen}
+        onCancel={resetNoteDialog}
+        onChange={setNoteDraft}
+        onConfirm={addInternalNote}
+      />
     </DashboardLayout>
   )
 }
@@ -1045,36 +1103,42 @@ function UserSummary({
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <AdminButton variant="primary">
-            <LogIn className="size-4" />
-            Login as Yettey
-          </AdminButton>
-          <AdminButton>
-            <LogIn className="size-4" />
-            Login as VPick
-          </AdminButton>
-          {user.status === "Active" || user.status === "Trial" ? (
-            <>
-              <AdminButton>
-                <ShieldCheck className="size-4" />
-                Suspend User
-              </AdminButton>
-              <AdminButton>
-                <Ban className="size-4" />
-                Block User
-              </AdminButton>
-            </>
-          ) : (
-            <AdminButton>
-              <Undo2 className="size-4" />
-              Restore User
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-2">
+            <AdminButton variant="primary">
+              <LogIn className="size-4" />
+              Login as Yettey
             </AdminButton>
-          )}
-          <AdminButton className="border-rose-200 bg-rose-500 text-white hover:border-rose-500 hover:bg-rose-600">
-            <Trash2 className="size-4" />
-            Delete
-          </AdminButton>
+            <AdminButton>
+              <LogIn className="size-4" />
+              Login as VPick
+            </AdminButton>
+          </div>
+          <div className="flex flex-wrap gap-2 border-l border-slate-200 pl-2">
+            {user.status === "Active" || user.status === "Trial" ? (
+              <>
+                <AdminButton>
+                  <ShieldCheck className="size-4" />
+                  Suspend User
+                </AdminButton>
+                <AdminButton>
+                  <Ban className="size-4" />
+                  Block User
+                </AdminButton>
+              </>
+            ) : (
+              <AdminButton>
+                <Undo2 className="size-4" />
+                Restore User
+              </AdminButton>
+            )}
+          </div>
+          <div className="flex border-l border-rose-100 pl-2">
+            <AdminButton className="border-rose-200 bg-white text-rose-600 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700">
+              <Trash2 className="size-4" />
+              Delete User
+            </AdminButton>
+          </div>
         </div>
       </div>
 
@@ -1281,6 +1345,21 @@ function ProjectsTab({ projects }: { projects: ProjectRow[] }) {
           <p className="mt-1 text-sm text-slate-500">
             Click a project row to inspect workspace, members, permissions, assets, and recent activity.
           </p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <ProjectMetricCard label="Total Projects" value={formatNumber(projects.length)} />
+            <ProjectMetricCard
+              label="Project Members"
+              value={formatNumber(
+                projects.reduce((total, project) => total + getProjectMembers(project).length, 0)
+              )}
+            />
+            <ProjectMetricCard
+              label="Generated Assets"
+              value={formatNumber(
+                projects.reduce((total, project) => total + project.generatedAssets, 0)
+              )}
+            />
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[860px]">
@@ -1730,126 +1809,16 @@ function BillingTab({
         <CreditManagementCard user={user} onGrantCredits={onGrantCredits} />
       </div>
 
-      <CreditHistoryTable rows={user.creditHistory} />
+      <BillingHistorySection
+        rows={user.billingHistory}
+        onChangePlan={onChangePlan}
+        onViewReceipt={onViewReceipt}
+      />
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <div className="flex flex-col gap-4 border-b border-slate-100 p-6 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-slate-950">Billing History</h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Subscription events, payment results, receipts, and manual adjustments.
-            </p>
-          </div>
-          <AdminButton onClick={onChangePlan}>
-            <ReceiptText className="size-4" />
-            Change Plan
-          </AdminButton>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1040px]">
-            <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-6 py-4">Date</th>
-                <th className="px-6 py-4">Event Type</th>
-                <th className="px-6 py-4">Previous Plan</th>
-                <th className="px-6 py-4">New Plan</th>
-                <th className="px-6 py-4">Amount</th>
-                <th className="px-6 py-4">Payment Method</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Receipt</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {user.billingHistory.map((row) => (
-                <tr key={row.id} className="transition hover:bg-slate-50">
-                  <td className="px-6 py-5 text-sm font-medium text-slate-700">
-                    {row.date}
-                  </td>
-                  <td className="px-6 py-5 text-sm font-bold text-slate-950">
-                    {row.eventType}
-                  </td>
-                  <td className="px-6 py-5 text-sm text-slate-600">
-                    {row.previousPlan}
-                  </td>
-                  <td className="px-6 py-5 text-sm font-semibold text-slate-800">
-                    {row.newPlan}
-                  </td>
-                  <td className="px-6 py-5 text-sm font-semibold text-slate-800">
-                    {row.amount}
-                  </td>
-                  <td className="px-6 py-5 text-sm text-slate-600">
-                    {row.paymentMethod}
-                  </td>
-                  <td className="px-6 py-5">
-                    <BillingStatusPill status={row.status} />
-                  </td>
-                  <td className="px-6 py-5">
-                    <div className="flex flex-wrap gap-2">
-                      <AdminButton
-                        className="h-9 px-3"
-                        onClick={() => onViewReceipt(row.receipt)}
-                      >
-                        View
-                      </AdminButton>
-                      <AdminButton
-                        className="h-9 px-3"
-                        onClick={() => onViewReceipt(row.receipt)}
-                      >
-                        Download
-                      </AdminButton>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <div className="border-b border-slate-100 p-6">
-          <h3 className="text-lg font-bold text-slate-950">Plan Change Audit</h3>
-          <p className="mt-1 text-sm text-slate-500">
-            Admin plan changes, effective periods, and operational notes.
-          </p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px]">
-            <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-6 py-4">Timestamp</th>
-                <th className="px-6 py-4">Admin</th>
-                <th className="px-6 py-4">Previous Plan</th>
-                <th className="px-6 py-4">New Plan</th>
-                <th className="px-6 py-4">Effective Period</th>
-                <th className="px-6 py-4">Reason / Note</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {user.planChangeLogs.map((row) => (
-                <tr key={row.id} className="transition hover:bg-slate-50">
-                  <td className="px-6 py-5 text-sm font-medium text-slate-700">
-                    {row.timestamp}
-                  </td>
-                  <td className="px-6 py-5 text-sm font-bold text-slate-950">
-                    {row.admin}
-                  </td>
-                  <td className="px-6 py-5 text-sm text-slate-600">
-                    {row.previousPlan}
-                  </td>
-                  <td className="px-6 py-5 text-sm font-semibold text-slate-900">
-                    {row.newPlan}
-                  </td>
-                  <td className="px-6 py-5 text-sm text-slate-600">
-                    {row.effectivePeriod}
-                  </td>
-                  <td className="px-6 py-5 text-sm text-slate-600">{row.note}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <CreditHistoryTable rows={user.creditHistory} />
+        <PlanChangeAuditSection rows={user.planChangeLogs} />
+      </div>
     </div>
   )
 }
@@ -1893,6 +1862,120 @@ function SubscriptionLifecycleCard({
         />
       </div>
     </section>
+  )
+}
+
+function BillingHistorySection({
+  onChangePlan,
+  onViewReceipt,
+  rows,
+}: {
+  onChangePlan: () => void
+  onViewReceipt: (receipt: ReceiptInfo) => void
+  rows: BillingHistoryRow[]
+}) {
+  const [showAll, setShowAll] = useState(false)
+  const recentRows = rows.slice(0, 3)
+
+  return (
+    <>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+        <div className="flex flex-col gap-4 border-b border-slate-100 p-6 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              Recent records
+            </p>
+            <h3 className="mt-1 text-lg font-bold text-slate-950">Billing History</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Showing latest {recentRows.length} of {formatNumber(rows.length)} records.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <AdminButton onClick={() => setShowAll(true)}>
+              View Full Billing History
+            </AdminButton>
+            <AdminButton onClick={onChangePlan}>
+              <ReceiptText className="size-4" />
+              Change Plan
+            </AdminButton>
+          </div>
+        </div>
+        <BillingHistoryTable rows={recentRows} onViewReceipt={onViewReceipt} />
+      </section>
+
+      <BillingHistoryDrawer
+        isOpen={showAll}
+        rows={rows}
+        onClose={() => setShowAll(false)}
+        onViewReceipt={onViewReceipt}
+      />
+    </>
+  )
+}
+
+function BillingHistoryTable({
+  onViewReceipt,
+  rows,
+}: {
+  onViewReceipt: (receipt: ReceiptInfo) => void
+  rows: BillingHistoryRow[]
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[1040px]">
+        <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th className="px-6 py-4">Date</th>
+            <th className="px-6 py-4">Event Type</th>
+            <th className="px-6 py-4">Previous Plan</th>
+            <th className="px-6 py-4">New Plan</th>
+            <th className="px-6 py-4">Amount</th>
+            <th className="px-6 py-4">Payment Method</th>
+            <th className="px-6 py-4">Status</th>
+            <th className="px-6 py-4">Receipt</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {rows.map((row) => (
+            <tr key={row.id} className="transition hover:bg-slate-50">
+              <td className="px-6 py-5 text-sm font-medium text-slate-700">
+                {row.date}
+              </td>
+              <td className="px-6 py-5 text-sm font-bold text-slate-950">
+                {row.eventType}
+              </td>
+              <td className="px-6 py-5 text-sm text-slate-600">{row.previousPlan}</td>
+              <td className="px-6 py-5 text-sm font-semibold text-slate-800">
+                {row.newPlan}
+              </td>
+              <td className="px-6 py-5 text-sm font-semibold text-slate-800">
+                {row.amount}
+              </td>
+              <td className="px-6 py-5 text-sm text-slate-600">{row.paymentMethod}</td>
+              <td className="px-6 py-5">
+                <BillingStatusPill status={row.status} />
+              </td>
+              <td className="px-6 py-5">
+                <div className="flex flex-wrap gap-2">
+                  <AdminButton
+                    className="h-9 px-3"
+                    onClick={() => onViewReceipt(row.receipt)}
+                  >
+                    View
+                  </AdminButton>
+                  <AdminButton
+                    className="h-9 px-3"
+                    onClick={() => onViewReceipt(row.receipt)}
+                  >
+                    Download
+                  </AdminButton>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -1974,62 +2057,160 @@ function CreditManagementCard({
 }
 
 function CreditHistoryTable({ rows }: { rows: CreditLedgerEntry[] }) {
+  const [showAll, setShowAll] = useState(false)
+  const recentRows = rows.slice(0, 3)
+
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-      <div className="border-b border-slate-100 p-6">
-        <h3 className="text-lg font-bold text-slate-950">Credit Audit Log</h3>
-        <p className="mt-1 text-sm text-slate-500">
-          Manual grants and operational credit adjustments for audit review.
-        </p>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[860px]">
-          <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-6 py-4">Timestamp</th>
-              <th className="px-6 py-4">Admin</th>
-              <th className="px-6 py-4">Recipient</th>
-              <th className="px-6 py-4">Credit Type</th>
-              <th className="px-6 py-4">Amount</th>
-              <th className="px-6 py-4">Reason</th>
+    <>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+        <div className="flex flex-col gap-4 border-b border-slate-100 p-6 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              Recent audit
+            </p>
+            <h3 className="mt-1 text-lg font-bold text-slate-950">Credit Audit Log</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Latest {recentRows.length} credit adjustments.
+            </p>
+          </div>
+          <AdminButton onClick={() => setShowAll(true)}>View All Credit Logs</AdminButton>
+        </div>
+        <CreditHistoryRows rows={recentRows} />
+      </section>
+
+      <CreditHistoryDrawer
+        isOpen={showAll}
+        rows={rows}
+        onClose={() => setShowAll(false)}
+      />
+    </>
+  )
+}
+
+function CreditHistoryRows({ rows }: { rows: CreditLedgerEntry[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[860px]">
+        <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th className="px-6 py-4">Timestamp</th>
+            <th className="px-6 py-4">Admin</th>
+            <th className="px-6 py-4">Recipient</th>
+            <th className="px-6 py-4">Credit Type</th>
+            <th className="px-6 py-4">Amount</th>
+            <th className="px-6 py-4">Reason</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {rows.map((row) => (
+            <tr key={row.id} className="transition hover:bg-slate-50">
+              <td className="px-6 py-5 text-sm font-medium text-slate-700">
+                {row.timestamp}
+              </td>
+              <td className="px-6 py-5 text-sm font-bold text-slate-950">
+                {row.admin}
+              </td>
+              <td className="px-6 py-5 text-sm text-slate-600">{row.recipient}</td>
+              <td className="px-6 py-5">
+                <CreditTypePill type={row.type} />
+              </td>
+              <td className="px-6 py-5 text-sm font-bold text-slate-950">
+                +{formatNumber(row.amount)}
+              </td>
+              <td className="px-6 py-5 text-sm text-slate-600">{row.reason}</td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((row) => (
-              <tr key={row.id} className="transition hover:bg-slate-50">
-                <td className="px-6 py-5 text-sm font-medium text-slate-700">
-                  {row.timestamp}
-                </td>
-                <td className="px-6 py-5 text-sm font-bold text-slate-950">
-                  {row.admin}
-                </td>
-                <td className="px-6 py-5 text-sm text-slate-600">{row.recipient}</td>
-                <td className="px-6 py-5">
-                  <CreditTypePill type={row.type} />
-                </td>
-                <td className="px-6 py-5 text-sm font-bold text-slate-950">
-                  +{formatNumber(row.amount)}
-                </td>
-                <td className="px-6 py-5 text-sm text-slate-600">{row.reason}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function PlanChangeAuditSection({ rows }: { rows: PlanChangeLog[] }) {
+  const [showAll, setShowAll] = useState(false)
+  const recentRows = rows.slice(0, 3)
+
+  return (
+    <>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+        <div className="flex flex-col gap-4 border-b border-slate-100 p-6 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              Recent audit
+            </p>
+            <h3 className="mt-1 text-lg font-bold text-slate-950">Plan Change Audit</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Latest {recentRows.length} subscription changes.
+            </p>
+          </div>
+          <AdminButton onClick={() => setShowAll(true)}>View Full Plan Audit</AdminButton>
+        </div>
+        <PlanChangeAuditRows rows={recentRows} />
+      </section>
+
+      <PlanChangeAuditDrawer
+        isOpen={showAll}
+        rows={rows}
+        onClose={() => setShowAll(false)}
+      />
+    </>
+  )
+}
+
+function PlanChangeAuditRows({ rows }: { rows: PlanChangeLog[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[860px]">
+        <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th className="px-6 py-4">Timestamp</th>
+            <th className="px-6 py-4">Admin</th>
+            <th className="px-6 py-4">Previous Plan</th>
+            <th className="px-6 py-4">New Plan</th>
+            <th className="px-6 py-4">Effective Period</th>
+            <th className="px-6 py-4">Reason / Note</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {rows.map((row) => (
+            <tr key={row.id} className="transition hover:bg-slate-50">
+              <td className="px-6 py-5 text-sm font-medium text-slate-700">
+                {row.timestamp}
+              </td>
+              <td className="px-6 py-5 text-sm font-bold text-slate-950">
+                {row.admin}
+              </td>
+              <td className="px-6 py-5 text-sm text-slate-600">{row.previousPlan}</td>
+              <td className="px-6 py-5 text-sm font-semibold text-slate-900">
+                {row.newPlan}
+              </td>
+              <td className="px-6 py-5 text-sm text-slate-600">
+                {row.effectivePeriod}
+              </td>
+              <td className="px-6 py-5 text-sm text-slate-600">{row.note}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
 function NotesSection({
   customerInquiries,
   internalNotes,
+  onAddNote,
 }: {
   customerInquiries: CustomerInquiry[]
   internalNotes: InternalNote[]
+  onAddNote: () => void
 }) {
   const [activeNoteTab, setActiveNoteTab] = useState<NoteTab>("inquiries")
+  const [showAll, setShowAll] = useState(false)
   const notes =
     activeNoteTab === "inquiries" ? customerInquiries : internalNotes
+  const visibleNotes = notes.slice(0, 3)
+  const totalCount = notes.length
 
   return (
     <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
@@ -2039,11 +2220,16 @@ function NotesSection({
           <div>
             <h3 className="text-lg font-bold text-slate-950">Notes</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Customer messages and private operational notes for admin review.
+              Latest operational notes. Full history opens separately for scale.
             </p>
           </div>
         </div>
-        <AdminButton>Add Note</AdminButton>
+        <div className="flex flex-wrap gap-2">
+          <AdminButton onClick={() => setShowAll(true)}>View All Notes</AdminButton>
+          <AdminButton variant="primary" onClick={onAddNote}>
+            Add Note
+          </AdminButton>
+        </div>
       </div>
 
       <div className="mt-6 inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
@@ -2062,27 +2248,311 @@ function NotesSection({
       </div>
 
       <div className="mt-6 space-y-3">
-        {notes.map((note) => (
-          <div
-            key={`${note.author}-${note.timestamp}`}
-            className="rounded-xl border border-slate-100 bg-slate-50 p-4"
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <NoteTypePill type={note.noteType} />
-              <span className="text-xs font-semibold text-slate-500">
-                {note.timestamp}
-              </span>
-            </div>
-            <p className="mt-3 text-sm font-semibold leading-6 text-slate-900">
-              {note.body}
-            </p>
-            <p className="mt-3 text-xs font-bold text-slate-500">
-              {note.author}
-            </p>
-          </div>
+        {visibleNotes.map((note) => (
+          <NoteCard key={`${note.author}-${note.timestamp}-${note.body}`} note={note} />
         ))}
       </div>
+      <div className="mt-4 flex items-center justify-between text-xs font-semibold text-slate-500">
+        <span>
+          Showing {visibleNotes.length} of {totalCount} {activeNoteTab === "inquiries" ? "inquiries" : "notes"}
+        </span>
+        {totalCount > visibleNotes.length ? (
+          <button
+            className="font-bold text-violet-600 transition hover:text-violet-700"
+            onClick={() => setShowAll(true)}
+            type="button"
+          >
+            Open full history
+          </button>
+        ) : null}
+      </div>
+
+      <NotesHistoryDrawer
+        activeTab={activeNoteTab}
+        customerInquiries={customerInquiries}
+        internalNotes={internalNotes}
+        isOpen={showAll}
+        onClose={() => setShowAll(false)}
+        onTabChange={setActiveNoteTab}
+      />
     </section>
+  )
+}
+
+function NoteCard({ note }: { note: CustomerInquiry | InternalNote }) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <NoteTypePill type={note.noteType} />
+        <span className="text-xs font-semibold text-slate-500">
+          {note.timestamp}
+        </span>
+      </div>
+      <p className="mt-3 text-sm font-semibold leading-6 text-slate-900">
+        {note.body}
+      </p>
+      {"tags" in note && note.tags && note.tags.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {note.tags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-500 ring-1 ring-slate-200"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <p className="mt-3 text-xs font-bold text-slate-500">{note.author}</p>
+    </div>
+  )
+}
+
+function NotesHistoryDrawer({
+  activeTab,
+  customerInquiries,
+  internalNotes,
+  isOpen,
+  onClose,
+  onTabChange,
+}: {
+  activeTab: NoteTab
+  customerInquiries: CustomerInquiry[]
+  internalNotes: InternalNote[]
+  isOpen: boolean
+  onClose: () => void
+  onTabChange: (tab: NoteTab) => void
+}) {
+  const [query, setQuery] = useState("")
+  const notes = activeTab === "inquiries" ? customerInquiries : internalNotes
+  const filteredNotes = notes.filter((note) => {
+    const haystack = `${note.body} ${note.author} ${note.noteType}`.toLowerCase()
+    return haystack.includes(query.toLowerCase())
+  })
+
+  if (!isOpen) {
+    return null
+  }
+
+  return (
+    <SideDrawer
+      description={`${formatNumber(filteredNotes.length)} matching records`}
+      onClose={onClose}
+      title="Full Notes History"
+    >
+      <div className="space-y-5">
+        <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+          <NoteTabButton
+            active={activeTab === "inquiries"}
+            count={customerInquiries.length}
+            label="Customer Inquiries"
+            onClick={() => onTabChange("inquiries")}
+          />
+          <NoteTabButton
+            active={activeTab === "internal"}
+            count={internalNotes.length}
+            label="Internal Notes"
+            onClick={() => onTabChange("internal")}
+          />
+        </div>
+        <input
+          className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
+          placeholder="Search notes by content, author, or type..."
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <div className="space-y-3">
+          {filteredNotes.map((note) => (
+            <NoteCard key={`${note.author}-${note.timestamp}-${note.body}`} note={note} />
+          ))}
+        </div>
+      </div>
+    </SideDrawer>
+  )
+}
+
+function AddNoteDialog({
+  draft,
+  isOpen,
+  onCancel,
+  onChange,
+  onConfirm,
+}: {
+  draft: NoteDraft
+  isOpen: boolean
+  onCancel: () => void
+  onChange: (draft: NoteDraft) => void
+  onConfirm: () => void
+}) {
+  if (!isOpen) {
+    return null
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
+        <div className="border-b border-slate-100 p-6">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="size-5 text-violet-600" />
+            <h3 className="text-lg font-bold text-slate-950">Add Internal Note</h3>
+          </div>
+          <p className="mt-2 text-sm text-slate-500">
+            Internal notes are visible to administrators only.
+          </p>
+        </div>
+        <div className="space-y-5 p-6">
+          <FieldLabel label="Note Type">
+            <select
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
+              value={draft.noteType}
+              onChange={(event) =>
+                onChange({ ...draft, noteType: event.target.value as AdminNoteType })
+              }
+            >
+              <option>Internal Note</option>
+              <option>Support Action</option>
+              <option>Billing Note</option>
+              <option>Risk Monitoring</option>
+            </select>
+          </FieldLabel>
+          <FieldLabel label="Content">
+            <textarea
+              className="min-h-28 w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-medium text-slate-950 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
+              placeholder="Add an operational note for this user..."
+              value={draft.body}
+              onChange={(event) => onChange({ ...draft, body: event.target.value })}
+            />
+          </FieldLabel>
+          <FieldLabel label="Optional Tags">
+            <input
+              className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
+              placeholder="billing, vip, support"
+              value={draft.tags}
+              onChange={(event) => onChange({ ...draft, tags: event.target.value })}
+            />
+          </FieldLabel>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 p-6">
+          <AdminButton onClick={onCancel}>Cancel</AdminButton>
+          <AdminButton
+            disabled={draft.body.trim().length === 0}
+            variant="primary"
+            onClick={onConfirm}
+          >
+            Add Note
+          </AdminButton>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BillingHistoryDrawer({
+  isOpen,
+  onClose,
+  onViewReceipt,
+  rows,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  onViewReceipt: (receipt: ReceiptInfo) => void
+  rows: BillingHistoryRow[]
+}) {
+  if (!isOpen) {
+    return null
+  }
+
+  return (
+    <SideDrawer
+      description={`${formatNumber(rows.length)} billing records`}
+      onClose={onClose}
+      title="Full Billing History"
+    >
+      <BillingHistoryTable rows={rows} onViewReceipt={onViewReceipt} />
+    </SideDrawer>
+  )
+}
+
+function CreditHistoryDrawer({
+  isOpen,
+  onClose,
+  rows,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  rows: CreditLedgerEntry[]
+}) {
+  if (!isOpen) {
+    return null
+  }
+
+  return (
+    <SideDrawer
+      description={`${formatNumber(rows.length)} credit audit records`}
+      onClose={onClose}
+      title="All Credit Logs"
+    >
+      <CreditHistoryRows rows={rows} />
+    </SideDrawer>
+  )
+}
+
+function PlanChangeAuditDrawer({
+  isOpen,
+  onClose,
+  rows,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  rows: PlanChangeLog[]
+}) {
+  if (!isOpen) {
+    return null
+  }
+
+  return (
+    <SideDrawer
+      description={`${formatNumber(rows.length)} plan change records`}
+      onClose={onClose}
+      title="Full Plan Change Audit"
+    >
+      <PlanChangeAuditRows rows={rows} />
+    </SideDrawer>
+  )
+}
+
+function SideDrawer({
+  children,
+  description,
+  onClose,
+  title,
+}: {
+  children: ReactNode
+  description?: string
+  onClose: () => void
+  title: string
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/25 backdrop-blur-sm">
+      <aside className="h-full w-full max-w-5xl overflow-y-auto border-l border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white/95 p-6 backdrop-blur">
+          <div>
+            <h3 className="text-xl font-bold text-slate-950">{title}</h3>
+            {description ? (
+              <p className="mt-1 text-sm font-medium text-slate-500">{description}</p>
+            ) : null}
+          </div>
+          <button
+            className="inline-flex size-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-950"
+            onClick={onClose}
+            type="button"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="p-6">{children}</div>
+      </aside>
+    </div>
   )
 }
 
@@ -2668,9 +3138,11 @@ function NoteTypePill({
   type: CustomerInquiry["noteType"] | InternalNote["noteType"]
 }) {
   const classes = {
+    "Billing Note": "bg-orange-50 text-orange-600 ring-orange-100",
     "Customer Inquiry": "bg-blue-50 text-blue-600 ring-blue-100",
     "Internal Note": "bg-slate-100 text-slate-700 ring-slate-200",
     "Risk Flag": "bg-rose-50 text-rose-600 ring-rose-100",
+    "Risk Monitoring": "bg-rose-50 text-rose-600 ring-rose-100",
     "Support Action": "bg-violet-50 text-violet-600 ring-violet-100",
   } satisfies Record<CustomerInquiry["noteType"] | InternalNote["noteType"], string>
 
