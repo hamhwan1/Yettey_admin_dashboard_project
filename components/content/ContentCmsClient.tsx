@@ -191,8 +191,8 @@ function ContentSummary({ section }: { section: ContentSection }) {
   const metrics = useMemo(() => {
     if (section === "landing-pages") {
       return [
-        { detail: "3 published, 2 draft or scheduled", label: "Pages", value: "5" },
-        { detail: "Hero, FAQ, CTA pending", label: "Content Blocks", value: "40" },
+        { detail: "2 published, 3 draft or scheduled", label: "Pages", value: "5" },
+        { detail: "Page-specific lightweight sections", label: "Content Blocks", value: "16" },
         { detail: "Korean and English", label: "Locales", value: "2" },
       ]
     }
@@ -239,15 +239,18 @@ function ContentSummary({ section }: { section: ContentSection }) {
 function LandingPagesFoundation() {
   const router = useRouter()
   const [query, setQuery] = useState("")
+  const [productFilter, setProductFilter] = useState("All")
   const [statusFilter, setStatusFilter] = useState("All")
   const [localeFilter, setLocaleFilter] = useState("All")
   const filteredPages = landingPages.filter((page) => {
-    const keyword = `${page.name} ${page.url} ${page.metaTitle} ${page.shortDescription}`.toLowerCase()
+    const keyword =
+      `${page.name} ${page.url} ${page.product} ${page.metaTitle} ${page.shortDescription}`.toLowerCase()
     const matchesQuery = keyword.includes(query.toLowerCase())
+    const matchesProduct = productFilter === "All" || page.product === productFilter
     const matchesStatus = statusFilter === "All" || page.status === statusFilter
     const matchesLocale = localeFilter === "All" || page.locale === localeFilter
 
-    return matchesQuery && matchesStatus && matchesLocale
+    return matchesQuery && matchesProduct && matchesStatus && matchesLocale
   })
 
   return (
@@ -257,7 +260,7 @@ function LandingPagesFoundation() {
           <div>
             <h2 className="text-lg font-bold text-slate-950">Landing Page List</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Manage which pages exist first. Open a page to edit content, metadata, and assets.
+              Manage page entities by product, URL, metadata, locale, and publishing state.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -270,6 +273,16 @@ function LandingPagesFoundation() {
                 onChange={(event) => setQuery(event.target.value)}
               />
             </div>
+            <select
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
+              value={productFilter}
+              onChange={(event) => setProductFilter(event.target.value)}
+            >
+              <option>All</option>
+              <option>YETTEY</option>
+              <option>VPICK</option>
+              <option>Shared/Common</option>
+            </select>
             <select
               className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
               value={statusFilter}
@@ -297,11 +310,12 @@ function LandingPagesFoundation() {
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1320px]">
+        <table className="w-full min-w-[1440px]">
           <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-6 py-4">Page Name</th>
               <th className="px-6 py-4">URL</th>
+              <th className="px-6 py-4">Product</th>
               <th className="px-6 py-4">Meta Title</th>
               <th className="px-6 py-4">Meta Description</th>
               <th className="px-6 py-4">Short Description</th>
@@ -324,6 +338,9 @@ function LandingPagesFoundation() {
                 </td>
                 <td className="px-6 py-5 text-sm font-semibold text-violet-600">
                   {page.url}
+                </td>
+                <td className="px-6 py-5">
+                  <ProductPill product={page.product} />
                 </td>
                 <td className="max-w-60 px-6 py-5 text-sm text-slate-700">
                   {page.metaTitle}
@@ -794,6 +811,21 @@ function StatusPill({ status }: { status: string }) {
   return (
     <span className={cn("inline-flex h-6 items-center rounded-full px-2.5 text-xs font-bold ring-1", tone)}>
       {status}
+    </span>
+  )
+}
+
+function ProductPill({ product }: { product: string }) {
+  const tone =
+    product === "YETTEY"
+      ? "bg-violet-50 text-violet-600 ring-violet-100"
+      : product === "VPICK"
+        ? "bg-blue-50 text-blue-600 ring-blue-100"
+        : "bg-slate-100 text-slate-600 ring-slate-200"
+
+  return (
+    <span className={cn("inline-flex h-6 items-center rounded-full px-2.5 text-xs font-bold ring-1", tone)}>
+      {product}
     </span>
   )
 }
