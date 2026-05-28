@@ -1,19 +1,20 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { useMemo, useState } from "react"
 import {
   Copy,
-  Edit3,
-  Eye,
   Image as ImageIcon,
   Plus,
   Search,
   Upload,
 } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import AdminButton from "@/components/admin/AdminButton"
 import PageHeader from "@/components/admin/PageHeader"
 import DashboardLayout from "@/components/layout/DashboardLayout"
+import { landingPages } from "@/components/content/landingPageMock"
 import { cn } from "@/lib/utils"
 
 type ContentSection =
@@ -24,21 +25,6 @@ type ContentSection =
   | "seo"
   | "media-library"
   | "navigation"
-
-type LandingBlock = {
-  description: string
-  fields: string[]
-  name: string
-  status: "Ready" | "Needs Review"
-}
-
-type LandingPageRow = {
-  actions: string
-  locale: string
-  name: string
-  status: "Published" | "Draft" | "Scheduled"
-  updatedDate: string
-}
 
 type BlogPost = {
   author: string
@@ -57,88 +43,6 @@ type MediaAsset = {
   updatedDate: string
   url: string
 }
-
-const landingPages: LandingPageRow[] = [
-  {
-    actions: "Edit / Preview",
-    locale: "en-US",
-    name: "Homepage",
-    status: "Published",
-    updatedDate: "May 28, 2026",
-  },
-  {
-    actions: "Edit / Preview",
-    locale: "ko-KR",
-    name: "Pricing",
-    status: "Published",
-    updatedDate: "May 27, 2026",
-  },
-  {
-    actions: "Edit / Preview",
-    locale: "en-US",
-    name: "VPICK Landing",
-    status: "Draft",
-    updatedDate: "May 25, 2026",
-  },
-  {
-    actions: "Edit / Preview",
-    locale: "ko-KR",
-    name: "Campaign Landing",
-    status: "Scheduled",
-    updatedDate: "Jun 01, 2026",
-  },
-]
-
-const landingBlocks: LandingBlock[] = [
-  {
-    description: "Main headline, subcopy, primary CTA, and hero media.",
-    fields: ["Title", "Description", "Button text", "Hero image"],
-    name: "Hero",
-    status: "Ready",
-  },
-  {
-    description: "Feature cards used for conversion-focused product messaging.",
-    fields: ["Card title", "Card description", "Icon", "Link"],
-    name: "Features",
-    status: "Ready",
-  },
-  {
-    description: "Step-based flow for user education and onboarding.",
-    fields: ["Step title", "Step copy", "Video", "Image"],
-    name: "Workflow",
-    status: "Needs Review",
-  },
-  {
-    description: "Customer proof, creator quotes, and brand trust content.",
-    fields: ["Quote", "Name", "Company", "Avatar"],
-    name: "Testimonials",
-    status: "Ready",
-  },
-  {
-    description: "Plan messaging, pricing CTA, and conversion copy.",
-    fields: ["Plan headline", "Description", "CTA", "Footnote"],
-    name: "Pricing",
-    status: "Ready",
-  },
-  {
-    description: "Common objections and support answers.",
-    fields: ["Question", "Answer", "Visibility"],
-    name: "FAQ",
-    status: "Ready",
-  },
-  {
-    description: "Final conversion section before footer.",
-    fields: ["Title", "Description", "Button text"],
-    name: "CTA",
-    status: "Needs Review",
-  },
-  {
-    description: "Footer text, legal links, and social links.",
-    fields: ["Link label", "URL", "Social channel"],
-    name: "Footer",
-    status: "Ready",
-  },
-]
 
 const blogCategories = [
   { name: "AI Content", order: 1, status: "Visible" },
@@ -259,10 +163,12 @@ export default function ContentCmsClient({ section }: { section: ContentSection 
         title={copy.title}
         description={copy.description}
         actions={
-          <AdminButton variant="primary">
-            <Plus className="size-4" />
-            {copy.action}
-          </AdminButton>
+          section === "landing-pages" ? undefined : (
+            <AdminButton variant="primary">
+              <Plus className="size-4" />
+              {copy.action}
+            </AdminButton>
+          )
         }
       />
 
@@ -285,8 +191,8 @@ function ContentSummary({ section }: { section: ContentSection }) {
   const metrics = useMemo(() => {
     if (section === "landing-pages") {
       return [
-        { detail: "3 published, 1 draft", label: "Pages", value: "4" },
-        { detail: "Hero, FAQ, CTA pending", label: "Blocks", value: "28" },
+        { detail: "3 published, 2 draft or scheduled", label: "Pages", value: "5" },
+        { detail: "Hero, FAQ, CTA pending", label: "Content Blocks", value: "40" },
         { detail: "Korean and English", label: "Locales", value: "2" },
       ]
     }
@@ -331,119 +237,141 @@ function ContentSummary({ section }: { section: ContentSection }) {
 }
 
 function LandingPagesFoundation() {
-  const [selectedBlock, setSelectedBlock] = useState(landingBlocks[0])
+  const router = useRouter()
+  const [query, setQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState("All")
+  const [localeFilter, setLocaleFilter] = useState("All")
+  const filteredPages = landingPages.filter((page) => {
+    const keyword = `${page.name} ${page.url} ${page.metaTitle} ${page.shortDescription}`.toLowerCase()
+    const matchesQuery = keyword.includes(query.toLowerCase())
+    const matchesStatus = statusFilter === "All" || page.status === statusFilter
+    const matchesLocale = localeFilter === "All" || page.locale === localeFilter
+
+    return matchesQuery && matchesStatus && matchesLocale
+  })
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <SectionHeader
-          description="Marketing pages marketers can edit without code."
-          title="Landing Page List"
-        />
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px]">
-            <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-6 py-4">Page Name</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Updated Date</th>
-                <th className="px-6 py-4">Locale</th>
-                <th className="px-6 py-4">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {landingPages.map((page) => (
-                <tr key={page.name} className="transition hover:bg-slate-50">
-                  <td className="px-6 py-5 text-sm font-bold text-slate-950">
-                    {page.name}
-                  </td>
-                  <td className="px-6 py-5">
-                    <StatusPill status={page.status} />
-                  </td>
-                  <td className="px-6 py-5 text-sm text-slate-600">
-                    {page.updatedDate}
-                  </td>
-                  <td className="px-6 py-5 text-sm font-semibold text-slate-700">
-                    {page.locale}
-                  </td>
-                  <td className="px-6 py-5 text-sm font-bold text-violet-600">
-                    {page.actions}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <SectionHeader
-          description="Block-based editor foundation. No raw HTML required."
-          title="Landing Page Editor"
-        />
-        <div className="grid gap-0 border-t border-slate-100 lg:grid-cols-[220px_1fr]">
-          <div className="border-b border-slate-100 p-4 lg:border-b-0 lg:border-r">
-            <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">
-              Section Structure
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+      <div className="border-b border-slate-100 p-6">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-950">Landing Page List</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Manage which pages exist first. Open a page to edit content, metadata, and assets.
             </p>
-            <div className="space-y-1">
-              {landingBlocks.map((block) => (
-                <button
-                  key={block.name}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold transition",
-                    selectedBlock.name === block.name
-                      ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
-                  )}
-                  onClick={() => setSelectedBlock(block)}
-                  type="button"
-                >
-                  {block.name}
-                  <span className="text-xs text-slate-400">{block.fields.length}</span>
-                </button>
-              ))}
-            </div>
           </div>
-          <div className="p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-bold text-slate-950">
-                  {selectedBlock.name}
-                </h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  {selectedBlock.description}
-                </p>
-              </div>
-              <StatusPill status={selectedBlock.status} />
+          <div className="flex flex-wrap gap-2">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className="h-10 w-full min-w-72 rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
+                placeholder="Search by page, URL, or metadata..."
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
             </div>
-            <div className="mt-5 space-y-4">
-              {selectedBlock.fields.map((field) => (
-                <label key={field} className="block">
-                  <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                    {field}
-                  </span>
-                  <input
-                    className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
-                    defaultValue={`${selectedBlock.name} ${field}`}
-                  />
-                </label>
-              ))}
-            </div>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <AdminButton variant="primary">
-                <Edit3 className="size-4" />
-                Save Draft
-              </AdminButton>
-              <AdminButton>
-                <Eye className="size-4" />
-                Preview
-              </AdminButton>
-            </div>
+            <select
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+            >
+              <option>All</option>
+              <option>Published</option>
+              <option>Draft</option>
+              <option>Scheduled</option>
+            </select>
+            <select
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
+              value={localeFilter}
+              onChange={(event) => setLocaleFilter(event.target.value)}
+            >
+              <option>All</option>
+              <option>en-US</option>
+              <option>ko-KR</option>
+            </select>
+            <AdminButton variant="primary">
+              <Plus className="size-4" />
+              Create Landing Page
+            </AdminButton>
           </div>
         </div>
-      </section>
-    </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1320px]">
+          <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-6 py-4">Page Name</th>
+              <th className="px-6 py-4">URL</th>
+              <th className="px-6 py-4">Meta Title</th>
+              <th className="px-6 py-4">Meta Description</th>
+              <th className="px-6 py-4">Short Description</th>
+              <th className="px-6 py-4">Locale</th>
+              <th className="px-6 py-4">Status</th>
+              <th className="px-6 py-4">Last Updated</th>
+              <th className="px-6 py-4">Updated By</th>
+              <th className="px-6 py-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filteredPages.map((page) => (
+              <tr
+                key={page.id}
+                className="cursor-pointer transition hover:bg-violet-50/60"
+                onClick={() => router.push(`/content/landing-pages/${page.id}`)}
+              >
+                <td className="px-6 py-5 text-sm font-bold text-slate-950">
+                  {page.name}
+                </td>
+                <td className="px-6 py-5 text-sm font-semibold text-violet-600">
+                  {page.url}
+                </td>
+                <td className="max-w-60 px-6 py-5 text-sm text-slate-700">
+                  {page.metaTitle}
+                </td>
+                <td className="max-w-72 px-6 py-5 text-sm leading-6 text-slate-600">
+                  {page.metaDescription}
+                </td>
+                <td className="max-w-60 px-6 py-5 text-sm leading-6 text-slate-600">
+                  {page.shortDescription}
+                </td>
+                <td className="px-6 py-5 text-sm font-semibold text-slate-700">
+                  {page.locale}
+                </td>
+                <td className="px-6 py-5">
+                  <StatusPill status={page.status} />
+                </td>
+                <td className="px-6 py-5 text-sm text-slate-600">
+                  {page.lastUpdated}
+                </td>
+                <td className="px-6 py-5 text-sm text-slate-600">
+                  {page.updatedBy}
+                </td>
+                <td className="px-6 py-5">
+                  <button
+                    className="text-sm font-bold text-violet-600 transition hover:text-violet-700"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      router.push(`/content/landing-pages/${page.id}`)
+                    }}
+                    type="button"
+                  >
+                    Open Detail
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {filteredPages.length === 0 ? (
+        <div className="border-t border-slate-100 p-10 text-center">
+          <p className="text-sm font-bold text-slate-950">No landing pages found</p>
+          <p className="mt-2 text-sm text-slate-500">
+            Try adjusting search, status, or locale filters.
+          </p>
+        </div>
+      ) : null}
+    </section>
   )
 }
 
@@ -797,7 +725,7 @@ function ModeButton({
   onClick,
 }: {
   active: boolean
-  children: React.ReactNode
+  children: ReactNode
   onClick: () => void
 }) {
   return (
