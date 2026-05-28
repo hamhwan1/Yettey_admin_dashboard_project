@@ -1,11 +1,5 @@
-import AdminSectionPage from "@/components/layout/AdminSectionPage"
+import ContentCmsClient from "@/components/content/ContentCmsClient"
 
 export default function LandingPagesPage() {
-  return (
-    <AdminSectionPage
-      eyebrow="Content"
-      title="Landing Pages"
-      description="Manage campaign landing pages, publish state, localization, and conversion-focused content blocks."
-    />
-  )
+  return <ContentCmsClient section="landing-pages" />
 }

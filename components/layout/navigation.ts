@@ -112,6 +112,11 @@ export const sidebarNavigation: Record<TopMenuKey, SidebarItem[]> = {
       icon: Flag,
     },
     {
+      title: "Navigation",
+      href: "/content/navigation",
+      icon: ListChecks,
+    },
+    {
       title: "Blog",
       href: "/content/blog",
       icon: BookOpen,

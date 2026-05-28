@@ -1,11 +1,5 @@
-import AdminSectionPage from "@/components/layout/AdminSectionPage"
+import ContentCmsClient from "@/components/content/ContentCmsClient"
 
 export default function MediaLibraryPage() {
-  return (
-    <AdminSectionPage
-      eyebrow="Content"
-      title="Media Library"
-      description="Organize reusable images, videos, documents, thumbnails, and brand media assets."
-    />
-  )
+  return <ContentCmsClient section="media-library" />
 }

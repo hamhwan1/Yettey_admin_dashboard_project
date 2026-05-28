@@ -1,11 +1,5 @@
-import AdminSectionPage from "@/components/layout/AdminSectionPage"
+import ContentCmsClient from "@/components/content/ContentCmsClient"
 
 export default function SeoPage() {
-  return (
-    <AdminSectionPage
-      eyebrow="Content"
-      title="SEO"
-      description="Review metadata, indexing configuration, canonical URLs, and search-focused content settings."
-    />
-  )
+  return <ContentCmsClient section="seo" />
 }

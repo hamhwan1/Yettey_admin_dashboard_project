@@ -1,11 +1,5 @@
-import AdminSectionPage from "@/components/layout/AdminSectionPage"
+import ContentCmsClient from "@/components/content/ContentCmsClient"
 
 export default function BlogPage() {
-  return (
-    <AdminSectionPage
-      eyebrow="Content"
-      title="Blog"
-      description="Draft, review, and publish blog content for product updates, education, and growth campaigns."
-    />
-  )
+  return <ContentCmsClient section="blog" />
 }

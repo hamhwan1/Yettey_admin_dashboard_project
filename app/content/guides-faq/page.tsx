@@ -1,11 +1,5 @@
-import AdminSectionPage from "@/components/layout/AdminSectionPage"
+import ContentCmsClient from "@/components/content/ContentCmsClient"
 
 export default function GuidesFaqPage() {
-  return (
-    <AdminSectionPage
-      eyebrow="Content"
-      title="Guides & FAQ"
-      description="Maintain support guides, frequently asked questions, onboarding docs, and help content."
-    />
-  )
+  return <ContentCmsClient section="guides-faq" />
 }
