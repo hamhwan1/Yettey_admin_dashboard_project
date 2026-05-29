@@ -28,7 +28,7 @@ import PageHeader from "@/components/admin/PageHeader"
 import DashboardLayout from "@/components/layout/DashboardLayout"
 import { cn } from "@/lib/utils"
 
-const categoryOptions = ["AI Content", "Video Editing", "Product Updates", "Social Media"]
+const defaultBlogCategoryOptions = ["AI Content", "Video Editing", "Product Updates", "Social Media"]
 
 type BlogDraft = {
   category: string
@@ -43,6 +43,9 @@ type BlogDraft = {
 type MediaDialogMode = "image-url" | "video-url" | "youtube" | null
 
 type BlogCreateClientProps = {
+  backHref?: string
+  categoryOptions?: string[]
+  contentType?: "blog" | "guide"
   initialDraft?: Partial<BlogDraft>
   mode?: "create" | "edit"
   postId?: string
@@ -55,6 +58,9 @@ const starterContent = `
 `
 
 export default function BlogCreateClient({
+  backHref,
+  categoryOptions = defaultBlogCategoryOptions,
+  contentType = "blog",
   initialDraft,
   mode = "create",
   postId,
@@ -63,8 +69,13 @@ export default function BlogCreateClient({
   const editorRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isEditing = mode === "edit"
+  const contentLabel = contentType === "guide" ? "Guide" : "Post"
+  const contentLower = contentLabel.toLowerCase()
+  const listLabel = contentType === "guide" ? "Guides & FAQ" : "Blog"
+  const listHref =
+    backHref ?? (contentType === "guide" ? "/content/guides-faq" : "/content/blog")
   const [draft, setDraft] = useState<BlogDraft>({
-    category: categoryOptions[0],
+    category: categoryOptions[0] ?? "",
     content: starterContent,
     seoDescription: "",
     seoTitle: "",
@@ -197,19 +208,19 @@ export default function BlogCreateClient({
       <PageHeader
         breadcrumbs={[
           { label: "Content" },
-          { label: "Blog" },
-          { label: "Create" },
+          { label: listLabel },
+          { label: isEditing ? "Edit" : "Create" },
         ]}
-        title={isEditing ? "Edit Manual Post" : "Create Manual Post"}
+        title={isEditing ? `Edit Manual ${contentLabel}` : `Create Manual ${contentLabel}`}
         description={
           isEditing
-            ? "Update an existing first-party blog article with the full rich text editor, media tools, SEO metadata, and publishing controls."
-            : "Write and format a first-party blog article with rich text, images, embeds, SEO metadata, and publishing controls."
+            ? `Update an existing first-party ${contentLower} with the full rich text editor, media tools, SEO metadata, and publishing controls.`
+            : `Write and format a first-party ${contentLower} with rich text, images, embeds, SEO metadata, and publishing controls.`
         }
         actions={
-          <AdminButton onClick={() => router.push("/content/blog")}>
+          <AdminButton onClick={() => router.push(listHref)}>
             <ArrowLeft className="size-4" />
-            Back to Blog
+            Back to {listLabel}
           </AdminButton>
         }
       />
@@ -217,10 +228,10 @@ export default function BlogCreateClient({
       {isEditing ? (
         <div className="mb-6 rounded-2xl border border-violet-100 bg-violet-50 px-5 py-4">
           <p className="text-sm font-bold text-violet-700">
-            Editing existing post
+            Editing existing {contentLower}
           </p>
           <p className="mt-1 text-sm text-violet-600">
-            Post ID: {postId ?? "mock-post"} · Changes are saved in local mock state only.
+            {contentLabel} ID: {postId ?? "mock-content"} - Changes are saved in local mock state only.
           </p>
         </div>
       ) : null}
@@ -231,7 +242,7 @@ export default function BlogCreateClient({
             <div className="grid gap-5 md:grid-cols-2">
               <Field
                 label="Title"
-                placeholder="Write a strong blog title..."
+                placeholder={`Write a strong ${contentLower} title...`}
                 value={draft.title}
                 onChange={(value) => updateDraft({ title: value })}
               />
@@ -413,24 +424,24 @@ export default function BlogCreateClient({
               {feedback === "draft"
                 ? "Draft Saved"
                 : feedback === "published"
-                  ? "Post Published"
-                  : "Post Deleted"}
+                  ? `${contentLabel} Published`
+                  : `${contentLabel} Deleted`}
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               {feedback === "draft"
                 ? isEditing
-                  ? "This mock post update has been saved as a draft."
-                  : "This mock post has been saved as a draft."
+                  ? `This mock ${contentLower} update has been saved as a draft.`
+                  : `This mock ${contentLower} has been saved as a draft.`
                 : feedback === "published"
                   ? isEditing
-                    ? "This mock post update has been published."
-                    : "This mock post has been published."
-                  : "This mock post has been deleted."}
+                    ? `This mock ${contentLower} update has been published.`
+                    : `This mock ${contentLower} has been published.`
+                  : `This mock ${contentLower} has been deleted.`}
             </p>
             <div className="mt-6 flex justify-end gap-2">
               <AdminButton onClick={() => setFeedback(null)}>OK</AdminButton>
-              <AdminButton onClick={() => router.push("/content/blog")} variant="primary">
-                Back to Blog
+              <AdminButton onClick={() => router.push(listHref)} variant="primary">
+                Back to {listLabel}
               </AdminButton>
             </div>
           </div>

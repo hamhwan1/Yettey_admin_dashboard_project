@@ -39,11 +39,38 @@ type BlogPost = {
   originalUrl?: string
   seoDescription?: string
   seoTitle?: string
-  status: "Draft" | "Published" | "Review"
+  status: "Draft" | "Hidden" | "Published" | "Review"
   tags: string[]
   thumbnail: string
   title: string
   type: "Imported URL" | "Manual Post"
+  updatedDate: string
+}
+
+type GuidePost = {
+  author: string
+  category: string
+  createdDate: string
+  id: string
+  language: "English" | "Korean"
+  originalUrl?: string
+  status: "Draft" | "Hidden" | "Published"
+  thumbnail: string
+  title: string
+  type: "Imported URL" | "Manual Guide"
+  updatedBy: string
+  updatedDate: string
+}
+
+type FaqItem = {
+  answer: string
+  category: string
+  id: string
+  language: "English" | "Korean"
+  question: string
+  sortOrder: number
+  status: "Draft" | "Hidden" | "Published"
+  updatedBy: string
   updatedDate: string
 }
 
@@ -151,6 +178,116 @@ const blogPosts: BlogPost[] = [
     title: "Thumbnail Patterns That Improve Click-Through",
     type: "Manual Post",
     updatedDate: "May 20, 2026",
+  },
+]
+
+const guideCategories: BlogCategory[] = [
+  { id: "getting-started", name: "Getting Started", order: 1, status: "Visible" },
+  { id: "asset-management", name: "Asset Management", order: 2, status: "Visible" },
+  { id: "ai-creation", name: "AI Creation", order: 3, status: "Visible" },
+  { id: "video-automation", name: "Video Automation", order: 4, status: "Visible" },
+  { id: "team-collaboration", name: "Team Collaboration", order: 5, status: "Visible" },
+  { id: "billing", name: "Billing", order: 6, status: "Hidden" },
+]
+
+const guidePosts: GuidePost[] = [
+  {
+    author: "Support Ops",
+    category: "Getting Started",
+    createdDate: "May 19, 2026",
+    id: "getting-started-guide",
+    language: "English",
+    status: "Published",
+    thumbnail: "https://cdn.yettey.com/guides/getting-started.jpg",
+    title: "Getting Started with Yettey",
+    type: "Manual Guide",
+    updatedBy: "Sarah Mitchell",
+    updatedDate: "May 28, 2026",
+  },
+  {
+    author: "Content Ops",
+    category: "Video Automation",
+    createdDate: "May 20, 2026",
+    id: "vpick-upload-guide",
+    language: "Korean",
+    originalUrl: "https://help.yettey.ai/legacy/vpick-upload-guide",
+    status: "Draft",
+    thumbnail: "https://cdn.yettey.com/guides/vpick-upload.jpg",
+    title: "VPICK Upload Guide",
+    type: "Imported URL",
+    updatedBy: "Growth Team",
+    updatedDate: "May 27, 2026",
+  },
+  {
+    author: "Billing Ops",
+    category: "Billing",
+    createdDate: "May 14, 2026",
+    id: "credit-usage-guide",
+    language: "English",
+    status: "Hidden",
+    thumbnail: "https://cdn.yettey.com/guides/credit-usage.jpg",
+    title: "Credit Usage and Billing Guide",
+    type: "Manual Guide",
+    updatedBy: "Sarah Mitchell",
+    updatedDate: "May 25, 2026",
+  },
+]
+
+const faqItems: FaqItem[] = [
+  {
+    answer: "Yettey is an AI media workflow platform for managing, creating, and publishing content assets.",
+    category: "Getting Started",
+    id: "faq-what-is-yettey-en",
+    language: "English",
+    question: "What is Yettey?",
+    sortOrder: 1,
+    status: "Published",
+    updatedBy: "Support Ops",
+    updatedDate: "May 28, 2026",
+  },
+  {
+    answer: "Credits are consumed when AI generation, video automation, and selected processing jobs are completed.",
+    category: "Billing",
+    id: "faq-credit-usage-en",
+    language: "English",
+    question: "How do credits work?",
+    sortOrder: 2,
+    status: "Draft",
+    updatedBy: "Billing Ops",
+    updatedDate: "May 27, 2026",
+  },
+  {
+    answer: "Workspace owners can invite members from team settings and assign each member a role.",
+    category: "Team Collaboration",
+    id: "faq-invite-team-en",
+    language: "English",
+    question: "How do I invite team members?",
+    sortOrder: 3,
+    status: "Published",
+    updatedBy: "Sarah Mitchell",
+    updatedDate: "May 24, 2026",
+  },
+  {
+    answer: "Yettey는 콘텐츠 자산을 관리하고 AI로 제작 및 게시하는 미디어 워크플로우 플랫폼입니다.",
+    category: "Getting Started",
+    id: "faq-what-is-yettey-ko",
+    language: "Korean",
+    question: "Yettey는 무엇인가요?",
+    sortOrder: 1,
+    status: "Published",
+    updatedBy: "Support Ops",
+    updatedDate: "May 28, 2026",
+  },
+  {
+    answer: "크레딧은 AI 생성, 영상 자동화, 일부 처리 작업이 완료될 때 사용됩니다.",
+    category: "Billing",
+    id: "faq-credit-usage-ko",
+    language: "Korean",
+    question: "크레딧은 어떻게 사용되나요?",
+    sortOrder: 2,
+    status: "Hidden",
+    updatedBy: "Billing Ops",
+    updatedDate: "May 25, 2026",
   },
 ]
 
@@ -389,7 +526,7 @@ export default function ContentCmsClient({ section }: { section: ContentSection 
               </AdminButton>
             </>
           ) : section === "landing-pages" || section === "navigation" ? undefined : (
-            <AdminButton variant="primary">
+            section === "guides-faq" ? undefined : <AdminButton variant="primary">
               <Plus className="size-4" />
               {copy.action}
             </AdminButton>
@@ -397,7 +534,7 @@ export default function ContentCmsClient({ section }: { section: ContentSection 
         }
       />
 
-      {section === "blog" || section === "navigation" ? null : (
+      {section === "blog" || section === "navigation" || section === "guides-faq" ? null : (
         <ContentSummary section={section} />
       )}
 
@@ -995,26 +1132,43 @@ function PostTable({
   )
 }
 
+function ThumbnailPreview({ src }: { src: string }) {
+  return (
+    <div
+      className="flex size-14 items-center justify-center rounded-xl bg-slate-100 bg-cover bg-center ring-1 ring-slate-200"
+      style={src ? { backgroundImage: `url(${src})` } : undefined}
+    >
+      {src ? null : <ImageIcon className="size-5 text-slate-400" />}
+    </div>
+  )
+}
+
 function ImportUrlDialog({
   categories,
+  description = "Store an external article as a managed reference. Imported URL posts do not expose article body editing.",
   form,
   onCancel,
   onChange,
   onImport,
+  submitLabel = "Import",
+  title = "Import URL",
 }: {
   categories: BlogCategory[]
+  description?: string
   form: BlogImportForm
   onCancel: () => void
   onChange: (patch: Partial<BlogImportForm>) => void
   onImport: () => void
+  submitLabel?: string
+  title?: string
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
       <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <div className="border-b border-slate-100 p-6">
-          <h2 className="text-lg font-bold text-slate-950">Import URL</h2>
+          <h2 className="text-lg font-bold text-slate-950">{title}</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Store an external article as a managed reference. Imported URL posts do not expose article body editing.
+            {description}
           </p>
         </div>
         <div className="grid gap-5 p-6 md:grid-cols-2">
@@ -1050,7 +1204,7 @@ function ImportUrlDialog({
             Cancel
           </AdminButton>
           <AdminButton disabled={!form.url.trim()} onClick={onImport} variant="primary">
-            Import
+            {submitLabel}
           </AdminButton>
         </div>
       </div>
@@ -1383,19 +1537,845 @@ function CategoryDialog({
 }
 
 function GuidesFaqFoundation() {
-  const rows = [
-    ["Getting Started", "Guide", "Published", "May 27, 2026"],
-    ["Credit usage FAQ", "FAQ", "Draft", "May 25, 2026"],
-    ["VPICK upload troubleshooting", "Guide", "Review", "May 22, 2026"],
-  ]
+  const router = useRouter()
+  const [activeTab, setActiveTab] = useState<"faq" | "guides">("guides")
+  const [guides, setGuides] = useState(guidePosts)
+  const [categories, setCategories] = useState(guideCategories)
+  const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null)
+  const [categoryDialog, setCategoryDialog] = useState<BlogCategory | "new" | null>(null)
+  const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null)
+  const [guideImportOpen, setGuideImportOpen] = useState(false)
+  const [selectedGuideId, setSelectedGuideId] = useState<string | null>(null)
+  const [guideImportForm, setGuideImportForm] = useState<BlogImportForm>({
+    category: guideCategories[0].name,
+    thumbnail: "",
+    thumbnailFileName: "",
+    thumbnailMode: "url",
+    title: "",
+    url: "",
+  })
+  const [faqs, setFaqs] = useState(faqItems)
+  const [faqLanguage, setFaqLanguage] = useState<"English" | "Korean">("English")
+  const [faqDialog, setFaqDialog] = useState<FaqItem | "new" | null>(null)
+  const [deleteFaqId, setDeleteFaqId] = useState<string | null>(null)
+  const [draggedFaqId, setDraggedFaqId] = useState<string | null>(null)
+  const deleteCategory = categories.find((category) => category.id === deleteCategoryId)
+  const selectedGuide = guides.find((guide) => guide.id === selectedGuideId) ?? null
+  const deleteFaq = faqs.find((faq) => faq.id === deleteFaqId)
+
+  const handleCategoryDrop = (targetId: string) => {
+    if (!draggedCategoryId || draggedCategoryId === targetId) {
+      setDraggedCategoryId(null)
+      return
+    }
+
+    const draggedIndex = categories.findIndex(
+      (category) => category.id === draggedCategoryId
+    )
+    const targetIndex = categories.findIndex((category) => category.id === targetId)
+
+    if (draggedIndex < 0 || targetIndex < 0) {
+      setDraggedCategoryId(null)
+      return
+    }
+
+    setCategories(normalizeBlogCategoryOrder(reorderArray(categories, draggedIndex, targetIndex)))
+    setDraggedCategoryId(null)
+  }
+
+  const handleSaveCategory = (category: BlogCategory) => {
+    if (categoryDialog === "new") {
+      setCategories((current) =>
+        normalizeBlogCategoryOrder([
+          ...current,
+          { ...category, id: createBlogId("guide-category"), order: current.length + 1 },
+        ])
+      )
+      setCategoryDialog(null)
+      return
+    }
+
+    setCategories((current) =>
+      current.map((item) => (item.id === category.id ? category : item))
+    )
+    setCategoryDialog(null)
+  }
+
+  const handleDeleteCategory = () => {
+    if (!deleteCategoryId) return
+    setCategories((current) =>
+      normalizeBlogCategoryOrder(
+        current.filter((category) => category.id !== deleteCategoryId)
+      )
+    )
+    setDeleteCategoryId(null)
+  }
+
+  const handleImportGuide = () => {
+    const title = guideImportForm.title.trim() || "Imported external guide"
+    const guide: GuidePost = {
+      author: "Content Ops",
+      category: guideImportForm.category,
+      createdDate: "Today",
+      id: createBlogId("imported-guide"),
+      language: "English",
+      originalUrl: guideImportForm.url.trim() || "https://example.com/imported-guide",
+      status: "Draft",
+      thumbnail:
+        guideImportForm.thumbnail.trim() ||
+        "https://cdn.yettey.com/guides/imported-reference.jpg",
+      title,
+      type: "Imported URL",
+      updatedBy: "Sarah Mitchell",
+      updatedDate: "Today",
+    }
+
+    setGuides((current) => [guide, ...current])
+    setSelectedGuideId(guide.id)
+    setGuideImportForm({
+      category: categories[0]?.name ?? "Getting Started",
+      thumbnail: "",
+      thumbnailFileName: "",
+      thumbnailMode: "url",
+      title: "",
+      url: "",
+    })
+    setGuideImportOpen(false)
+  }
+
+  const handleOpenGuide = (guideId: string) => {
+    const guide = guides.find((item) => item.id === guideId)
+
+    if (guide?.type === "Manual Guide") {
+      router.push(`/content/guides-faq/${guide.id}`)
+      return
+    }
+
+    setSelectedGuideId(guideId)
+  }
+
+  const handleFaqDrop = (targetId: string) => {
+    if (!draggedFaqId || draggedFaqId === targetId) {
+      setDraggedFaqId(null)
+      return
+    }
+
+    setFaqs((current) => {
+      const sameLanguage = current
+        .filter((item) => item.language === faqLanguage)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+      const draggedIndex = sameLanguage.findIndex((item) => item.id === draggedFaqId)
+      const targetIndex = sameLanguage.findIndex((item) => item.id === targetId)
+
+      if (draggedIndex < 0 || targetIndex < 0) return current
+
+      const reordered = normalizeFaqOrder(
+        reorderArray(sameLanguage, draggedIndex, targetIndex)
+      )
+
+      return current.map(
+        (item) => reordered.find((reorderedItem) => reorderedItem.id === item.id) ?? item
+      )
+    })
+    setDraggedFaqId(null)
+  }
+
+  const handleSaveFaq = (faq: FaqItem) => {
+    if (faqDialog === "new") {
+      setFaqs((current) => {
+        const languageItems = current.filter((item) => item.language === faq.language)
+        return [
+          ...current,
+          {
+            ...faq,
+            id: createBlogId("faq"),
+            sortOrder: languageItems.length + 1,
+            updatedBy: "Sarah Mitchell",
+            updatedDate: "Today",
+          },
+        ]
+      })
+      setFaqDialog(null)
+      return
+    }
+
+    setFaqs((current) =>
+      current.map((item) =>
+        item.id === faq.id ? { ...faq, updatedBy: "Sarah Mitchell", updatedDate: "Today" } : item
+      )
+    )
+    setFaqDialog(null)
+  }
+
+  const handleDeleteFaq = () => {
+    if (!deleteFaqId) return
+    setFaqs((current) => current.filter((faq) => faq.id !== deleteFaqId))
+    setDeleteFaqId(null)
+  }
 
   return (
-    <FoundationTable
-      description="Organize help content for onboarding and support."
-      headers={["Title", "Type", "Status", "Updated"]}
-      rows={rows}
-      title="Guide Library"
-    />
+    <div className="space-y-6">
+      <div className="inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+        {[
+          { label: "Guides", value: "guides" as const },
+          { label: "FAQ", value: "faq" as const },
+        ].map((tab) => (
+          <button
+            className={cn(
+              "rounded-xl px-5 py-2 text-sm font-bold transition",
+              activeTab === tab.value
+                ? "bg-violet-600 text-white shadow-lg shadow-violet-600/20"
+                : "text-slate-500 hover:bg-slate-50 hover:text-slate-950"
+            )}
+            key={tab.value}
+            onClick={() => setActiveTab(tab.value)}
+            type="button"
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "guides" ? (
+        <div className="grid gap-6 xl:grid-cols-[0.7fr_1.3fr]">
+          <CategoryManager
+            categories={categories}
+            draggedCategoryId={draggedCategoryId}
+            onAdd={() => setCategoryDialog("new")}
+            onDelete={(categoryId) => setDeleteCategoryId(categoryId)}
+            onDragStart={setDraggedCategoryId}
+            onDrop={handleCategoryDrop}
+            onEdit={setCategoryDialog}
+            onToggleVisibility={(categoryId) =>
+              setCategories((current) =>
+                current.map((category) =>
+                  category.id === categoryId
+                    ? {
+                        ...category,
+                        status: category.status === "Visible" ? "Hidden" : "Visible",
+                      }
+                    : category
+                )
+              )
+            }
+          />
+          <GuideTable
+            guides={guides}
+            onDelete={(guideId) =>
+              setGuides((current) => current.filter((guide) => guide.id !== guideId))
+            }
+            onImport={() => setGuideImportOpen(true)}
+            onNewGuide={() => router.push("/content/guides-faq/create")}
+            onOpenGuide={handleOpenGuide}
+            onStatusChange={(guideId, status) =>
+              setGuides((current) =>
+                current.map((guide) =>
+                  guide.id === guideId
+                    ? { ...guide, status, updatedBy: "Sarah Mitchell", updatedDate: "Today" }
+                    : guide
+                )
+              )
+            }
+          />
+        </div>
+      ) : (
+        <FaqManagement
+          draggedFaqId={draggedFaqId}
+          faqs={faqs}
+          language={faqLanguage}
+          onAdd={() => setFaqDialog("new")}
+          onDelete={setDeleteFaqId}
+          onDragStart={setDraggedFaqId}
+          onDrop={handleFaqDrop}
+          onEdit={setFaqDialog}
+          onLanguageChange={setFaqLanguage}
+          onStatusChange={(faqId, status) =>
+            setFaqs((current) =>
+              current.map((faq) =>
+                faq.id === faqId
+                  ? { ...faq, status, updatedBy: "Sarah Mitchell", updatedDate: "Today" }
+                  : faq
+              )
+            )
+          }
+        />
+      )}
+
+      {guideImportOpen ? (
+        <ImportUrlDialog
+          categories={categories}
+          description="Store an external help article as a managed guide reference. Imported guides do not expose body editing."
+          form={guideImportForm}
+          onCancel={() => setGuideImportOpen(false)}
+          onChange={(patch) =>
+            setGuideImportForm((current) => ({ ...current, ...patch }))
+          }
+          onImport={handleImportGuide}
+          submitLabel="Import Guide"
+          title="Import Guide URL"
+        />
+      ) : null}
+
+      {selectedGuide ? (
+        <GuideReferenceDialog
+          categories={categories}
+          guide={selectedGuide}
+          onClose={() => setSelectedGuideId(null)}
+          onDelete={(guideId) => {
+            setGuides((current) => current.filter((guide) => guide.id !== guideId))
+            setSelectedGuideId(null)
+          }}
+          onUpdate={(guideId, patch) =>
+            setGuides((current) =>
+              current.map((guide) =>
+                guide.id === guideId
+                  ? { ...guide, ...patch, updatedBy: "Sarah Mitchell", updatedDate: "Today" }
+                  : guide
+              )
+            )
+          }
+        />
+      ) : null}
+
+      {categoryDialog ? (
+        <CategoryDialog
+          category={
+            categoryDialog === "new"
+              ? {
+                  id: "new",
+                  name: "",
+                  order: categories.length + 1,
+                  status: "Visible",
+                }
+              : categoryDialog
+          }
+          mode={categoryDialog === "new" ? "create" : "edit"}
+          onCancel={() => setCategoryDialog(null)}
+          onSave={handleSaveCategory}
+        />
+      ) : null}
+
+      {deleteCategory ? (
+        <ContentDialog
+          confirmLabel="Delete"
+          message="Are you sure you want to delete this guide category? Existing mock guides keep their current category label."
+          onCancel={() => setDeleteCategoryId(null)}
+          onConfirm={handleDeleteCategory}
+          title={`Delete ${deleteCategory.name}`}
+          tone="danger"
+        />
+      ) : null}
+
+      {faqDialog ? (
+        <FaqDialog
+          categories={categories}
+          faq={
+            faqDialog === "new"
+              ? {
+                  answer: "",
+                  category: categories[0]?.name ?? "Getting Started",
+                  id: "new",
+                  language: faqLanguage,
+                  question: "",
+                  sortOrder:
+                    faqs.filter((faq) => faq.language === faqLanguage).length + 1,
+                  status: "Draft",
+                  updatedBy: "Sarah Mitchell",
+                  updatedDate: "Today",
+                }
+              : faqDialog
+          }
+          mode={faqDialog === "new" ? "create" : "edit"}
+          onCancel={() => setFaqDialog(null)}
+          onSave={handleSaveFaq}
+        />
+      ) : null}
+
+      {deleteFaq ? (
+        <ContentDialog
+          confirmLabel="Delete"
+          message="Are you sure you want to delete this FAQ item? This action only updates local mock data."
+          onCancel={() => setDeleteFaqId(null)}
+          onConfirm={handleDeleteFaq}
+          title="Delete FAQ"
+          tone="danger"
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function GuideTable({
+  guides,
+  onDelete,
+  onImport,
+  onNewGuide,
+  onOpenGuide,
+  onStatusChange,
+}: {
+  guides: GuidePost[]
+  onDelete: (guideId: string) => void
+  onImport: () => void
+  onNewGuide: () => void
+  onOpenGuide: (guideId: string) => void
+  onStatusChange: (guideId: string, status: GuidePost["status"]) => void
+}) {
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+      <div className="flex flex-col gap-4 border-b border-slate-100 p-6 sm:flex-row sm:items-start sm:justify-between">
+        <SectionTitle
+          title="Guides CMS"
+          description="Manage long-form help articles, imported references, language state, and publishing visibility."
+        />
+        <div className="flex flex-wrap gap-2">
+          <AdminButton onClick={onNewGuide}>
+            <Plus className="size-4" />
+            New Guide
+          </AdminButton>
+          <AdminButton onClick={onImport} variant="primary">
+            <ExternalLink className="size-4" />
+            Import URL
+          </AdminButton>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1120px]">
+          <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-6 py-4">Thumbnail</th>
+              <th className="px-6 py-4">Title</th>
+              <th className="px-6 py-4">Category</th>
+              <th className="px-6 py-4">Status</th>
+              <th className="px-6 py-4">Language</th>
+              <th className="px-6 py-4">Updated Date</th>
+              <th className="px-6 py-4">Updated By</th>
+              <th className="px-6 py-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {guides.map((guide) => (
+              <tr
+                className="cursor-pointer transition hover:bg-violet-50/60"
+                key={guide.id}
+                onClick={() => onOpenGuide(guide.id)}
+              >
+                <td className="px-6 py-5">
+                  <ThumbnailPreview src={guide.thumbnail} />
+                </td>
+                <td className="px-6 py-5">
+                  <p className="text-sm font-bold text-slate-950">{guide.title}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    {guide.type}
+                  </p>
+                </td>
+                <td className="px-6 py-5 text-sm text-slate-600">{guide.category}</td>
+                <td className="px-6 py-5">
+                  <StatusPill status={guide.status} />
+                </td>
+                <td className="px-6 py-5 text-sm text-slate-600">{guide.language}</td>
+                <td className="px-6 py-5 text-sm text-slate-600">{guide.updatedDate}</td>
+                <td className="px-6 py-5 text-sm text-slate-600">{guide.updatedBy}</td>
+                <td className="px-6 py-5">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      className="text-xs font-bold text-violet-600 hover:text-violet-700"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onOpenGuide(guide.id)
+                      }}
+                      type="button"
+                    >
+                      {guide.type === "Manual Guide" ? "Edit" : "Open"}
+                    </button>
+                    <button
+                      className="text-xs font-bold text-slate-500 hover:text-violet-600"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onStatusChange(guide.id, guide.status === "Published" ? "Draft" : "Published")
+                      }}
+                      type="button"
+                    >
+                      {guide.status === "Published" ? "Draft" : "Publish"}
+                    </button>
+                    <button
+                      className="text-xs font-bold text-slate-500 hover:text-orange-600"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onStatusChange(guide.id, "Hidden")
+                      }}
+                      type="button"
+                    >
+                      Hide
+                    </button>
+                    <button
+                      className="text-xs font-bold text-red-500 hover:text-red-600"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onDelete(guide.id)
+                      }}
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+function GuideReferenceDialog({
+  categories,
+  guide,
+  onClose,
+  onDelete,
+  onUpdate,
+}: {
+  categories: BlogCategory[]
+  guide: GuidePost
+  onClose: () => void
+  onDelete: (guideId: string) => void
+  onUpdate: (guideId: string, patch: Partial<GuidePost>) => void
+}) {
+  const [thumbnailMode, setThumbnailMode] = useState<ThumbnailInputMode>("url")
+  const [thumbnailFileName, setThumbnailFileName] = useState("")
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
+      <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex flex-col gap-4 border-b border-slate-100 p-6 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-bold text-slate-950">
+                Imported Guide Detail
+              </h2>
+              <StatusPill status={guide.status} />
+            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              Imported guides are managed as external references. Body editing is disabled.
+            </p>
+          </div>
+          <AdminButton onClick={onClose}>Close</AdminButton>
+        </div>
+        <div className="max-h-[calc(90vh-104px)] overflow-y-auto p-6">
+          <div className="grid gap-5 md:grid-cols-2">
+            <ContentInput
+              label="Title"
+              value={guide.title}
+              onChange={(value) => onUpdate(guide.id, { title: value })}
+            />
+            <ContentSelect
+              label="Category"
+              options={categories.map((category) => category.name)}
+              value={guide.category}
+              onChange={(value) => onUpdate(guide.id, { category: value })}
+            />
+            <ContentSelect
+              label="Language"
+              options={["English", "Korean"]}
+              value={guide.language}
+              onChange={(value) =>
+                onUpdate(guide.id, { language: value as GuidePost["language"] })
+              }
+            />
+            <ContentSelect
+              label="Status"
+              options={["Draft", "Published", "Hidden"]}
+              value={guide.status}
+              onChange={(value) =>
+                onUpdate(guide.id, { status: value as GuidePost["status"] })
+              }
+            />
+            <ThumbnailSourceSelector
+              fileName={thumbnailFileName}
+              mode={thumbnailMode}
+              onChange={(value) => onUpdate(guide.id, { thumbnail: value })}
+              onFileNameChange={setThumbnailFileName}
+              onModeChange={setThumbnailMode}
+              value={guide.thumbnail}
+            />
+            <ContentInput label="Original URL" value={guide.originalUrl ?? ""} />
+          </div>
+          <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-5">
+            <AdminButton
+              disabled={!guide.originalUrl}
+              onClick={() =>
+                guide.originalUrl &&
+                window.open(guide.originalUrl, "_blank", "noopener,noreferrer")
+              }
+            >
+              <ExternalLink className="size-4" />
+              Open Original Guide
+            </AdminButton>
+            <AdminButton
+              className="border-red-200 text-red-600 hover:border-red-300 hover:bg-red-50"
+              onClick={() => onDelete(guide.id)}
+            >
+              <Trash2 className="size-4" />
+              Delete
+            </AdminButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FaqManagement({
+  draggedFaqId,
+  faqs,
+  language,
+  onAdd,
+  onDelete,
+  onDragStart,
+  onDrop,
+  onEdit,
+  onLanguageChange,
+  onStatusChange,
+}: {
+  draggedFaqId: string | null
+  faqs: FaqItem[]
+  language: "English" | "Korean"
+  onAdd: () => void
+  onDelete: (faqId: string) => void
+  onDragStart: (faqId: string) => void
+  onDrop: (faqId: string) => void
+  onEdit: (faq: FaqItem) => void
+  onLanguageChange: (language: "English" | "Korean") => void
+  onStatusChange: (faqId: string, status: FaqItem["status"]) => void
+}) {
+  const visibleFaqs = faqs
+    .filter((faq) => faq.language === language)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+      <div className="flex flex-col gap-4 border-b border-slate-100 p-6 lg:flex-row lg:items-start lg:justify-between">
+        <SectionTitle
+          title="FAQ CMS"
+          description="Manage structured Q&A items by language, category, visibility, and display order."
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+            {(["English", "Korean"] as const).map((item) => (
+              <button
+                className={cn(
+                  "rounded-lg px-4 py-2 text-xs font-bold transition",
+                  language === item
+                    ? "bg-white text-violet-600 shadow-sm"
+                    : "text-slate-500 hover:text-slate-950"
+                )}
+                key={item}
+                onClick={() => onLanguageChange(item)}
+                type="button"
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+          <AdminButton onClick={onAdd} variant="primary">
+            <Plus className="size-4" />
+            Add FAQ
+          </AdminButton>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1100px]">
+          <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-6 py-4">Sort</th>
+              <th className="px-6 py-4">Question</th>
+              <th className="px-6 py-4">Answer</th>
+              <th className="px-6 py-4">Category</th>
+              <th className="px-6 py-4">Language</th>
+              <th className="px-6 py-4">Visibility</th>
+              <th className="px-6 py-4">Updated</th>
+              <th className="px-6 py-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {visibleFaqs.map((faq) => (
+              <tr
+                className={cn(
+                  "transition hover:bg-violet-50/60",
+                  draggedFaqId === faq.id && "opacity-60"
+                )}
+                draggable
+                key={faq.id}
+                onDragOver={(event) => event.preventDefault()}
+                onDragStart={() => onDragStart(faq.id)}
+                onDrop={() => onDrop(faq.id)}
+              >
+                <td className="px-6 py-5">
+                  <div className="flex items-center gap-2 text-sm font-bold text-slate-500">
+                    <GripVertical className="size-4 text-slate-300" />
+                    {faq.sortOrder}
+                  </div>
+                </td>
+                <td className="max-w-[260px] px-6 py-5 text-sm font-bold text-slate-950">
+                  {faq.question}
+                </td>
+                <td className="max-w-[360px] px-6 py-5 text-sm leading-6 text-slate-600">
+                  {faq.answer}
+                </td>
+                <td className="px-6 py-5 text-sm text-slate-600">{faq.category}</td>
+                <td className="px-6 py-5 text-sm text-slate-600">{faq.language}</td>
+                <td className="px-6 py-5">
+                  <StatusPill status={faq.status} />
+                </td>
+                <td className="px-6 py-5">
+                  <p className="text-sm text-slate-600">{faq.updatedDate}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">
+                    {faq.updatedBy}
+                  </p>
+                </td>
+                <td className="px-6 py-5">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      className="text-xs font-bold text-violet-600 hover:text-violet-700"
+                      onClick={() => onEdit(faq)}
+                      type="button"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="text-xs font-bold text-slate-500 hover:text-violet-600"
+                      onClick={() =>
+                        onStatusChange(
+                          faq.id,
+                          faq.status === "Published" ? "Draft" : "Published"
+                        )
+                      }
+                      type="button"
+                    >
+                      {faq.status === "Published" ? "Draft" : "Publish"}
+                    </button>
+                    <button
+                      className="text-xs font-bold text-slate-500 hover:text-orange-600"
+                      onClick={() => onStatusChange(faq.id, "Hidden")}
+                      type="button"
+                    >
+                      Hide
+                    </button>
+                    <button
+                      className="text-xs font-bold text-red-500 hover:text-red-600"
+                      onClick={() => onDelete(faq.id)}
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="border-t border-slate-100 px-6 py-4 text-sm font-semibold text-slate-500">
+        Showing {visibleFaqs.length} {language} FAQ items. Drag rows to control display order.
+      </div>
+    </section>
+  )
+}
+
+function FaqDialog({
+  categories,
+  faq,
+  mode,
+  onCancel,
+  onSave,
+}: {
+  categories: BlogCategory[]
+  faq: FaqItem
+  mode: "create" | "edit"
+  onCancel: () => void
+  onSave: (faq: FaqItem) => void
+}) {
+  const [draft, setDraft] = useState(faq)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
+      <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="border-b border-slate-100 p-6">
+          <h2 className="text-lg font-bold text-slate-950">
+            {mode === "create" ? "Add FAQ" : "Edit FAQ"}
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Manage a structured question and answer for the selected help center language.
+          </p>
+        </div>
+        <div className="grid gap-5 p-6 md:grid-cols-2">
+          <ContentSelect
+            label="Language"
+            options={["English", "Korean"]}
+            value={draft.language}
+            onChange={(value) =>
+              setDraft((current) => ({
+                ...current,
+                language: value as FaqItem["language"],
+              }))
+            }
+          />
+          <ContentSelect
+            label="Category"
+            options={categories.map((category) => category.name)}
+            value={draft.category}
+            onChange={(value) => setDraft((current) => ({ ...current, category: value }))}
+          />
+          <ContentInput
+            label="Sort Order"
+            type="number"
+            value={String(draft.sortOrder)}
+            onChange={(value) =>
+              setDraft((current) => ({ ...current, sortOrder: Number(value) || 1 }))
+            }
+          />
+          <ContentSelect
+            label="Visibility"
+            options={["Draft", "Published", "Hidden"]}
+            value={draft.status}
+            onChange={(value) =>
+              setDraft((current) => ({
+                ...current,
+                status: value as FaqItem["status"],
+              }))
+            }
+          />
+          <div className="md:col-span-2">
+            <ContentInput
+              label="Question"
+              value={draft.question}
+              onChange={(value) =>
+                setDraft((current) => ({ ...current, question: value }))
+              }
+            />
+          </div>
+          <div className="md:col-span-2">
+            <ContentTextArea
+              label="Answer"
+              value={draft.answer}
+              onChange={(value) =>
+                setDraft((current) => ({ ...current, answer: value }))
+              }
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 p-6">
+          <AdminButton onClick={onCancel}>Cancel</AdminButton>
+          <AdminButton
+            disabled={!draft.question.trim() || !draft.answer.trim()}
+            onClick={() => onSave(draft)}
+            variant="primary"
+          >
+            Save
+          </AdminButton>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -2182,6 +3162,10 @@ function createNavigationId(prefix: string) {
 
 function normalizeBlogCategoryOrder(items: BlogCategory[]) {
   return items.map((item, index) => ({ ...item, order: index + 1 }))
+}
+
+function normalizeFaqOrder(items: FaqItem[]) {
+  return items.map((item, index) => ({ ...item, sortOrder: index + 1 }))
 }
 
 function createBlogId(prefix: string) {
