@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { type ChangeEvent, useMemo, useState } from "react"
 import {
   ChevronDown,
   ChevronRight,
@@ -57,9 +57,13 @@ type BlogCategory = {
 type BlogImportForm = {
   category: string
   thumbnail: string
+  thumbnailFileName: string
+  thumbnailMode: ThumbnailInputMode
   title: string
   url: string
 }
+
+type ThumbnailInputMode = "file" | "url"
 
 type MediaAsset = {
   name: string
@@ -638,6 +642,8 @@ function BlogFoundation({
   const [importForm, setImportForm] = useState<BlogImportForm>({
     category: blogCategories[0].name,
     thumbnail: "",
+    thumbnailFileName: "",
+    thumbnailMode: "url",
     title: "",
     url: "",
   })
@@ -667,6 +673,8 @@ function BlogFoundation({
     setImportForm({
       category: categories[0]?.name ?? "AI Content",
       thumbnail: "",
+      thumbnailFileName: "",
+      thumbnailMode: "url",
       title: "",
       url: "",
     })
@@ -940,8 +948,17 @@ function PostTable({
                 onClick={() => onOpenPost(post.id)}
               >
                 <td className="px-6 py-5">
-                  <div className="flex size-14 items-center justify-center rounded-xl bg-slate-100 ring-1 ring-slate-200">
-                    <ImageIcon className="size-5 text-slate-400" />
+                  <div
+                    className="flex size-14 items-center justify-center rounded-xl bg-slate-100 bg-cover bg-center ring-1 ring-slate-200"
+                    style={
+                      post.thumbnail
+                        ? { backgroundImage: `url(${post.thumbnail})` }
+                        : undefined
+                    }
+                  >
+                    {post.thumbnail ? null : (
+                      <ImageIcon className="size-5 text-slate-400" />
+                    )}
                   </div>
                 </td>
                 <td className="px-6 py-5">
@@ -1011,10 +1028,15 @@ function ImportUrlDialog({
             value={form.title}
             onChange={(value) => onChange({ title: value })}
           />
-          <ContentInput
-            label="Thumbnail"
+          <ThumbnailSourceSelector
+            fileName={form.thumbnailFileName}
+            mode={form.thumbnailMode}
             value={form.thumbnail}
             onChange={(value) => onChange({ thumbnail: value })}
+            onFileNameChange={(thumbnailFileName) => onChange({ thumbnailFileName })}
+            onModeChange={(thumbnailMode) =>
+              onChange({ thumbnail: "", thumbnailFileName: "", thumbnailMode })
+            }
           />
           <ContentSelect
             label="Category"
@@ -1036,6 +1058,124 @@ function ImportUrlDialog({
   )
 }
 
+function ThumbnailSourceSelector({
+  fileName,
+  mode,
+  onChange,
+  onFileNameChange,
+  onModeChange,
+  value,
+}: {
+  fileName?: string
+  mode: ThumbnailInputMode
+  onChange: (value: string) => void
+  onFileNameChange?: (value: string) => void
+  onModeChange: (mode: ThumbnailInputMode) => void
+  value: string
+}) {
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+
+    if (!file) {
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        onChange(reader.result)
+        onFileNameChange?.(file.name)
+      }
+    }
+    reader.readAsDataURL(file)
+    event.currentTarget.value = ""
+  }
+
+  return (
+    <div className="md:col-span-2">
+      <fieldset>
+        <legend className="text-xs font-bold uppercase tracking-wide text-slate-500">
+          Thumbnail
+        </legend>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          {[
+            { label: "Image URL", value: "url" as const },
+            { label: "File Upload", value: "file" as const },
+          ].map((option) => (
+            <label
+              className={cn(
+                "flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm font-bold transition",
+                mode === option.value
+                  ? "border-violet-300 bg-violet-50 text-violet-700 ring-4 ring-violet-500/10"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+              )}
+              key={option.value}
+            >
+              <input
+                checked={mode === option.value}
+                className="size-4 accent-violet-600"
+                onChange={() => onModeChange(option.value)}
+                type="radio"
+              />
+              {option.label}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-[1fr_180px]">
+        <div>
+          {mode === "url" ? (
+            <ContentInput
+              label="Thumbnail URL"
+              onChange={onChange}
+              value={value}
+            />
+          ) : (
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                Upload Thumbnail
+              </span>
+              <label className="mt-2 flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center transition hover:border-violet-300 hover:bg-violet-50/50">
+                <Upload className="size-5 text-violet-500" />
+                <span className="mt-2 text-sm font-bold text-slate-800">
+                  Choose image file
+                </span>
+                <span className="mt-1 text-xs font-semibold text-slate-500">
+                  PNG, JPG, WEBP supported for mock upload
+                </span>
+                <input
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={handleFileChange}
+                  type="file"
+                />
+              </label>
+              {fileName ? (
+                <p className="mt-2 text-xs font-semibold text-slate-500">
+                  Selected: {fileName}
+                </p>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            Preview
+          </span>
+          <div
+            className="mt-2 flex h-28 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 bg-cover bg-center"
+            style={value ? { backgroundImage: `url(${value})` } : undefined}
+          >
+            {value ? null : <ImageIcon className="size-6 text-slate-400" />}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BlogPostDetailDialog({
   categories,
   onClose,
@@ -1050,6 +1190,8 @@ function BlogPostDetailDialog({
   post: BlogPost
 }) {
   const isImported = post.type === "Imported URL"
+  const [thumbnailMode, setThumbnailMode] = useState<ThumbnailInputMode>("url")
+  const [thumbnailFileName, setThumbnailFileName] = useState("")
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
@@ -1083,11 +1225,22 @@ function BlogPostDetailDialog({
               value={post.category}
               onChange={(value) => onUpdate(post.id, { category: value })}
             />
-            <ContentInput
-              label="Thumbnail"
-              value={post.thumbnail}
-              onChange={(value) => onUpdate(post.id, { thumbnail: value })}
-            />
+            {isImported ? (
+              <ThumbnailSourceSelector
+                fileName={thumbnailFileName}
+                mode={thumbnailMode}
+                onChange={(value) => onUpdate(post.id, { thumbnail: value })}
+                onFileNameChange={setThumbnailFileName}
+                onModeChange={setThumbnailMode}
+                value={post.thumbnail}
+              />
+            ) : (
+              <ContentInput
+                label="Thumbnail"
+                value={post.thumbnail}
+                onChange={(value) => onUpdate(post.id, { thumbnail: value })}
+              />
+            )}
             <ContentInput label="Type" value={post.type} />
             {isImported ? (
               <ContentInput label="Original URL" value={post.originalUrl ?? ""} />
