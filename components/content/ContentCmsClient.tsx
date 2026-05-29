@@ -1,6 +1,5 @@
 "use client"
 
-import type { ReactNode } from "react"
 import { useMemo, useState } from "react"
 import {
   ChevronDown,
@@ -34,10 +33,32 @@ type ContentSection =
 type BlogPost = {
   author: string
   category: string
-  mode: "Manual Write" | "Import From URL"
+  content?: string
+  createdDate: string
+  id: string
+  originalUrl?: string
+  seoDescription?: string
+  seoTitle?: string
   status: "Draft" | "Published" | "Review"
+  tags: string[]
+  thumbnail: string
   title: string
+  type: "Imported URL" | "Manual Post"
   updatedDate: string
+}
+
+type BlogCategory = {
+  id: string
+  name: string
+  order: number
+  status: "Hidden" | "Visible"
+}
+
+type BlogImportForm = {
+  category: string
+  thumbnail: string
+  title: string
+  url: string
 }
 
 type MediaAsset = {
@@ -74,36 +95,57 @@ type NavigationMenuForm = {
   visibility: NavigationVisibility
 }
 
-const blogCategories = [
-  { name: "AI Content", order: 1, status: "Visible" },
-  { name: "Video Editing", order: 2, status: "Visible" },
-  { name: "Product Updates", order: 3, status: "Visible" },
-  { name: "Social Media", order: 4, status: "Hidden" },
+const blogCategories: BlogCategory[] = [
+  { id: "ai-content", name: "AI Content", order: 1, status: "Visible" },
+  { id: "video-editing", name: "Video Editing", order: 2, status: "Visible" },
+  { id: "product-updates", name: "Product Updates", order: 3, status: "Visible" },
+  { id: "social-media", name: "Social Media", order: 4, status: "Hidden" },
 ]
 
 const blogPosts: BlogPost[] = [
   {
     author: "Sarah Mitchell",
     category: "AI Content",
-    mode: "Manual Write",
+    content:
+      "AI video workflows reduce repetitive editing tasks and help marketing teams publish faster.",
+    createdDate: "May 24, 2026",
+    id: "ai-video-workflows",
+    seoDescription: "Learn how AI video workflows reduce editing time for content teams.",
+    seoTitle: "How AI Video Workflows Reduce Editing Time",
     status: "Draft",
+    tags: ["AI", "workflow", "editing"],
+    thumbnail: "https://cdn.yettey.com/blog/ai-video-workflows.jpg",
     title: "How AI Video Workflows Reduce Editing Time",
+    type: "Manual Post",
     updatedDate: "May 28, 2026",
   },
   {
     author: "Growth Team",
     category: "Product Updates",
-    mode: "Import From URL",
+    createdDate: "May 25, 2026",
+    id: "vpick-shortform-workflow",
+    originalUrl: "https://medium.com/example/vpick-shortform-workflow",
     status: "Review",
+    tags: ["VPICK", "shortform"],
+    thumbnail: "https://cdn.yettey.com/blog/vpick-shortform-workflow.jpg",
     title: "VPICK Shortform Workflow Update",
+    type: "Imported URL",
     updatedDate: "May 27, 2026",
   },
   {
     author: "Content Ops",
     category: "Video Editing",
-    mode: "Manual Write",
+    content:
+      "Thumbnail contrast, face visibility, and topic clarity affect click-through performance.",
+    createdDate: "May 14, 2026",
+    id: "thumbnail-patterns",
+    seoDescription: "Thumbnail design patterns that improve click-through for shortform videos.",
+    seoTitle: "Thumbnail Patterns That Improve Click-Through",
     status: "Published",
+    tags: ["thumbnail", "video", "conversion"],
+    thumbnail: "https://cdn.yettey.com/blog/thumbnail-patterns.jpg",
     title: "Thumbnail Patterns That Improve Click-Through",
+    type: "Manual Post",
     updatedDate: "May 20, 2026",
   },
 ]
@@ -321,6 +363,8 @@ const pageCopy: Record<
 
 export default function ContentCmsClient({ section }: { section: ContentSection }) {
   const copy = pageCopy[section]
+  const router = useRouter()
+  const [blogImportOpen, setBlogImportOpen] = useState(false)
 
   return (
     <DashboardLayout>
@@ -329,7 +373,18 @@ export default function ContentCmsClient({ section }: { section: ContentSection 
         title={copy.title}
         description={copy.description}
         actions={
-          section === "landing-pages" || section === "navigation" ? undefined : (
+          section === "blog" ? (
+            <>
+              <AdminButton onClick={() => router.push("/content/blog/create")}>
+                <Plus className="size-4" />
+                New Post
+              </AdminButton>
+              <AdminButton variant="primary" onClick={() => setBlogImportOpen(true)}>
+                <ExternalLink className="size-4" />
+                Import URL
+              </AdminButton>
+            </>
+          ) : section === "landing-pages" || section === "navigation" ? undefined : (
             <AdminButton variant="primary">
               <Plus className="size-4" />
               {copy.action}
@@ -338,11 +393,18 @@ export default function ContentCmsClient({ section }: { section: ContentSection 
         }
       />
 
-      {section === "navigation" ? null : <ContentSummary section={section} />}
+      {section === "blog" || section === "navigation" ? null : (
+        <ContentSummary section={section} />
+      )}
 
       <div className="mt-8">
         {section === "landing-pages" ? <LandingPagesFoundation /> : null}
-        {section === "blog" ? <BlogFoundation /> : null}
+        {section === "blog" ? (
+          <BlogFoundation
+            importOpen={blogImportOpen}
+            onCloseImport={() => setBlogImportOpen(false)}
+          />
+        ) : null}
         {section === "guides-faq" ? <GuidesFaqFoundation /> : null}
         {section === "popups-banners" ? <PopupsBannersFoundation /> : null}
         {section === "seo" ? <SeoFoundation /> : null}
@@ -559,100 +621,274 @@ function LandingPagesFoundation() {
   )
 }
 
-function BlogFoundation() {
-  const [mode, setMode] = useState<"manual" | "import">("manual")
-  const [importUrl, setImportUrl] = useState("")
-  const hasImportDraft = importUrl.trim().length > 0
+function BlogFoundation({
+  importOpen,
+  onCloseImport,
+}: {
+  importOpen: boolean
+  onCloseImport: () => void
+}) {
+  const [posts, setPosts] = useState(blogPosts)
+  const [categories, setCategories] = useState(blogCategories)
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
+  const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null)
+  const [categoryDialog, setCategoryDialog] = useState<BlogCategory | "new" | null>(null)
+  const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null)
+  const [importForm, setImportForm] = useState<BlogImportForm>({
+    category: blogCategories[0].name,
+    thumbnail: "",
+    title: "",
+    url: "",
+  })
+  const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null
+  const deleteCategory = categories.find((category) => category.id === deleteCategoryId)
+
+  const handleImportPost = () => {
+    const title = importForm.title.trim() || "Imported external article"
+    const post: BlogPost = {
+      author: "Content Ops",
+      category: importForm.category,
+      createdDate: "Today",
+      id: createBlogId("imported-post"),
+      originalUrl: importForm.url.trim() || "https://example.com/imported-article",
+      status: "Review",
+      tags: ["imported"],
+      thumbnail:
+        importForm.thumbnail.trim() ||
+        "https://cdn.yettey.com/blog/imported-reference.jpg",
+      title,
+      type: "Imported URL",
+      updatedDate: "Today",
+    }
+
+    setPosts((current) => [post, ...current])
+    setSelectedPostId(post.id)
+    setImportForm({
+      category: categories[0]?.name ?? "AI Content",
+      thumbnail: "",
+      title: "",
+      url: "",
+    })
+    onCloseImport()
+  }
+
+  const handleCategoryDrop = (targetId: string) => {
+    if (!draggedCategoryId || draggedCategoryId === targetId) {
+      setDraggedCategoryId(null)
+      return
+    }
+
+    const draggedIndex = categories.findIndex(
+      (category) => category.id === draggedCategoryId
+    )
+    const targetIndex = categories.findIndex((category) => category.id === targetId)
+
+    if (draggedIndex < 0 || targetIndex < 0) {
+      setDraggedCategoryId(null)
+      return
+    }
+
+    setCategories(normalizeBlogCategoryOrder(reorderArray(categories, draggedIndex, targetIndex)))
+    setDraggedCategoryId(null)
+  }
+
+  const handleSaveCategory = (category: BlogCategory) => {
+    if (categoryDialog === "new") {
+      setCategories((current) =>
+        normalizeBlogCategoryOrder([
+          ...current,
+          {
+            ...category,
+            id: createBlogId("category"),
+            order: current.length + 1,
+          },
+        ])
+      )
+      setCategoryDialog(null)
+      return
+    }
+
+    setCategories((current) =>
+      current.map((item) => (item.id === category.id ? category : item))
+    )
+    setCategoryDialog(null)
+  }
+
+  const handleDeleteCategory = () => {
+    if (!deleteCategoryId) return
+
+    setCategories((current) =>
+      normalizeBlogCategoryOrder(
+        current.filter((category) => category.id !== deleteCategoryId)
+      )
+    )
+    setDeleteCategoryId(null)
+  }
+
+  const handleUpdatePost = (postId: string, patch: Partial<BlogPost>) => {
+    setPosts((current) =>
+      current.map((post) => (post.id === postId ? { ...post, ...patch } : post))
+    )
+  }
+
+  const handleDeletePost = (postId: string) => {
+    setPosts((current) => current.filter((post) => post.id !== postId))
+    setSelectedPostId(null)
+  }
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-slate-950">Post Creation</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Create manually or import a draft from external article URLs.
-            </p>
-          </div>
-          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
-            <ModeButton active={mode === "manual"} onClick={() => setMode("manual")}>
-              Manual Write
-            </ModeButton>
-            <ModeButton active={mode === "import"} onClick={() => setMode("import")}>
-              Import From URL
-            </ModeButton>
-          </div>
-        </div>
-        {mode === "manual" ? (
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <ContentInput label="Post Title" value="New product workflow announcement" />
-            <ContentInput label="Tags" value="product, ai-workflow, update" />
-            <ContentTextArea label="Draft Body" value="Start writing the article draft..." />
-            <ContentInput label="SEO Title" value="AI workflow update for creators" />
-          </div>
-        ) : (
-          <div className="mt-6 grid gap-4 xl:grid-cols-[1fr_0.8fr]">
-            <div>
-              <label className="block">
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  External Article URL
-                </span>
-                <div className="mt-2 flex gap-2">
-                  <input
-                    className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
-                    placeholder="Paste Naver Blog, Tistory, Medium, Brunch, or external URL"
-                    value={importUrl}
-                    onChange={(event) => setImportUrl(event.target.value)}
-                  />
-                  <AdminButton variant="primary">Generate Draft</AdminButton>
-                </div>
-              </label>
-              <p className="mt-3 text-sm text-slate-500">
-                Flow: Import URL - Generate Draft - Edit - Publish.
-              </p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                Generated Draft Preview
-              </p>
-              <h3 className="mt-3 text-base font-bold text-slate-950">
-                {hasImportDraft ? "Imported article draft" : "Waiting for URL"}
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                {hasImportDraft
-                  ? "Title, content, images, and SEO fields will be extracted into an editable draft."
-                  : "Paste a URL to simulate title, content, image extraction, and draft generation."}
-              </p>
-            </div>
-          </div>
-        )}
-      </section>
-
       <div className="grid gap-6 xl:grid-cols-[0.7fr_1.3fr]">
-        <CategoryManager />
-        <PostTable />
+        <CategoryManager
+          categories={categories}
+          draggedCategoryId={draggedCategoryId}
+          onAdd={() => setCategoryDialog("new")}
+          onDelete={(categoryId) => setDeleteCategoryId(categoryId)}
+          onDragStart={setDraggedCategoryId}
+          onDrop={handleCategoryDrop}
+          onEdit={setCategoryDialog}
+          onToggleVisibility={(categoryId) =>
+            setCategories((current) =>
+              current.map((category) =>
+                category.id === categoryId
+                  ? {
+                      ...category,
+                      status: category.status === "Visible" ? "Hidden" : "Visible",
+                    }
+                  : category
+              )
+            )
+          }
+        />
+        <PostTable posts={posts} onOpenPost={setSelectedPostId} />
       </div>
+
+      {importOpen ? (
+        <ImportUrlDialog
+          categories={categories}
+          form={importForm}
+          onCancel={onCloseImport}
+          onChange={(patch) => setImportForm((current) => ({ ...current, ...patch }))}
+          onImport={handleImportPost}
+        />
+      ) : null}
+
+      {selectedPost ? (
+        <BlogPostDetailDialog
+          categories={categories}
+          onClose={() => setSelectedPostId(null)}
+          onDelete={handleDeletePost}
+          onUpdate={handleUpdatePost}
+          post={selectedPost}
+        />
+      ) : null}
+
+      {categoryDialog ? (
+        <CategoryDialog
+          category={
+            categoryDialog === "new"
+              ? {
+                  id: "new",
+                  name: "",
+                  order: categories.length + 1,
+                  status: "Visible",
+                }
+              : categoryDialog
+          }
+          mode={categoryDialog === "new" ? "create" : "edit"}
+          onCancel={() => setCategoryDialog(null)}
+          onSave={handleSaveCategory}
+        />
+      ) : null}
+
+      {deleteCategory ? (
+        <ContentDialog
+          confirmLabel="Delete"
+          message="Are you sure you want to delete this category? Existing mock posts keep their current category label."
+          onCancel={() => setDeleteCategoryId(null)}
+          onConfirm={handleDeleteCategory}
+          title={`Delete ${deleteCategory.name}`}
+          tone="danger"
+        />
+      ) : null}
     </div>
   )
 }
 
-function CategoryManager() {
+function CategoryManager({
+  categories,
+  draggedCategoryId,
+  onAdd,
+  onDelete,
+  onDragStart,
+  onDrop,
+  onEdit,
+  onToggleVisibility,
+}: {
+  categories: BlogCategory[]
+  draggedCategoryId: string | null
+  onAdd: () => void
+  onDelete: (categoryId: string) => void
+  onDragStart: (categoryId: string) => void
+  onDrop: (categoryId: string) => void
+  onEdit: (category: BlogCategory) => void
+  onToggleVisibility: (categoryId: string) => void
+}) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-      <SectionTitle title="Blog Categories" description="Edit names, order, and visibility." />
+      <div className="flex items-start justify-between gap-3">
+        <SectionTitle title="Category Management" description="Add, edit, hide, delete, and reorder categories." />
+        <AdminButton className="h-9 px-3" onClick={onAdd}>
+          <Plus className="size-4" />
+          Add Category
+        </AdminButton>
+      </div>
       <div className="mt-5 space-y-3">
-        {blogCategories.map((category) => (
+        {categories.map((category) => (
           <div
-            key={category.name}
-            className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-4"
+            key={category.id}
+            draggable
+            className={cn(
+              "flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4 transition hover:border-violet-100 hover:bg-violet-50/40",
+              draggedCategoryId === category.id && "opacity-60"
+            )}
+            onDragOver={(event) => event.preventDefault()}
+            onDragStart={() => onDragStart(category.id)}
+            onDrop={() => onDrop(category.id)}
           >
-            <div>
-              <p className="text-sm font-bold text-slate-950">{category.name}</p>
+            <div className="flex min-w-0 items-center gap-3">
+              <GripVertical className="size-4 shrink-0 text-slate-300" />
+              <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-slate-950">{category.name}</p>
               <p className="text-xs font-semibold text-slate-500">
                 Order {category.order}
               </p>
+              </div>
             </div>
-            <StatusPill status={category.status} />
+            <div className="flex shrink-0 items-center gap-2">
+              <StatusPill status={category.status} />
+              <button
+                className="rounded-lg px-2 py-1 text-xs font-bold text-slate-500 transition hover:bg-white hover:text-violet-600"
+                onClick={() => onToggleVisibility(category.id)}
+                type="button"
+              >
+                {category.status === "Visible" ? "Hide" : "Show"}
+              </button>
+              <button
+                className="rounded-lg px-2 py-1 text-xs font-bold text-slate-500 transition hover:bg-white hover:text-violet-600"
+                onClick={() => onEdit(category)}
+                type="button"
+              >
+                Edit
+              </button>
+              <button
+                className="rounded-lg px-2 py-1 text-xs font-bold text-red-500 transition hover:bg-red-50"
+                onClick={() => onDelete(category.id)}
+                type="button"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -660,24 +896,42 @@ function CategoryManager() {
   )
 }
 
-function PostTable() {
+function PostTable({
+  onOpenPost,
+  posts,
+}: {
+  onOpenPost: (postId: string) => void
+  posts: BlogPost[]
+}) {
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-      <SectionHeader description="Draft, publish, and review blog content." title="Blog Posts" />
+      <SectionHeader description="Manage manual articles and imported external references." title="Blog Posts" />
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[800px]">
+        <table className="w-full min-w-[1080px]">
           <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
             <tr>
+              <th className="px-6 py-4">Thumbnail</th>
               <th className="px-6 py-4">Title</th>
               <th className="px-6 py-4">Category</th>
-              <th className="px-6 py-4">Mode</th>
+              <th className="px-6 py-4">Type</th>
               <th className="px-6 py-4">Status</th>
-              <th className="px-6 py-4">Updated</th>
+              <th className="px-6 py-4">Created Date</th>
+              <th className="px-6 py-4">Updated Date</th>
+              <th className="px-6 py-4">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {blogPosts.map((post) => (
-              <tr key={post.title} className="transition hover:bg-slate-50">
+            {posts.map((post) => (
+              <tr
+                key={post.id}
+                className="cursor-pointer transition hover:bg-violet-50/60"
+                onClick={() => onOpenPost(post.id)}
+              >
+                <td className="px-6 py-5">
+                  <div className="flex size-14 items-center justify-center rounded-xl bg-slate-100 ring-1 ring-slate-200">
+                    <ImageIcon className="size-5 text-slate-400" />
+                  </div>
+                </td>
                 <td className="px-6 py-5">
                   <p className="text-sm font-bold text-slate-950">{post.title}</p>
                   <p className="mt-1 text-xs font-semibold text-slate-500">
@@ -685,17 +939,281 @@ function PostTable() {
                   </p>
                 </td>
                 <td className="px-6 py-5 text-sm text-slate-600">{post.category}</td>
-                <td className="px-6 py-5 text-sm text-slate-600">{post.mode}</td>
+                <td className="px-6 py-5 text-sm text-slate-600">{post.type}</td>
                 <td className="px-6 py-5">
                   <StatusPill status={post.status} />
                 </td>
+                <td className="px-6 py-5 text-sm text-slate-600">{post.createdDate}</td>
                 <td className="px-6 py-5 text-sm text-slate-600">{post.updatedDate}</td>
+                <td className="px-6 py-5">
+                  <button
+                    className="text-sm font-bold text-violet-600 transition hover:text-violet-700"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onOpenPost(post.id)
+                    }}
+                    type="button"
+                  >
+                    Open
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
     </section>
+  )
+}
+
+function ImportUrlDialog({
+  categories,
+  form,
+  onCancel,
+  onChange,
+  onImport,
+}: {
+  categories: BlogCategory[]
+  form: BlogImportForm
+  onCancel: () => void
+  onChange: (patch: Partial<BlogImportForm>) => void
+  onImport: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
+      <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="border-b border-slate-100 p-6">
+          <h2 className="text-lg font-bold text-slate-950">Import URL</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Store an external article as a managed reference. Imported URL posts do not expose article body editing.
+          </p>
+        </div>
+        <div className="grid gap-5 p-6 md:grid-cols-2">
+          <ContentInput
+            label="URL"
+            value={form.url}
+            onChange={(value) => onChange({ url: value })}
+          />
+          <ContentInput
+            label="Custom Title"
+            value={form.title}
+            onChange={(value) => onChange({ title: value })}
+          />
+          <ContentInput
+            label="Thumbnail"
+            value={form.thumbnail}
+            onChange={(value) => onChange({ thumbnail: value })}
+          />
+          <ContentSelect
+            label="Category"
+            options={categories.map((category) => category.name)}
+            value={form.category}
+            onChange={(value) => onChange({ category: value })}
+          />
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 p-6">
+          <AdminButton onClick={onCancel} variant="secondary">
+            Cancel
+          </AdminButton>
+          <AdminButton disabled={!form.url.trim()} onClick={onImport} variant="primary">
+            Import
+          </AdminButton>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BlogPostDetailDialog({
+  categories,
+  onClose,
+  onDelete,
+  onUpdate,
+  post,
+}: {
+  categories: BlogCategory[]
+  onClose: () => void
+  onDelete: (postId: string) => void
+  onUpdate: (postId: string, patch: Partial<BlogPost>) => void
+  post: BlogPost
+}) {
+  const isImported = post.type === "Imported URL"
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
+      <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex flex-col gap-4 border-b border-slate-100 p-6 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-bold text-slate-950">
+                {isImported ? "Imported URL Detail" : "Manual Post Detail"}
+              </h2>
+              <StatusPill status={post.status} />
+            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              {isImported
+                ? "Manage external article metadata only. Article body editing is disabled for imported URLs."
+                : "Edit, save draft, publish, or delete a manually written article."}
+            </p>
+          </div>
+          <AdminButton onClick={onClose}>Close</AdminButton>
+        </div>
+        <div className="max-h-[calc(90vh-104px)] overflow-y-auto p-6">
+          <div className="grid gap-5 md:grid-cols-2">
+            <ContentInput
+              label="Title"
+              value={post.title}
+              onChange={(value) => onUpdate(post.id, { title: value })}
+            />
+            <ContentSelect
+              label="Category"
+              options={categories.map((category) => category.name)}
+              value={post.category}
+              onChange={(value) => onUpdate(post.id, { category: value })}
+            />
+            <ContentInput
+              label="Thumbnail"
+              value={post.thumbnail}
+              onChange={(value) => onUpdate(post.id, { thumbnail: value })}
+            />
+            <ContentInput label="Type" value={post.type} />
+            {isImported ? (
+              <ContentInput label="Original URL" value={post.originalUrl ?? ""} />
+            ) : (
+              <>
+                <ContentInput
+                  label="Tags"
+                  value={post.tags.join(", ")}
+                  onChange={(value) =>
+                    onUpdate(post.id, {
+                      tags: value
+                        .split(",")
+                        .map((tag) => tag.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                />
+                <ContentInput
+                  label="SEO Title"
+                  value={post.seoTitle ?? ""}
+                  onChange={(value) => onUpdate(post.id, { seoTitle: value })}
+                />
+                <ContentTextArea
+                  label="Content"
+                  value={post.content ?? ""}
+                  onChange={(value) => onUpdate(post.id, { content: value })}
+                />
+                <ContentTextArea
+                  label="SEO Description"
+                  value={post.seoDescription ?? ""}
+                  onChange={(value) => onUpdate(post.id, { seoDescription: value })}
+                />
+              </>
+            )}
+          </div>
+          <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-5">
+            {isImported ? (
+              <AdminButton
+                disabled={!post.originalUrl}
+                onClick={() =>
+                  post.originalUrl &&
+                  window.open(post.originalUrl, "_blank", "noopener,noreferrer")
+                }
+              >
+                <ExternalLink className="size-4" />
+                Open Original Post
+              </AdminButton>
+            ) : (
+              <>
+                <AdminButton
+                  onClick={() => onUpdate(post.id, { status: "Draft" })}
+                >
+                  Save Draft
+                </AdminButton>
+                <AdminButton
+                  onClick={() => onUpdate(post.id, { status: "Published" })}
+                  variant="primary"
+                >
+                  Publish
+                </AdminButton>
+              </>
+            )}
+            <AdminButton
+              className="border-red-200 text-red-600 hover:border-red-300 hover:bg-red-50"
+              onClick={() => onDelete(post.id)}
+            >
+              <Trash2 className="size-4" />
+              Delete
+            </AdminButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CategoryDialog({
+  category,
+  mode,
+  onCancel,
+  onSave,
+}: {
+  category: BlogCategory
+  mode: "create" | "edit"
+  onCancel: () => void
+  onSave: (category: BlogCategory) => void
+}) {
+  const [draft, setDraft] = useState(category)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="border-b border-slate-100 p-6">
+          <h2 className="text-lg font-bold text-slate-950">
+            {mode === "create" ? "Add Category" : "Edit Category"}
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Manage category name, order, and visibility for blog operations.
+          </p>
+        </div>
+        <div className="grid gap-5 p-6">
+          <ContentInput
+            label="Category Name"
+            value={draft.name}
+            onChange={(value) => setDraft((current) => ({ ...current, name: value }))}
+          />
+          <ContentInput
+            label="Sort Order"
+            type="number"
+            value={String(draft.order)}
+            onChange={(value) =>
+              setDraft((current) => ({ ...current, order: Number(value) || 1 }))
+            }
+          />
+          <ContentSelect
+            label="Visibility"
+            options={["Visible", "Hidden"]}
+            value={draft.status}
+            onChange={(value) =>
+              setDraft((current) => ({
+                ...current,
+                status: value as BlogCategory["status"],
+              }))
+            }
+          />
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 p-6">
+          <AdminButton onClick={onCancel}>Cancel</AdminButton>
+          <AdminButton
+            disabled={!draft.name.trim()}
+            onClick={() => onSave(draft)}
+            variant="primary"
+          >
+            Save
+          </AdminButton>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -1497,6 +2015,14 @@ function createNavigationId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 }
 
+function normalizeBlogCategoryOrder(items: BlogCategory[]) {
+  return items.map((item, index) => ({ ...item, order: index + 1 }))
+}
+
+function createBlogId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+}
+
 function FoundationTable({
   description,
   headers,
@@ -1561,31 +2087,6 @@ function SectionTitle({ description, title }: { description: string; title: stri
       <h2 className="text-lg font-bold text-slate-950">{title}</h2>
       <p className="mt-1 text-sm text-slate-500">{description}</p>
     </div>
-  )
-}
-
-function ModeButton({
-  active,
-  children,
-  onClick,
-}: {
-  active: boolean
-  children: ReactNode
-  onClick: () => void
-}) {
-  return (
-    <button
-      className={cn(
-        "h-9 rounded-lg px-3 text-sm font-bold transition",
-        active
-          ? "bg-white text-violet-600 shadow-sm ring-1 ring-slate-200"
-          : "text-slate-500 hover:text-slate-950"
-      )}
-      onClick={onClick}
-      type="button"
-    >
-      {children}
-    </button>
   )
 }
 
