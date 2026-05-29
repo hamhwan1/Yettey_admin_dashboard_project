@@ -42,16 +42,27 @@ type BlogDraft = {
 
 type MediaDialogMode = "image-url" | "video-url" | "youtube" | null
 
+type BlogCreateClientProps = {
+  initialDraft?: Partial<BlogDraft>
+  mode?: "create" | "edit"
+  postId?: string
+}
+
 const starterContent = `
   <h2>Start writing your article</h2>
   <p>Use the toolbar to format text, add lists, insert media, and structure a complete blog post.</p>
   <blockquote>Tip: drag an image into the editor or use the image tools in the toolbar.</blockquote>
 `
 
-export default function BlogCreateClient() {
+export default function BlogCreateClient({
+  initialDraft,
+  mode = "create",
+  postId,
+}: BlogCreateClientProps = {}) {
   const router = useRouter()
   const editorRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const isEditing = mode === "edit"
   const [draft, setDraft] = useState<BlogDraft>({
     category: categoryOptions[0],
     content: starterContent,
@@ -60,6 +71,7 @@ export default function BlogCreateClient() {
     tags: "",
     thumbnail: "",
     title: "",
+    ...initialDraft,
   })
   const [feedback, setFeedback] = useState<"deleted" | "draft" | "published" | null>(null)
   const [mediaDialog, setMediaDialog] = useState<MediaDialogMode>(null)
@@ -188,8 +200,12 @@ export default function BlogCreateClient() {
           { label: "Blog" },
           { label: "Create" },
         ]}
-        title="Create Manual Post"
-        description="Write and format a first-party blog article with rich text, images, embeds, SEO metadata, and publishing controls."
+        title={isEditing ? "Edit Manual Post" : "Create Manual Post"}
+        description={
+          isEditing
+            ? "Update an existing first-party blog article with the full rich text editor, media tools, SEO metadata, and publishing controls."
+            : "Write and format a first-party blog article with rich text, images, embeds, SEO metadata, and publishing controls."
+        }
         actions={
           <AdminButton onClick={() => router.push("/content/blog")}>
             <ArrowLeft className="size-4" />
@@ -197,6 +213,17 @@ export default function BlogCreateClient() {
           </AdminButton>
         }
       />
+
+      {isEditing ? (
+        <div className="mb-6 rounded-2xl border border-violet-100 bg-violet-50 px-5 py-4">
+          <p className="text-sm font-bold text-violet-700">
+            Editing existing post
+          </p>
+          <p className="mt-1 text-sm text-violet-600">
+            Post ID: {postId ?? "mock-post"} · Changes are saved in local mock state only.
+          </p>
+        </div>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
@@ -391,9 +418,13 @@ export default function BlogCreateClient() {
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               {feedback === "draft"
-                ? "This mock post has been saved as a draft."
+                ? isEditing
+                  ? "This mock post update has been saved as a draft."
+                  : "This mock post has been saved as a draft."
                 : feedback === "published"
-                  ? "This mock post has been published."
+                  ? isEditing
+                    ? "This mock post update has been published."
+                    : "This mock post has been published."
                   : "This mock post has been deleted."}
             </p>
             <div className="mt-6 flex justify-end gap-2">

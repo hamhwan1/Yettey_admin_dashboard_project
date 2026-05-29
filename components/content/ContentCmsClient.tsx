@@ -628,6 +628,7 @@ function BlogFoundation({
   importOpen: boolean
   onCloseImport: () => void
 }) {
+  const router = useRouter()
   const [posts, setPosts] = useState(blogPosts)
   const [categories, setCategories] = useState(blogCategories)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
@@ -736,6 +737,17 @@ function BlogFoundation({
     setSelectedPostId(null)
   }
 
+  const handleOpenPost = (postId: string) => {
+    const post = posts.find((item) => item.id === postId)
+
+    if (post?.type === "Manual Post") {
+      router.push(`/content/blog/${post.id}`)
+      return
+    }
+
+    setSelectedPostId(postId)
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid gap-6 xl:grid-cols-[0.7fr_1.3fr]">
@@ -760,7 +772,7 @@ function BlogFoundation({
             )
           }
         />
-        <PostTable posts={posts} onOpenPost={setSelectedPostId} />
+        <PostTable posts={posts} onOpenPost={handleOpenPost} />
       </div>
 
       {importOpen ? (
@@ -954,7 +966,7 @@ function PostTable({
                     }}
                     type="button"
                   >
-                    Open
+                    {post.type === "Manual Post" ? "Edit" : "Open"}
                   </button>
                 </td>
               </tr>
