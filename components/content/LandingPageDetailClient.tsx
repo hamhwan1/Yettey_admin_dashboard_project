@@ -1,9 +1,11 @@
 "use client"
 
 import type {
+  Dispatch,
   InputHTMLAttributes,
   ReactNode,
   SelectHTMLAttributes,
+  SetStateAction,
   TextareaHTMLAttributes,
 } from "react"
 import { useMemo, useState } from "react"
@@ -16,6 +18,7 @@ import {
   getLandingPage,
   landingPages,
   seoLanguages,
+  type LandingSeoSettings,
   type SeoLanguage,
 } from "@/components/content/landingPageMock"
 import DashboardLayout from "@/components/layout/DashboardLayout"
@@ -27,11 +30,17 @@ export default function LandingPageDetailClient({ pageId }: { pageId: string }) 
   const initialLanguage: SeoLanguage = page.locale === "ko-KR" ? "Korean" : "English"
   const [selectedLanguage, setSelectedLanguage] =
     useState<SeoLanguage>(initialLanguage)
+  const [savedSeo, setSavedSeo] = useState(() => cloneSeoState(page.seo))
+  const [seoDrafts, setSeoDrafts] = useState(() => cloneSeoState(page.seo))
   const [urlDraft, setUrlDraft] = useState(page.url)
   const [pendingUrl, setPendingUrl] = useState("")
   const [showUrlWarning, setShowUrlWarning] = useState(false)
   const [urlWarningAccepted, setUrlWarningAccepted] = useState(false)
-  const seo = page.seo[selectedLanguage]
+  const [saveDialog, setSaveDialog] = useState<
+    "confirm" | "failure" | "success" | null
+  >(null)
+  const seo = seoDrafts[selectedLanguage]
+  const hasSeoChanges = hasSeoStateChanges(savedSeo, seoDrafts)
 
   const handleUrlChange = (value: string) => {
     if (!urlWarningAccepted && value !== page.url) {
@@ -69,7 +78,11 @@ export default function LandingPageDetailClient({ pageId }: { pageId: string }) 
               <ExternalLink className="size-4" />
               Open Live Page
             </AdminButton>
-            <AdminButton variant="primary">
+            <AdminButton
+              disabled={!hasSeoChanges}
+              onClick={() => setSaveDialog("confirm")}
+              variant="primary"
+            >
               <Save className="size-4" />
               Save SEO
             </AdminButton>
@@ -179,19 +192,40 @@ export default function LandingPageDetailClient({ pageId }: { pageId: string }) 
             <div className="p-6">
               <div className="grid gap-4">
                 <CmsInput
-                  key={`${selectedLanguage}-meta-title`}
                   label="Meta Title"
-                  defaultValue={seo.metaTitle}
+                  value={seo.metaTitle}
+                  onChange={(event) =>
+                    updateSeoDraft(
+                      selectedLanguage,
+                      "metaTitle",
+                      event.target.value,
+                      setSeoDrafts
+                    )
+                  }
                 />
                 <CmsTextArea
-                  key={`${selectedLanguage}-meta-description`}
                   label="Meta Description"
-                  defaultValue={seo.metaDescription}
+                  value={seo.metaDescription}
+                  onChange={(event) =>
+                    updateSeoDraft(
+                      selectedLanguage,
+                      "metaDescription",
+                      event.target.value,
+                      setSeoDrafts
+                    )
+                  }
                 />
                 <CmsTextArea
-                  key={`${selectedLanguage}-keywords`}
                   label="Keywords"
-                  defaultValue={seo.keywords}
+                  value={seo.keywords}
+                  onChange={(event) =>
+                    updateSeoDraft(
+                      selectedLanguage,
+                      "keywords",
+                      event.target.value,
+                      setSeoDrafts
+                    )
+                  }
                 />
               </div>
             </div>
@@ -243,6 +277,44 @@ export default function LandingPageDetailClient({ pageId }: { pageId: string }) 
             </div>
           </div>
         </div>
+      ) : null}
+
+      {saveDialog === "confirm" ? (
+        <Dialog
+          message="Are you sure you want to save these SEO changes?"
+          onCancel={() => setSaveDialog(null)}
+          onConfirm={() => {
+            const saveFailed = !seo.metaTitle.trim()
+
+            if (saveFailed) {
+              setSaveDialog("failure")
+              return
+            }
+
+            setSavedSeo(cloneSeoState(seoDrafts))
+            setSaveDialog("success")
+          }}
+          title="Save Changes"
+        />
+      ) : null}
+
+      {saveDialog === "success" ? (
+        <Dialog
+          confirmLabel="OK"
+          message="SEO information has been saved successfully."
+          onConfirm={() => setSaveDialog(null)}
+          title="Saved"
+        />
+      ) : null}
+
+      {saveDialog === "failure" ? (
+        <Dialog
+          confirmLabel="OK"
+          message="Failed to save SEO information. Please try again later."
+          onConfirm={() => setSaveDialog(null)}
+          title="Save Failed"
+          tone="danger"
+        />
       ) : null}
     </DashboardLayout>
   )
@@ -377,5 +449,85 @@ function ProductPill({ product }: { product: string }) {
     >
       {product}
     </span>
+  )
+}
+
+function cloneSeoState(seo: Record<SeoLanguage, LandingSeoSettings>) {
+  return Object.fromEntries(
+    seoLanguages.map((language) => [language, { ...seo[language] }])
+  ) as Record<SeoLanguage, LandingSeoSettings>
+}
+
+function hasSeoStateChanges(
+  savedSeo: Record<SeoLanguage, LandingSeoSettings>,
+  seoDrafts: Record<SeoLanguage, LandingSeoSettings>
+) {
+  return seoLanguages.some((language) => {
+    const saved = savedSeo[language]
+    const draft = seoDrafts[language]
+
+    return (
+      saved.metaTitle !== draft.metaTitle ||
+      saved.metaDescription !== draft.metaDescription ||
+      saved.keywords !== draft.keywords
+    )
+  })
+}
+
+function updateSeoDraft(
+  language: SeoLanguage,
+  field: keyof LandingSeoSettings,
+  value: string,
+  setSeoDrafts: Dispatch<SetStateAction<Record<SeoLanguage, LandingSeoSettings>>>
+) {
+  setSeoDrafts((current) => ({
+    ...current,
+    [language]: {
+      ...current[language],
+      [field]: value,
+    },
+  }))
+}
+
+function Dialog({
+  confirmLabel = "Save",
+  message,
+  onCancel,
+  onConfirm,
+  title,
+  tone = "default",
+}: {
+  confirmLabel?: string
+  message: string
+  onCancel?: () => void
+  onConfirm: () => void
+  title: string
+  tone?: "danger" | "default"
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+        <h2 className="text-lg font-bold text-slate-950">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{message}</p>
+        <div className="mt-6 flex justify-end gap-2">
+          {onCancel ? (
+            <AdminButton variant="secondary" onClick={onCancel}>
+              Cancel
+            </AdminButton>
+          ) : null}
+          <AdminButton
+            className={
+              tone === "danger"
+                ? "bg-red-600 shadow-red-600/20 hover:bg-red-700 hover:shadow-red-600/25"
+                : undefined
+            }
+            onClick={onConfirm}
+            variant="primary"
+          >
+            {confirmLabel}
+          </AdminButton>
+        </div>
+      </div>
+    </div>
   )
 }
