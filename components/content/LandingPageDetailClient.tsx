@@ -7,16 +7,7 @@ import type {
   TextareaHTMLAttributes,
 } from "react"
 import { useMemo, useState } from "react"
-import {
-  ArrowLeft,
-  Eye,
-  Image as ImageIcon,
-  Link as LinkIcon,
-  Plus,
-  Save,
-  Trash2,
-  Upload,
-} from "lucide-react"
+import { AlertTriangle, ArrowLeft, ExternalLink, Save } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import AdminButton from "@/components/admin/AdminButton"
@@ -24,6 +15,8 @@ import PageHeader from "@/components/admin/PageHeader"
 import {
   getLandingPage,
   landingPages,
+  seoLanguages,
+  type SeoLanguage,
 } from "@/components/content/landingPageMock"
 import DashboardLayout from "@/components/layout/DashboardLayout"
 import { cn } from "@/lib/utils"
@@ -31,18 +24,24 @@ import { cn } from "@/lib/utils"
 export default function LandingPageDetailClient({ pageId }: { pageId: string }) {
   const router = useRouter()
   const page = useMemo(() => getLandingPage(pageId) ?? landingPages[0], [pageId])
-  const [selectedBlockName, setSelectedBlockName] = useState(
-    page.contentBlocks[0]?.name ?? ""
-  )
-  const selectedBlock =
-    page.contentBlocks.find((block) => block.name === selectedBlockName) ??
-    page.contentBlocks[0]
-  const [imageDrafts, setImageDrafts] = useState(() =>
-    Object.fromEntries(page.images.map((asset) => [asset.id, asset.url]))
-  )
-  const [uploadedFileNames, setUploadedFileNames] = useState<Record<string, string>>(
-    {}
-  )
+  const initialLanguage: SeoLanguage = page.locale === "ko-KR" ? "Korean" : "English"
+  const [selectedLanguage, setSelectedLanguage] =
+    useState<SeoLanguage>(initialLanguage)
+  const [urlDraft, setUrlDraft] = useState(page.url)
+  const [pendingUrl, setPendingUrl] = useState("")
+  const [showUrlWarning, setShowUrlWarning] = useState(false)
+  const [urlWarningAccepted, setUrlWarningAccepted] = useState(false)
+  const seo = page.seo[selectedLanguage]
+
+  const handleUrlChange = (value: string) => {
+    if (!urlWarningAccepted && value !== page.url) {
+      setPendingUrl(value)
+      setShowUrlWarning(true)
+      return
+    }
+
+    setUrlDraft(value)
+  }
 
   return (
     <DashboardLayout>
@@ -53,7 +52,7 @@ export default function LandingPageDetailClient({ pageId }: { pageId: string }) 
           { label: page.name },
         ]}
         title={page.name}
-        description={`Editing ${page.url}. Manage this page's metadata, SEO, images, and lightweight content.`}
+        description={`Managing page information and localized SEO metadata for ${page.url}.`}
         actions={
           <>
             <AdminButton
@@ -63,13 +62,16 @@ export default function LandingPageDetailClient({ pageId }: { pageId: string }) 
               <ArrowLeft className="size-4" />
               Back to List
             </AdminButton>
-            <AdminButton variant="secondary">
-              <Eye className="size-4" />
-              Preview
+            <AdminButton
+              variant="secondary"
+              onClick={() => window.open(page.liveUrl, "_blank", "noopener,noreferrer")}
+            >
+              <ExternalLink className="size-4" />
+              Open Live Page
             </AdminButton>
             <AdminButton variant="primary">
               <Save className="size-4" />
-              Save Draft
+              Save SEO
             </AdminButton>
           </>
         }
@@ -94,11 +96,15 @@ export default function LandingPageDetailClient({ pageId }: { pageId: string }) 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
           <SectionTitle
             title="Basic Information"
-            description="Page-level CMS fields that identify this landing page entity."
+            description="Page-level fields for routing, ownership, locale, and publish state."
           />
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <CmsInput label="Page Name" defaultValue={page.name} />
-            <CmsInput label="URL" defaultValue={page.url} />
+            <CmsInput
+              label="URL"
+              value={urlDraft}
+              onChange={(event) => handleUrlChange(event.target.value)}
+            />
             <CmsSelect
               label="Product Group"
               defaultValue={page.product}
@@ -114,211 +120,130 @@ export default function LandingPageDetailClient({ pageId }: { pageId: string }) 
               defaultValue={page.status}
               options={["Published", "Draft", "Scheduled"]}
             />
+            <CmsInput label="Last Updated" defaultValue={page.lastUpdated} readOnly />
             <CmsInput label="Updated By" defaultValue={page.updatedBy} readOnly />
-            <CmsTextArea
-              label="Short Description"
-              defaultValue={page.shortDescription}
-            />
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-          <SectionTitle
-            title="SEO Management"
-            description="Highest-priority editable metadata for search result previews and social sharing."
-          />
-          <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            <CmsInput label="Meta Title" defaultValue={page.metaTitle} />
-            <CmsInput label="OG Title" defaultValue={page.ogTitle} />
-            <CmsTextArea label="Meta Description" defaultValue={page.metaDescription} />
-            <CmsTextArea
-              label="OG Description"
-              defaultValue={page.ogDescription}
-            />
-            <CmsInput label="Keywords" defaultValue={page.keywords} />
-            <CmsInput label="OG Image" defaultValue={page.ogImage} />
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <SectionTitle
-              title="Image Management"
-              description="Connected page assets. Upload a replacement or paste an image URL per asset."
-            />
-            <AdminButton variant="secondary">
-              <Plus className="size-4" />
-              Add Image Slot
-            </AdminButton>
-          </div>
-          <div className="mt-6 grid gap-4 xl:grid-cols-2">
-            {page.images.map((asset) => (
-              <div
-                key={asset.id}
-                className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold text-slate-950">{asset.label}</p>
-                      <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-slate-500 ring-1 ring-slate-200">
-                        {asset.type}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs font-medium text-slate-500">
-                      {asset.alt}
-                    </p>
-                  </div>
-                  <ImageIcon className="size-5 shrink-0 text-violet-500" />
-                </div>
-                <div className="mt-4 flex h-32 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white">
-                  <div className="max-w-full px-4 text-center">
-                    <ImageIcon className="mx-auto size-7 text-slate-400" />
-                    <p className="mt-2 truncate text-xs font-semibold text-slate-500">
-                      {uploadedFileNames[asset.id] || imageDrafts[asset.id]}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-3">
-                  <label className="block">
-                    <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                      Upload from computer
-                    </span>
-                    <input
-                      className="mt-2 block w-full rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 file:mr-4 file:h-10 file:border-0 file:bg-slate-100 file:px-4 file:text-sm file:font-bold file:text-slate-700 hover:file:bg-slate-200"
-                      type="file"
-                      accept="image/*"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0]
-                        setUploadedFileNames((current) => ({
-                          ...current,
-                          [asset.id]: file?.name ?? "",
-                        }))
-                      }}
-                    />
-                  </label>
-                  <CmsInput
-                    label="Paste Image URL"
-                    value={imageDrafts[asset.id] ?? ""}
-                    onChange={(event) =>
-                      setImageDrafts((current) => ({
-                        ...current,
-                        [asset.id]: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <AdminButton variant="secondary">
-                    <Upload className="size-4" />
-                    Replace
-                  </AdminButton>
-                  <AdminButton
-                    variant="ghost"
-                    onClick={() =>
-                      setImageDrafts((current) => ({ ...current, [asset.id]: "" }))
-                    }
-                  >
-                    <Trash2 className="size-4" />
-                    Remove
-                  </AdminButton>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+        <section className="rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
           <div className="border-b border-slate-100 p-6">
-            <SectionTitle
-              title="Lightweight Content"
-              description="Edit simple titles, subtitles, CTA text, short descriptions, and page section copy."
-            />
-          </div>
-          <div className="grid lg:grid-cols-[280px_1fr]">
-            <aside className="border-b border-slate-100 bg-slate-50 p-4 lg:border-b-0 lg:border-r">
-              <div className="space-y-2">
-                {page.contentBlocks.map((block) => (
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+              <SectionTitle
+                title="SEO Management"
+                description="Edit localized search metadata for this specific landing page."
+              />
+              <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+                {seoLanguages.map((language) => (
                   <button
-                    key={block.name}
+                    key={language}
                     className={cn(
-                      "flex w-full items-center justify-between rounded-xl px-4 py-3 text-left text-sm font-bold transition",
-                      selectedBlock.name === block.name
+                      "h-9 rounded-lg px-4 text-sm font-bold transition",
+                      selectedLanguage === language
                         ? "bg-violet-600 text-white shadow-sm shadow-violet-600/20"
-                        : "text-slate-600 hover:bg-white hover:text-slate-950 hover:shadow-sm"
+                        : "text-slate-600 hover:bg-white hover:text-slate-950"
                     )}
-                    onClick={() => setSelectedBlockName(block.name)}
+                    onClick={() => setSelectedLanguage(language)}
                     type="button"
                   >
-                    <span>{block.name}</span>
-                    <span
-                      className={cn(
-                        "rounded-full px-2 py-0.5 text-xs",
-                        selectedBlock.name === block.name
-                          ? "bg-white/20 text-white"
-                          : "bg-slate-100 text-slate-500"
-                      )}
-                    >
-                      {block.fields.length}
-                    </span>
+                    {language}
                   </button>
                 ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-0 lg:grid-cols-[280px_1fr]">
+            <aside className="border-b border-slate-100 bg-slate-50 p-5 lg:border-b-0 lg:border-r">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                Current Language
+              </p>
+              <p className="mt-2 text-lg font-bold text-slate-950">
+                {selectedLanguage}
+              </p>
+              <div className="mt-5 space-y-3 text-sm font-semibold text-slate-600">
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Page
+                  </p>
+                  <p className="mt-1 text-slate-950">{page.name}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Live URL
+                  </p>
+                  <p className="mt-1 break-all text-violet-600">{page.liveUrl}</p>
+                </div>
               </div>
             </aside>
 
             <div className="p-6">
-              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-bold text-slate-950">
-                      {selectedBlock.name}
-                    </h2>
-                    <StatusPill status={selectedBlock.status} />
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-slate-500">
-                    {selectedBlock.description}
-                  </p>
-                </div>
-                <AdminButton variant="secondary">
-                  <Plus className="size-4" />
-                  Add Field
-                </AdminButton>
-              </div>
-
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                {selectedBlock.fields.map((field) => (
-                  <CmsTextArea
-                    key={`${selectedBlock.name}-${field.label}`}
-                    label={field.label}
-                    defaultValue={field.value}
-                  />
-                ))}
+              <div className="grid gap-4">
                 <CmsInput
-                  label="Section Anchor"
-                  defaultValue={`#${selectedBlock.name.toLowerCase().replace(/\s+/g, "-")}`}
+                  key={`${selectedLanguage}-meta-title`}
+                  label="Meta Title"
+                  defaultValue={seo.metaTitle}
                 />
-                <CmsInput
-                  label="CTA Link"
-                  defaultValue={
-                    selectedBlock.name === "Pricing" ? "/pricing" : "/signup"
-                  }
+                <CmsTextArea
+                  key={`${selectedLanguage}-meta-description`}
+                  label="Meta Description"
+                  defaultValue={seo.metaDescription}
                 />
-              </div>
-
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
-                  <LinkIcon className="size-4 text-slate-400" />
-                  Changes are saved as mock draft data until API integration.
-                </div>
-                <AdminButton variant="primary">
-                  <Save className="size-4" />
-                  Save Section Draft
-                </AdminButton>
+                <CmsTextArea
+                  key={`${selectedLanguage}-keywords`}
+                  label="Keywords"
+                  defaultValue={seo.keywords}
+                />
               </div>
             </div>
           </div>
         </section>
       </div>
+
+      {showUrlWarning ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="flex items-start gap-4">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-orange-50 text-orange-600">
+                <AlertTriangle className="size-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">
+                  URL change may affect SEO
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Changing this URL may affect SEO rankings, indexed search
+                  results, and existing backlinks. Do you want to continue?
+                </p>
+                <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm font-semibold text-slate-600">
+                  {page.url} -&gt; {pendingUrl || "(empty URL)"}
+                </div>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <AdminButton
+                variant="secondary"
+                onClick={() => {
+                  setPendingUrl("")
+                  setShowUrlWarning(false)
+                }}
+              >
+                Cancel
+              </AdminButton>
+              <AdminButton
+                variant="primary"
+                onClick={() => {
+                  setUrlWarningAccepted(true)
+                  setUrlDraft(pendingUrl)
+                  setPendingUrl("")
+                  setShowUrlWarning(false)
+                }}
+              >
+                Continue
+              </AdminButton>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </DashboardLayout>
   )
 }
@@ -366,7 +291,7 @@ function CmsInput({
         {label}
       </span>
       <input
-        className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
+        className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition read-only:bg-slate-50 read-only:text-slate-500 focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
         {...props}
       />
     </label>
@@ -403,7 +328,7 @@ function CmsTextArea({
   ...props
 }: TextareaHTMLAttributes<HTMLTextAreaElement> & { label: string }) {
   return (
-    <label className="block md:col-span-1">
+    <label className="block">
       <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
         {label}
       </span>
@@ -417,13 +342,11 @@ function CmsTextArea({
 
 function StatusPill({ status }: { status: string }) {
   const tone =
-    status === "Published" || status === "Ready"
+    status === "Published"
       ? "bg-emerald-50 text-emerald-600 ring-emerald-100"
       : status === "Draft" || status === "Scheduled"
         ? "bg-violet-50 text-violet-600 ring-violet-100"
-        : status === "Needs Review"
-          ? "bg-orange-50 text-orange-600 ring-orange-100"
-          : "bg-slate-100 text-slate-600 ring-slate-200"
+        : "bg-slate-100 text-slate-600 ring-slate-200"
 
   return (
     <span

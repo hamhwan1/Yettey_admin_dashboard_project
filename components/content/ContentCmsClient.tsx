@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation"
 import AdminButton from "@/components/admin/AdminButton"
 import PageHeader from "@/components/admin/PageHeader"
 import DashboardLayout from "@/components/layout/DashboardLayout"
-import { landingPages } from "@/components/content/landingPageMock"
+import { getPrimarySeo, landingPages } from "@/components/content/landingPageMock"
 import { cn } from "@/lib/utils"
 
 type ContentSection =
@@ -192,7 +192,7 @@ function ContentSummary({ section }: { section: ContentSection }) {
     if (section === "landing-pages") {
       return [
         { detail: "2 published, 3 draft or scheduled", label: "Pages", value: "5" },
-        { detail: "Page-specific lightweight sections", label: "Content Blocks", value: "16" },
+        { detail: "English and Korean metadata", label: "SEO Locales", value: "2" },
         { detail: "Korean and English", label: "Locales", value: "2" },
       ]
     }
@@ -243,8 +243,9 @@ function LandingPagesFoundation() {
   const [statusFilter, setStatusFilter] = useState("All")
   const [localeFilter, setLocaleFilter] = useState("All")
   const filteredPages = landingPages.filter((page) => {
+    const seo = getPrimarySeo(page)
     const keyword =
-      `${page.name} ${page.url} ${page.product} ${page.metaTitle} ${page.shortDescription}`.toLowerCase()
+      `${page.name} ${page.url} ${page.product} ${seo.metaTitle} ${seo.metaDescription}`.toLowerCase()
     const matchesQuery = keyword.includes(query.toLowerCase())
     const matchesProduct = productFilter === "All" || page.product === productFilter
     const matchesStatus = statusFilter === "All" || page.status === statusFilter
@@ -310,7 +311,7 @@ function LandingPagesFoundation() {
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1440px]">
+        <table className="w-full min-w-[1260px]">
           <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-6 py-4">Page Name</th>
@@ -318,7 +319,6 @@ function LandingPagesFoundation() {
               <th className="px-6 py-4">Product</th>
               <th className="px-6 py-4">Meta Title</th>
               <th className="px-6 py-4">Meta Description</th>
-              <th className="px-6 py-4">Short Description</th>
               <th className="px-6 py-4">Locale</th>
               <th className="px-6 py-4">Status</th>
               <th className="px-6 py-4">Last Updated</th>
@@ -327,7 +327,10 @@ function LandingPagesFoundation() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredPages.map((page) => (
+            {filteredPages.map((page) => {
+              const seo = getPrimarySeo(page)
+
+              return (
               <tr
                 key={page.id}
                 className="cursor-pointer transition hover:bg-violet-50/60"
@@ -343,13 +346,10 @@ function LandingPagesFoundation() {
                   <ProductPill product={page.product} />
                 </td>
                 <td className="max-w-60 px-6 py-5 text-sm text-slate-700">
-                  {page.metaTitle}
+                  {seo.metaTitle}
                 </td>
                 <td className="max-w-72 px-6 py-5 text-sm leading-6 text-slate-600">
-                  {page.metaDescription}
-                </td>
-                <td className="max-w-60 px-6 py-5 text-sm leading-6 text-slate-600">
-                  {page.shortDescription}
+                  {seo.metaDescription}
                 </td>
                 <td className="px-6 py-5 text-sm font-semibold text-slate-700">
                   {page.locale}
@@ -376,7 +376,8 @@ function LandingPagesFoundation() {
                   </button>
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>
