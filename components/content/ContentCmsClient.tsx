@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { useMemo, useState } from "react"
 import {
   ChevronDown,
+  ChevronRight,
   Copy,
   ExternalLink,
   GripVertical,
@@ -299,7 +300,7 @@ const pageCopy: Record<
     title: "Media Library",
   },
   navigation: {
-    action: "Add Menu Item",
+    action: "Manage Navigation",
     description:
       "Manage top navigation labels, dropdown descriptions, visibility, order, and marketing links.",
     title: "Navigation",
@@ -328,7 +329,7 @@ export default function ContentCmsClient({ section }: { section: ContentSection 
         title={copy.title}
         description={copy.description}
         actions={
-          section === "landing-pages" ? undefined : (
+          section === "landing-pages" || section === "navigation" ? undefined : (
             <AdminButton variant="primary">
               <Plus className="size-4" />
               {copy.action}
@@ -337,7 +338,7 @@ export default function ContentCmsClient({ section }: { section: ContentSection 
         }
       />
 
-      <ContentSummary section={section} />
+      {section === "navigation" ? null : <ContentSummary section={section} />}
 
       <div className="mt-8">
         {section === "landing-pages" ? <LandingPagesFoundation /> : null}
@@ -817,6 +818,9 @@ function NavigationFoundation() {
   const [navigationTree, setNavigationTree] = useState(initialNavigationTree)
   const [selectedId, setSelectedId] = useState(initialNavigationTree[0].id)
   const [draggedId, setDraggedId] = useState<string | null>(null)
+  const [expandedGroupIds, setExpandedGroupIds] = useState(() =>
+    initialNavigationTree.map((group) => group.id)
+  )
   const [hasChanges, setHasChanges] = useState(false)
   const [saveDialog, setSaveDialog] = useState<"confirm" | "success" | null>(null)
   const [menuDialog, setMenuDialog] = useState<"sub" | "top" | null>(null)
@@ -921,6 +925,7 @@ function NavigationFoundation() {
 
       markChanged([...navigationTree, item])
       setSelectedId(item.id)
+      setExpandedGroupIds((current) => [...current, item.id])
       setMenuDialog(null)
       return
     }
@@ -939,6 +944,11 @@ function NavigationFoundation() {
 
     markChanged(addNavigationChild(navigationTree, menuForm.parentId, child))
     setSelectedId(child.id)
+    setExpandedGroupIds((current) =>
+      current.includes(menuForm.parentId)
+        ? current
+        : [...current, menuForm.parentId]
+    )
     setMenuDialog(null)
   }
 
@@ -949,6 +959,19 @@ function NavigationFoundation() {
     if (!targetParent || targetParent.id === parentMenu.id) return
 
     markChanged(moveNavigationChild(navigationTree, selectedId, targetParent.id))
+    setExpandedGroupIds((current) =>
+      current.includes(targetParent.id)
+        ? current
+        : [...current, targetParent.id]
+    )
+  }
+
+  const handleToggleExpand = (groupId: string) => {
+    setExpandedGroupIds((current) =>
+      current.includes(groupId)
+        ? current.filter((id) => id !== groupId)
+        : [...current, groupId]
+    )
   }
 
   const handleToggleVisibility = (id: string) => {
@@ -969,6 +992,9 @@ function NavigationFoundation() {
 
     markChanged(nextTree.tree)
     setSelectedId(nextTree.newId)
+    if (navigationTree.some((group) => group.id === id)) {
+      setExpandedGroupIds((current) => [...current, nextTree.newId])
+    }
   }
 
   const handleDeleteMenu = () => {
@@ -982,6 +1008,9 @@ function NavigationFoundation() {
       Boolean(deletedGroup?.children.some((child) => child.id === selectedId))
 
     markChanged(nextTree)
+    setExpandedGroupIds((current) =>
+      current.filter((id) => id !== deleteTargetId)
+    )
 
     if (selectedWasDeleted) {
       setSelectedId(deletedParent?.id ?? nextTree[0]?.id ?? "")
@@ -1020,52 +1049,60 @@ function NavigationFoundation() {
           </div>
         </div>
         <div className="space-y-3 p-4">
-          {navigationTree.map((group) => (
-            <div
-              key={group.id}
-              draggable
-              onDragStart={() => setDraggedId(group.id)}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={() => handleDrop(group.id)}
-            >
-              <TreeRow
-                active={selectedId === group.id}
-                item={group}
-                level={1}
-                onDelete={() => setDeleteTargetId(group.id)}
-                onDuplicate={() => handleDuplicate(group.id)}
-                onClick={() => setSelectedId(group.id)}
-                onToggleVisibility={() => handleToggleVisibility(group.id)}
-              />
-              {group.children.length ? (
-                <div className="ml-7 mt-2 space-y-1 border-l border-slate-200 pl-3">
-                  {group.children.map((child) => (
-                    <div
-                      key={child.id}
-                      draggable
-                      onDragStart={() => setDraggedId(child.id)}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={() => handleDrop(child.id)}
-                    >
-                      <TreeRow
-                        active={selectedId === child.id}
-                        item={child}
-                        level={2}
-                        onDelete={() => setDeleteTargetId(child.id)}
-                        onDuplicate={() => handleDuplicate(child.id)}
-                        onClick={() => setSelectedId(child.id)}
-                        onToggleVisibility={() => handleToggleVisibility(child.id)}
-                      />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="ml-11 mt-2 text-xs font-semibold text-slate-400">
-                  No dropdown items
-                </p>
-              )}
-            </div>
-          ))}
+          {navigationTree.map((group) => {
+            const isExpanded = expandedGroupIds.includes(group.id)
+
+            return (
+              <div
+                key={group.id}
+                draggable
+                onDragStart={() => setDraggedId(group.id)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => handleDrop(group.id)}
+              >
+                <TreeRow
+                  active={selectedId === group.id}
+                  childCount={group.children.length}
+                  expanded={isExpanded}
+                  item={group}
+                  level={1}
+                  onDelete={() => setDeleteTargetId(group.id)}
+                  onDuplicate={() => handleDuplicate(group.id)}
+                  onClick={() => setSelectedId(group.id)}
+                  onToggleExpand={() => handleToggleExpand(group.id)}
+                  onToggleVisibility={() => handleToggleVisibility(group.id)}
+                />
+                {isExpanded && group.children.length ? (
+                  <div className="ml-7 mt-2 space-y-1 border-l border-slate-200 pl-3">
+                    {group.children.map((child) => (
+                      <div
+                        key={child.id}
+                        draggable
+                        onDragStart={() => setDraggedId(child.id)}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={() => handleDrop(child.id)}
+                      >
+                        <TreeRow
+                          active={selectedId === child.id}
+                          item={child}
+                          level={2}
+                          onDelete={() => setDeleteTargetId(child.id)}
+                          onDuplicate={() => handleDuplicate(child.id)}
+                          onClick={() => setSelectedId(child.id)}
+                          onToggleVisibility={() => handleToggleVisibility(child.id)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {isExpanded && !group.children.length ? (
+                  <p className="ml-11 mt-2 text-xs font-semibold text-slate-400">
+                    No dropdown items
+                  </p>
+                ) : null}
+              </div>
+            )
+          })}
           {!navigationTree.length ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
               <p className="text-sm font-bold text-slate-950">
@@ -1554,19 +1591,25 @@ function ModeButton({
 
 function TreeRow({
   active,
+  childCount = 0,
+  expanded,
   item,
   level,
   onDelete,
   onDuplicate,
   onClick,
+  onToggleExpand,
   onToggleVisibility,
 }: {
   active: boolean
+  childCount?: number
+  expanded?: boolean
   item: NavigationChild
   level: 1 | 2
   onDelete: () => void
   onDuplicate: () => void
   onClick: () => void
+  onToggleExpand?: () => void
   onToggleVisibility: () => void
 }) {
   return (
@@ -1589,7 +1632,21 @@ function TreeRow({
     >
       <GripVertical className="size-4 shrink-0 text-slate-300 transition group-hover:text-slate-500" />
       {level === 1 ? (
-        <ChevronDown className="size-4 shrink-0 text-slate-400" />
+        <button
+          aria-label={expanded ? `Collapse ${item.name}` : `Expand ${item.name}`}
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white hover:text-slate-950 hover:shadow-sm"
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggleExpand?.()
+          }}
+          type="button"
+        >
+          {expanded ? (
+            <ChevronDown className="size-4" />
+          ) : (
+            <ChevronRight className="size-4" />
+          )}
+        </button>
       ) : (
         <span className="size-4 shrink-0 rounded-full bg-slate-300" />
       )}
@@ -1603,7 +1660,7 @@ function TreeRow({
         </p>
       </div>
       <span className="shrink-0 rounded-full bg-white px-2 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">
-        {item.sortOrder}
+        {level === 1 && childCount ? childCount : item.sortOrder}
       </span>
       <div className="flex shrink-0 items-center gap-1 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
         <button
