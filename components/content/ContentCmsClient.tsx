@@ -74,6 +74,35 @@ type FaqItem = {
   updatedDate: string
 }
 
+type PopupBannerType = "Announcement" | "Banner" | "Maintenance Notice" | "Popup"
+
+type PopupBannerStatus = "Active" | "Archived" | "Draft" | "Expired" | "Scheduled"
+
+type PopupBannerItem = {
+  audiences: string[]
+  buttonText: string
+  buttonUrl: string
+  description: string
+  dismissBehavior: string
+  endDate: string
+  id: string
+  image: string
+  location: string
+  name: string
+  plans: string[]
+  startDate: string
+  status: PopupBannerStatus
+  title: string
+  type: PopupBannerType
+  updatedBy: string
+  updatedDate: string
+}
+
+type PopupBannerForm = PopupBannerItem & {
+  imageFileName: string
+  imageMode: ThumbnailInputMode
+}
+
 type BlogCategory = {
   id: string
   name: string
@@ -287,6 +316,85 @@ const faqItems: FaqItem[] = [
     sortOrder: 2,
     status: "Hidden",
     updatedBy: "Billing Ops",
+    updatedDate: "May 25, 2026",
+  },
+]
+
+const popupBannerItems: PopupBannerItem[] = [
+  {
+    audiences: ["All Users"],
+    buttonText: "View campaign",
+    buttonUrl: "/campaign/summer-event",
+    description: "Promote the summer launch campaign across homepage visitors.",
+    dismissBehavior: "Don't Show Again For 7 Days",
+    endDate: "2026-06-14",
+    id: "summer-launch-banner",
+    image: "https://cdn.yettey.com/campaigns/summer-launch-banner.jpg",
+    location: "Homepage",
+    name: "Summer launch banner",
+    plans: [],
+    startDate: "2026-06-01",
+    status: "Active",
+    title: "Summer creator campaign is live",
+    type: "Banner",
+    updatedBy: "Growth Team",
+    updatedDate: "May 28, 2026",
+  },
+  {
+    audiences: ["Logged-in Users", "Paid Users"],
+    buttonText: "Open dashboard",
+    buttonUrl: "/dashboard",
+    description: "Inform active users about the short maintenance window.",
+    dismissBehavior: "Close Only",
+    endDate: "2026-05-31",
+    id: "maintenance-dashboard-notice",
+    image: "https://cdn.yettey.com/notices/maintenance-window.png",
+    location: "Dashboard",
+    name: "Dashboard maintenance notice",
+    plans: ["Starter", "Growth", "Professional"],
+    startDate: "2026-05-30",
+    status: "Scheduled",
+    title: "Scheduled maintenance on May 31",
+    type: "Maintenance Notice",
+    updatedBy: "Operations",
+    updatedDate: "May 27, 2026",
+  },
+  {
+    audiences: ["Guests Only", "Free Users"],
+    buttonText: "Try VPICK",
+    buttonUrl: "/vpick",
+    description: "Introduce the VPICK shortform workflow to high-intent pricing page visitors.",
+    dismissBehavior: "Don't Show Again Today",
+    endDate: "2026-06-20",
+    id: "vpick-promo-popup",
+    image: "https://cdn.yettey.com/campaigns/vpick-promo-popup.jpg",
+    location: "Pricing",
+    name: "VPICK promo popup",
+    plans: [],
+    startDate: "2026-06-03",
+    status: "Draft",
+    title: "Create short clips from long videos",
+    type: "Popup",
+    updatedBy: "Sarah Mitchell",
+    updatedDate: "May 26, 2026",
+  },
+  {
+    audiences: ["All Users"],
+    buttonText: "Read update",
+    buttonUrl: "/blog/product-workflow-update",
+    description: "Announce the new media library workflow update in content pages.",
+    dismissBehavior: "Don't Show Again Until Campaign Ends",
+    endDate: "2026-05-25",
+    id: "media-library-announcement",
+    image: "https://cdn.yettey.com/announcements/media-library-update.jpg",
+    location: "Blog",
+    name: "Media library announcement",
+    plans: [],
+    startDate: "2026-05-12",
+    status: "Expired",
+    title: "New media library workflow",
+    type: "Announcement",
+    updatedBy: "Content Ops",
     updatedDate: "May 25, 2026",
   },
 ]
@@ -525,7 +633,7 @@ export default function ContentCmsClient({ section }: { section: ContentSection 
                 Import URL
               </AdminButton>
             </>
-          ) : section === "landing-pages" || section === "navigation" ? undefined : (
+          ) : section === "landing-pages" || section === "navigation" || section === "popups-banners" ? undefined : (
             section === "guides-faq" ? undefined : <AdminButton variant="primary">
               <Plus className="size-4" />
               {copy.action}
@@ -534,7 +642,7 @@ export default function ContentCmsClient({ section }: { section: ContentSection 
         }
       />
 
-      {section === "blog" || section === "navigation" || section === "guides-faq" ? null : (
+      {section === "blog" || section === "navigation" || section === "guides-faq" || section === "popups-banners" ? null : (
         <ContentSummary section={section} />
       )}
 
@@ -2380,20 +2488,548 @@ function FaqDialog({
 }
 
 function PopupsBannersFoundation() {
-  const rows = [
-    ["Summer launch banner", "Homepage", "Jun 01 - Jun 14", "High", "Active"],
-    ["Maintenance notice", "App dashboard", "May 30 - May 31", "High", "Inactive"],
-    ["VPICK promo popup", "Pricing", "Jun 03 - Jun 20", "Medium", "Scheduled"],
-  ]
+  const [items, setItems] = useState(popupBannerItems)
+  const [query, setQuery] = useState("")
+  const [typeFilter, setTypeFilter] = useState("All")
+  const [statusFilter, setStatusFilter] = useState("All")
+  const [dialogMode, setDialogMode] = useState<"create" | "edit" | null>(null)
+  const [draft, setDraft] = useState<PopupBannerForm | null>(null)
+  const filteredItems = items.filter((item) => {
+    const matchesQuery =
+      item.name.toLowerCase().includes(query.toLowerCase()) ||
+      item.title.toLowerCase().includes(query.toLowerCase()) ||
+      item.location.toLowerCase().includes(query.toLowerCase())
+    const matchesType = typeFilter === "All" || item.type === typeFilter
+    const matchesStatus = statusFilter === "All" || item.status === statusFilter
+
+    return matchesQuery && matchesType && matchesStatus
+  })
+
+  const openCreateDialog = () => {
+    setDraft(createPopupBannerForm())
+    setDialogMode("create")
+  }
+
+  const openEditDialog = (item: PopupBannerItem) => {
+    setDraft({
+      ...item,
+      imageFileName: "",
+      imageMode: item.image ? "url" : "file",
+    })
+    setDialogMode("edit")
+  }
+
+  const closeDialog = () => {
+    setDialogMode(null)
+    setDraft(null)
+  }
+
+  const saveDraft = () => {
+    if (!draft) return
+
+    const item: PopupBannerItem = {
+      audiences: draft.audiences,
+      buttonText: draft.buttonText,
+      buttonUrl: draft.buttonUrl,
+      description: draft.description,
+      dismissBehavior: draft.dismissBehavior,
+      endDate: draft.endDate,
+      id: draft.id,
+      image: draft.image,
+      location: draft.location,
+      name: draft.name,
+      plans: draft.plans,
+      startDate: draft.startDate,
+      status: draft.status,
+      title: draft.title,
+      type: draft.type,
+      updatedBy: "Sarah Mitchell",
+      updatedDate: "Today",
+    }
+
+    if (dialogMode === "create") {
+      setItems((current) => [item, ...current])
+    } else {
+      setItems((current) => current.map((currentItem) => (currentItem.id === item.id ? item : currentItem)))
+    }
+
+    closeDialog()
+  }
+
+  const updateStatus = (itemId: string, status: PopupBannerStatus) => {
+    setItems((current) =>
+      current.map((item) =>
+        item.id === itemId
+          ? { ...item, status, updatedBy: "Sarah Mitchell", updatedDate: "Today" }
+          : item
+      )
+    )
+  }
 
   return (
-    <FoundationTable
-      description="Schedule promotions, maintenance notices, and campaign popups."
-      headers={["Name", "Location", "Date Range", "Priority", "Status"]}
-      rows={rows}
-      title="Popup & Banner Operations"
-    />
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <SectionTitle
+              title="Campaign Display Manager"
+              description="Control what appears, who sees it, where it appears, and when it remains visible."
+            />
+            <div className="mt-4 flex flex-wrap gap-2">
+              {["Popup", "Banner", "Announcement", "Maintenance Notice"].map((type) => (
+                <span
+                  className="rounded-full bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200"
+                  key={type}
+                >
+                  {type}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="block min-w-[240px]">
+              <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                Search
+              </span>
+              <div className="mt-2 flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3">
+                <Search className="size-4 text-slate-400" />
+                <input
+                  className="w-full bg-transparent text-sm font-semibold text-slate-950 outline-none placeholder:text-slate-400"
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search campaigns..."
+                  value={query}
+                />
+              </div>
+            </label>
+            <ContentSelect
+              label="Type"
+              options={["All", "Popup", "Banner", "Announcement", "Maintenance Notice"]}
+              value={typeFilter}
+              onChange={setTypeFilter}
+            />
+            <ContentSelect
+              label="Status"
+              options={["All", "Draft", "Scheduled", "Active", "Expired", "Archived"]}
+              value={statusFilter}
+              onChange={setStatusFilter}
+            />
+            <AdminButton className="h-11" onClick={openCreateDialog} variant="primary">
+              <Plus className="size-4" />
+              New Popup/Banner
+            </AdminButton>
+          </div>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+        <SectionHeader
+          description="Manage campaign visibility, schedule, audience targeting, and edit history without permanent deletion."
+          title="Popups & Banners"
+        />
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1240px]">
+            <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-6 py-4">Name</th>
+                <th className="px-6 py-4">Type</th>
+                <th className="px-6 py-4">Location</th>
+                <th className="px-6 py-4">Target Audience</th>
+                <th className="px-6 py-4">Date Range</th>
+                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4">Updated</th>
+                <th className="px-6 py-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredItems.map((item) => (
+                <tr
+                  className="cursor-pointer transition hover:bg-violet-50/60"
+                  key={item.id}
+                  onClick={() => openEditDialog(item)}
+                >
+                  <td className="px-6 py-5">
+                    <div className="flex items-center gap-3">
+                      <ThumbnailPreview src={item.image} />
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-950">{item.name}</p>
+                        <p className="mt-1 max-w-[260px] truncate text-xs font-semibold text-slate-500">
+                          {item.title}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-5 text-sm font-semibold text-slate-700">{item.type}</td>
+                  <td className="px-6 py-5 text-sm text-slate-600">{item.location}</td>
+                  <td className="px-6 py-5">
+                    <div className="flex max-w-[240px] flex-wrap gap-1.5">
+                      {[...item.audiences, ...item.plans].slice(0, 4).map((target) => (
+                        <span
+                          className="rounded-full bg-slate-50 px-2 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200"
+                          key={target}
+                        >
+                          {target}
+                        </span>
+                      ))}
+                      {item.audiences.length + item.plans.length > 4 ? (
+                        <span className="rounded-full bg-violet-50 px-2 py-1 text-xs font-bold text-violet-600 ring-1 ring-violet-100">
+                          +{item.audiences.length + item.plans.length - 4}
+                        </span>
+                      ) : null}
+                    </div>
+                  </td>
+                  <td className="px-6 py-5 text-sm text-slate-600">
+                    {formatCampaignDate(item.startDate)} - {formatCampaignDate(item.endDate)}
+                  </td>
+                  <td className="px-6 py-5">
+                    <StatusPill status={item.status} />
+                  </td>
+                  <td className="px-6 py-5">
+                    <p className="text-sm text-slate-600">{item.updatedDate}</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-400">{item.updatedBy}</p>
+                  </td>
+                  <td className="px-6 py-5">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        className="text-xs font-bold text-violet-600 hover:text-violet-700"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          openEditDialog(item)
+                        }}
+                        type="button"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="text-xs font-bold text-emerald-600 hover:text-emerald-700"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          updateStatus(item.id, "Active")
+                        }}
+                        type="button"
+                      >
+                        Enable
+                      </button>
+                      <button
+                        className="text-xs font-bold text-slate-500 hover:text-orange-600"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          updateStatus(item.id, "Draft")
+                        }}
+                        type="button"
+                      >
+                        Disable
+                      </button>
+                      <button
+                        className="text-xs font-bold text-slate-500 hover:text-slate-700"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          updateStatus(item.id, "Archived")
+                        }}
+                        type="button"
+                      >
+                        Archive
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="border-t border-slate-100 px-6 py-4 text-sm font-semibold text-slate-500">
+          Showing {filteredItems.length} campaign display records. Archived records remain available for history.
+        </div>
+      </section>
+
+      {draft && dialogMode ? (
+        <PopupBannerDialog
+          draft={draft}
+          mode={dialogMode}
+          onCancel={closeDialog}
+          onChange={(patch) =>
+            setDraft((current) => (current ? { ...current, ...patch } : current))
+          }
+          onSave={saveDraft}
+          onStatusChange={(status) =>
+            setDraft((current) => (current ? { ...current, status } : current))
+          }
+        />
+      ) : null}
+    </div>
   )
+}
+
+function PopupBannerDialog({
+  draft,
+  mode,
+  onCancel,
+  onChange,
+  onSave,
+  onStatusChange,
+}: {
+  draft: PopupBannerForm
+  mode: "create" | "edit"
+  onCancel: () => void
+  onChange: (patch: Partial<PopupBannerForm>) => void
+  onSave: () => void
+  onStatusChange: (status: PopupBannerStatus) => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
+      <div className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex flex-col gap-4 border-b border-slate-100 p-6 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-bold text-slate-950">
+                {mode === "create" ? "Create Popup/Banner" : "Campaign Display Detail"}
+              </h2>
+              <StatusPill status={draft.status} />
+            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              Manage content, targeting, schedule, dismiss behavior, and edit history.
+            </p>
+          </div>
+          <AdminButton onClick={onCancel}>Close</AdminButton>
+        </div>
+
+        <div className="max-h-[calc(92vh-108px)] overflow-y-auto p-6">
+          <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+            <section className="rounded-2xl border border-slate-200 p-5">
+              <SectionTitle
+                title="Content"
+                description="Control the message, CTA, image, and content type shown to users."
+              />
+              <div className="mt-5 grid gap-5 md:grid-cols-2">
+                <ContentInput
+                  label="Name"
+                  value={draft.name}
+                  onChange={(value) => onChange({ name: value })}
+                />
+                <ContentSelect
+                  label="Type"
+                  options={["Popup", "Banner", "Announcement", "Maintenance Notice"]}
+                  value={draft.type}
+                  onChange={(value) => onChange({ type: value as PopupBannerType })}
+                />
+                <ContentInput
+                  label="Title"
+                  value={draft.title}
+                  onChange={(value) => onChange({ title: value })}
+                />
+                <ContentInput
+                  label="Button Text"
+                  value={draft.buttonText}
+                  onChange={(value) => onChange({ buttonText: value })}
+                />
+                <ContentInput
+                  label="Button URL"
+                  value={draft.buttonUrl}
+                  onChange={(value) => onChange({ buttonUrl: value })}
+                />
+                <ContentSelect
+                  label="Status"
+                  options={["Draft", "Scheduled", "Active", "Expired", "Archived"]}
+                  value={draft.status}
+                  onChange={(value) => onStatusChange(value as PopupBannerStatus)}
+                />
+                <ContentTextArea
+                  label="Description"
+                  value={draft.description}
+                  onChange={(value) => onChange({ description: value })}
+                />
+                <ThumbnailSourceSelector
+                  fileName={draft.imageFileName}
+                  mode={draft.imageMode}
+                  onChange={(value) => onChange({ image: value })}
+                  onFileNameChange={(imageFileName) => onChange({ imageFileName })}
+                  onModeChange={(imageMode) =>
+                    onChange({ image: "", imageFileName: "", imageMode })
+                  }
+                  value={draft.image}
+                />
+              </div>
+            </section>
+
+            <div className="space-y-6">
+              <section className="rounded-2xl border border-slate-200 p-5">
+                <SectionTitle
+                  title="Schedule & Location"
+                  description="Set where and when this campaign display appears."
+                />
+                <div className="mt-5 grid gap-5">
+                  <ContentSelect
+                    label="Location"
+                    options={["All Pages", "Homepage", "Pricing", "Dashboard", "Billing", "Blog"]}
+                    value={draft.location}
+                    onChange={(value) => onChange({ location: value })}
+                  />
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <ContentInput
+                      label="Start Date"
+                      type="date"
+                      value={draft.startDate}
+                      onChange={(value) => onChange({ startDate: value })}
+                    />
+                    <ContentInput
+                      label="End Date"
+                      type="date"
+                      value={draft.endDate}
+                      onChange={(value) => onChange({ endDate: value })}
+                    />
+                  </div>
+                  <ContentSelect
+                    label="Dismiss Behavior"
+                    options={[
+                      "Close Only",
+                      "Don't Show Again Today",
+                      "Don't Show Again For 7 Days",
+                      "Don't Show Again Until Campaign Ends",
+                    ]}
+                    value={draft.dismissBehavior}
+                    onChange={(value) => onChange({ dismissBehavior: value })}
+                  />
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 p-5">
+                <SectionTitle
+                  title="Audience Targeting"
+                  description="Choose one or more user segments and paid plans."
+                />
+                <MultiSelectCheckboxes
+                  label="User Targeting"
+                  options={["All Users", "Logged-in Users", "Guests Only", "Paid Users", "Free Users"]}
+                  value={draft.audiences}
+                  onChange={(audiences) => onChange({ audiences })}
+                />
+                <MultiSelectCheckboxes
+                  label="Specific Plans"
+                  options={["Starter", "Growth", "Professional", "Enterprise"]}
+                  value={draft.plans}
+                  onChange={(plans) => onChange({ plans })}
+                />
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <SectionTitle
+                  title="Edit History"
+                  description="Recent operational update record for audit visibility."
+                />
+                <div className="mt-4 rounded-xl bg-white p-4 ring-1 ring-slate-200">
+                  <p className="text-sm font-bold text-slate-950">{draft.updatedBy}</p>
+                  <p className="mt-1 text-sm text-slate-500">Updated {draft.updatedDate}</p>
+                  <p className="mt-3 text-xs font-semibold text-slate-400">
+                    Permanent deletion is disabled. Use Archive to retain campaign history.
+                  </p>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-5">
+            {mode === "edit" ? (
+              <>
+                <AdminButton onClick={() => onStatusChange("Active")}>Enable</AdminButton>
+                <AdminButton onClick={() => onStatusChange("Draft")}>Disable</AdminButton>
+                <AdminButton onClick={() => onStatusChange("Archived")}>Archive</AdminButton>
+              </>
+            ) : null}
+            <AdminButton onClick={onCancel} variant="secondary">
+              Cancel
+            </AdminButton>
+            <AdminButton disabled={!draft.name.trim() || !draft.title.trim()} onClick={onSave} variant="primary">
+              {mode === "create" ? "Create" : "Save Changes"}
+            </AdminButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MultiSelectCheckboxes({
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  label: string
+  onChange: (value: string[]) => void
+  options: string[]
+  value: string[]
+}) {
+  const toggle = (option: string) => {
+    onChange(
+      value.includes(option)
+        ? value.filter((item) => item !== option)
+        : [...value, option]
+    )
+  }
+
+  return (
+    <div className="mt-5">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {options.map((option) => (
+          <label
+            className={cn(
+              "flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm font-bold transition",
+              value.includes(option)
+                ? "border-violet-300 bg-violet-50 text-violet-700 ring-4 ring-violet-500/10"
+                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+            )}
+            key={option}
+          >
+            <input
+              checked={value.includes(option)}
+              className="size-4 accent-violet-600"
+              onChange={() => toggle(option)}
+              type="checkbox"
+            />
+            {option}
+          </label>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function createPopupBannerForm(): PopupBannerForm {
+  return {
+    audiences: ["All Users"],
+    buttonText: "",
+    buttonUrl: "",
+    description: "",
+    dismissBehavior: "Close Only",
+    endDate: "2026-06-14",
+    id: createBlogId("display-campaign"),
+    image: "",
+    imageFileName: "",
+    imageMode: "url",
+    location: "Homepage",
+    name: "",
+    plans: [],
+    startDate: "2026-06-01",
+    status: "Draft",
+    title: "",
+    type: "Popup",
+    updatedBy: "Sarah Mitchell",
+    updatedDate: "Today",
+  }
+}
+
+function formatCampaignDate(value: string) {
+  const date = new Date(`${value}T00:00:00`)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleDateString("en-US", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  })
 }
 
 function SeoFoundation() {
@@ -3170,56 +3806,6 @@ function normalizeFaqOrder(items: FaqItem[]) {
 
 function createBlogId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-}
-
-function FoundationTable({
-  description,
-  headers,
-  rows,
-  title,
-}: {
-  description: string
-  headers: string[]
-  rows: string[][]
-  title: string
-}) {
-  return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-      <SectionHeader description={description} title={title} />
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px]">
-          <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
-            <tr>
-              {headers.map((header) => (
-                <th key={header} className="px-6 py-4">{header}</th>
-              ))}
-              <th className="px-6 py-4">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((row) => (
-              <tr key={row.join("-")} className="transition hover:bg-slate-50">
-                {row.map((cell, index) => (
-                  <td
-                    key={`${cell}-${index}`}
-                    className={cn(
-                      "px-6 py-5 text-sm text-slate-600",
-                      index === 0 && "font-bold text-slate-950"
-                    )}
-                  >
-                    {cell}
-                  </td>
-                ))}
-                <td className="px-6 py-5 text-sm font-bold text-violet-600">
-                  Edit
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  )
 }
 
 function SectionHeader({ description, title }: { description: string; title: string }) {
