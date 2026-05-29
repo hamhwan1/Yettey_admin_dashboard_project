@@ -5,10 +5,12 @@ import { useMemo, useState } from "react"
 import {
   ChevronDown,
   Copy,
+  ExternalLink,
   GripVertical,
   Image as ImageIcon,
   Plus,
   Search,
+  Trash2,
   Upload,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -60,6 +62,15 @@ type NavigationChild = {
 
 type NavigationGroup = NavigationChild & {
   children: NavigationChild[]
+}
+
+type NavigationMenuForm = {
+  description: string
+  icon: string
+  name: string
+  parentId: string
+  url: string
+  visibility: NavigationVisibility
 }
 
 const blogCategories = [
@@ -807,11 +818,26 @@ function NavigationFoundation() {
   const [selectedId, setSelectedId] = useState(initialNavigationTree[0].id)
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [hasChanges, setHasChanges] = useState(false)
-  const [showSaveDialog, setShowSaveDialog] = useState(false)
-  const selectedItem =
-    findNavigationItem(navigationTree, selectedId) ?? navigationTree[0]
+  const [saveDialog, setSaveDialog] = useState<"confirm" | "success" | null>(null)
+  const [menuDialog, setMenuDialog] = useState<"sub" | "top" | null>(null)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+  const [menuForm, setMenuForm] = useState<NavigationMenuForm>({
+    description: "",
+    icon: "link",
+    name: "",
+    parentId: initialNavigationTree[0].id,
+    url: "",
+    visibility: "Visible",
+  })
+  const selectedItem = findNavigationItem(navigationTree, selectedId)
   const parentMenu = findParentMenu(navigationTree, selectedId)
   const parentOptions = navigationTree.map((item) => item.name)
+  const deleteTarget = deleteTargetId
+    ? findNavigationItem(navigationTree, deleteTargetId)
+    : null
+  const deleteTargetChildren =
+    navigationTree.find((group) => group.id === deleteTargetId)?.children.length ??
+    0
 
   const markChanged = (nextTree: NavigationGroup[]) => {
     setNavigationTree(nextTree)
@@ -822,6 +848,11 @@ function NavigationFoundation() {
     field: keyof NavigationChild,
     value: string | number
   ) => {
+    if (field === "sortOrder") {
+      markChanged(setNavigationSortOrder(navigationTree, selectedId, Number(value)))
+      return
+    }
+
     markChanged(
       updateNavigationItem(navigationTree, selectedId, {
         [field]: value,
@@ -844,38 +875,71 @@ function NavigationFoundation() {
     setDraggedId(null)
   }
 
-  const handleAddTopMenu = () => {
-    const item: NavigationGroup = {
-      children: [],
-      description: "New top navigation group",
+  const openAddTopMenuDialog = () => {
+    setMenuForm({
+      description: "",
       icon: "menu",
-      id: `top-menu-${Date.now()}`,
-      name: "New Top Menu",
-      sortOrder: navigationTree.length + 1,
-      url: "/new-menu",
-      visibility: "Hidden",
-    }
-
-    markChanged([...navigationTree, item])
-    setSelectedId(item.id)
+      name: "",
+      parentId: navigationTree[0]?.id ?? "",
+      url: "",
+      visibility: "Visible",
+    })
+    setMenuDialog("top")
   }
 
-  const handleAddSubMenu = () => {
+  const openAddSubMenuDialog = () => {
     const parent = parentMenu ?? navigationTree.find((item) => item.id === selectedId)
-    const parentId = parent?.id ?? navigationTree[0].id
-    const parentItem = navigationTree.find((item) => item.id === parentId)
-    const child: NavigationChild = {
-      description: "New dropdown menu item",
+    setMenuForm({
+      description: "",
       icon: "link",
-      id: `sub-menu-${Date.now()}`,
-      name: "New Sub Menu",
-      sortOrder: (parentItem?.children.length ?? 0) + 1,
-      url: "/new-sub-menu",
-      visibility: "Hidden",
+      name: "",
+      parentId: parent?.id ?? navigationTree[0]?.id ?? "",
+      url: "",
+      visibility: "Visible",
+    })
+    setMenuDialog("sub")
+  }
+
+  const handleCreateMenu = () => {
+    const menuName =
+      menuForm.name.trim() || (menuDialog === "top" ? "New Top Menu" : "New Sub Menu")
+    const menuUrl =
+      menuForm.url.trim() ||
+      `/${menuName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`
+
+    if (menuDialog === "top") {
+      const item: NavigationGroup = {
+        children: [],
+        description: menuForm.description.trim() || "New top navigation group",
+        icon: menuForm.icon.trim() || "menu",
+        id: createNavigationId("top-menu"),
+        name: menuName,
+        sortOrder: navigationTree.length + 1,
+        url: menuUrl,
+        visibility: menuForm.visibility,
+      }
+
+      markChanged([...navigationTree, item])
+      setSelectedId(item.id)
+      setMenuDialog(null)
+      return
     }
 
-    markChanged(addNavigationChild(navigationTree, parentId, child))
+    const child: NavigationChild = {
+      description: menuForm.description.trim() || "New dropdown menu item",
+      icon: menuForm.icon.trim() || "link",
+      id: createNavigationId("sub-menu"),
+      name: menuName,
+      sortOrder:
+        (navigationTree.find((group) => group.id === menuForm.parentId)?.children
+          .length ?? 0) + 1,
+      url: menuUrl,
+      visibility: menuForm.visibility,
+    }
+
+    markChanged(addNavigationChild(navigationTree, menuForm.parentId, child))
     setSelectedId(child.id)
+    setMenuDialog(null)
   }
 
   const handleParentChange = (parentName: string) => {
@@ -887,6 +951,51 @@ function NavigationFoundation() {
     markChanged(moveNavigationChild(navigationTree, selectedId, targetParent.id))
   }
 
+  const handleToggleVisibility = (id: string) => {
+    const item = findNavigationItem(navigationTree, id)
+    if (!item) return
+
+    markChanged(
+      updateNavigationItem(navigationTree, id, {
+        visibility: item.visibility === "Visible" ? "Hidden" : "Visible",
+      })
+    )
+  }
+
+  const handleDuplicate = (id: string) => {
+    const nextTree = duplicateNavigationItem(navigationTree, id)
+
+    if (nextTree.tree === navigationTree) return
+
+    markChanged(nextTree.tree)
+    setSelectedId(nextTree.newId)
+  }
+
+  const handleDeleteMenu = () => {
+    if (!deleteTargetId) return
+
+    const nextTree = deleteNavigationItem(navigationTree, deleteTargetId)
+    const deletedParent = findParentMenu(navigationTree, deleteTargetId)
+    const deletedGroup = navigationTree.find((group) => group.id === deleteTargetId)
+    const selectedWasDeleted =
+      selectedId === deleteTargetId ||
+      Boolean(deletedGroup?.children.some((child) => child.id === selectedId))
+
+    markChanged(nextTree)
+
+    if (selectedWasDeleted) {
+      setSelectedId(deletedParent?.id ?? nextTree[0]?.id ?? "")
+    }
+
+    setDeleteTargetId(null)
+  }
+
+  const handleOpenPage = () => {
+    if (!selectedItem) return
+
+    window.open(selectedItem.url, "_blank", "noopener,noreferrer")
+  }
+
   return (
     <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
@@ -896,11 +1005,15 @@ function NavigationFoundation() {
         />
         <div className="border-b border-slate-100 p-4">
           <div className="flex flex-wrap gap-2">
-            <AdminButton className="h-9 px-3" onClick={handleAddTopMenu}>
+            <AdminButton className="h-9 px-3" onClick={openAddTopMenuDialog}>
               <Plus className="size-4" />
               Add Top Menu
             </AdminButton>
-            <AdminButton className="h-9 px-3" onClick={handleAddSubMenu}>
+            <AdminButton
+              className="h-9 px-3"
+              disabled={!navigationTree.length}
+              onClick={openAddSubMenuDialog}
+            >
               <Plus className="size-4" />
               Add Sub Menu
             </AdminButton>
@@ -919,7 +1032,10 @@ function NavigationFoundation() {
                 active={selectedId === group.id}
                 item={group}
                 level={1}
+                onDelete={() => setDeleteTargetId(group.id)}
+                onDuplicate={() => handleDuplicate(group.id)}
                 onClick={() => setSelectedId(group.id)}
+                onToggleVisibility={() => handleToggleVisibility(group.id)}
               />
               {group.children.length ? (
                 <div className="ml-7 mt-2 space-y-1 border-l border-slate-200 pl-3">
@@ -935,7 +1051,10 @@ function NavigationFoundation() {
                         active={selectedId === child.id}
                         item={child}
                         level={2}
+                        onDelete={() => setDeleteTargetId(child.id)}
+                        onDuplicate={() => handleDuplicate(child.id)}
                         onClick={() => setSelectedId(child.id)}
+                        onToggleVisibility={() => handleToggleVisibility(child.id)}
                       />
                     </div>
                   ))}
@@ -947,6 +1066,16 @@ function NavigationFoundation() {
               )}
             </div>
           ))}
+          {!navigationTree.length ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+              <p className="text-sm font-bold text-slate-950">
+                No navigation menus
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                Add a top menu to start rebuilding website navigation.
+              </p>
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -955,96 +1084,155 @@ function NavigationFoundation() {
           description="Edit the selected menu item as it appears on the website."
           title="Selected Menu Detail"
         />
-        <div className="grid gap-5 p-6 md:grid-cols-2">
-          <ContentInput
-            label="Menu Name"
-            value={selectedItem.name}
-            onChange={(value) => handleFieldChange("name", value)}
-          />
-          <ContentInput
-            label="URL"
-            value={selectedItem.url}
-            onChange={(value) => handleFieldChange("url", value)}
-          />
-          <ContentInput
-            label="Icon"
-            value={selectedItem.icon}
-            onChange={(value) => handleFieldChange("icon", value)}
-          />
-          <ContentInput
-            label="Sort Order"
-            type="number"
-            value={String(selectedItem.sortOrder)}
-            onChange={(value) =>
-              handleFieldChange("sortOrder", Number(value) || 1)
-            }
-          />
-          <ContentSelect
-            label="Visibility"
-            options={["Visible", "Hidden"]}
-            value={selectedItem.visibility}
-            onChange={(value) =>
-              handleFieldChange("visibility", value as NavigationVisibility)
-            }
-          />
-          <ContentSelect
-            disabled={!parentMenu}
-            label="Parent Menu"
-            options={parentOptions}
-            value={parentMenu?.name ?? "Top Level"}
-            onChange={handleParentChange}
-          />
-          <ContentTextArea
-            label="Description"
-            value={selectedItem.description}
-            onChange={(value) => handleFieldChange("description", value)}
-          />
-        </div>
+        {selectedItem ? (
+          <div className="grid gap-5 p-6 md:grid-cols-2">
+            <ContentInput
+              label="Menu Name"
+              value={selectedItem.name}
+              onChange={(value) => handleFieldChange("name", value)}
+            />
+            <ContentInput
+              label="URL"
+              value={selectedItem.url}
+              onChange={(value) => handleFieldChange("url", value)}
+            />
+            <ContentInput
+              label="Icon"
+              value={selectedItem.icon}
+              onChange={(value) => handleFieldChange("icon", value)}
+            />
+            <ContentInput
+              label="Sort Order"
+              type="number"
+              value={String(selectedItem.sortOrder)}
+              onChange={(value) =>
+                handleFieldChange("sortOrder", Number(value) || 1)
+              }
+            />
+            <ContentSelect
+              label="Visibility"
+              options={["Visible", "Hidden"]}
+              value={selectedItem.visibility}
+              onChange={(value) =>
+                handleFieldChange("visibility", value as NavigationVisibility)
+              }
+            />
+            <ContentSelect
+              disabled={!parentMenu}
+              label="Parent Menu"
+              options={parentOptions}
+              value={parentMenu?.name ?? "Top Level"}
+              onChange={handleParentChange}
+            />
+            <ContentTextArea
+              label="Description"
+              value={selectedItem.description}
+              onChange={(value) => handleFieldChange("description", value)}
+            />
+          </div>
+        ) : (
+          <div className="p-6">
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+              <p className="text-sm font-bold text-slate-950">
+                Select a menu item
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                Choose an item from the navigation tree or create a new top menu.
+              </p>
+            </div>
+          </div>
+        )}
         <div className="flex flex-col gap-3 border-t border-slate-100 p-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-bold text-slate-950">
               Website navigation hierarchy
             </p>
             <p className="mt-1 text-sm text-slate-500">
-              Drag top menus or sibling submenu items to adjust visual order.
+              {hasChanges
+                ? "Unsaved changes are ready to publish to mock navigation."
+                : "Drag top menus or sibling submenu items to adjust visual order."}
             </p>
           </div>
-          <AdminButton
-            disabled={!hasChanges}
-            onClick={() => setShowSaveDialog(true)}
-            variant="primary"
-          >
-            Save Changes
-          </AdminButton>
+          <div className="flex flex-wrap gap-2">
+            <AdminButton disabled={!selectedItem} onClick={handleOpenPage}>
+              <ExternalLink className="size-4" />
+              Open Page
+            </AdminButton>
+            <AdminButton
+              disabled={!selectedItem}
+              onClick={() => selectedItem && handleDuplicate(selectedItem.id)}
+            >
+              <Copy className="size-4" />
+              Duplicate
+            </AdminButton>
+            <AdminButton
+              className="border-red-200 text-red-600 hover:border-red-300 hover:bg-red-50"
+              disabled={!selectedItem}
+              onClick={() => selectedItem && setDeleteTargetId(selectedItem.id)}
+            >
+              <Trash2 className="size-4" />
+              Delete
+            </AdminButton>
+            <AdminButton
+              disabled={!hasChanges}
+              onClick={() => setSaveDialog("confirm")}
+              variant="primary"
+            >
+              Save Changes
+            </AdminButton>
+          </div>
         </div>
       </section>
 
-      {showSaveDialog ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-            <h2 className="text-lg font-bold text-slate-950">Save Navigation</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Do you want to save navigation changes?
-            </p>
-            <div className="mt-6 flex justify-end gap-2">
-              <AdminButton
-                variant="secondary"
-                onClick={() => setShowSaveDialog(false)}
-              >
-                Cancel
-              </AdminButton>
-              <AdminButton
-                onClick={() => {
-                  setHasChanges(false)
-                  setShowSaveDialog(false)
-                }}
-                variant="primary"
-              >
-                Save
-              </AdminButton>
-            </div>
-          </div>
-        </div>
+      {menuDialog ? (
+        <NavigationMenuDialog
+          form={menuForm}
+          mode={menuDialog}
+          parentOptions={navigationTree.map((group) => ({
+            id: group.id,
+            name: group.name,
+          }))}
+          onCancel={() => setMenuDialog(null)}
+          onChange={(patch) => setMenuForm((current) => ({ ...current, ...patch }))}
+          onCreate={handleCreateMenu}
+        />
+      ) : null}
+
+      {saveDialog === "confirm" ? (
+        <ContentDialog
+          confirmLabel="Save"
+          message="Do you want to save these navigation changes?"
+          onCancel={() => setSaveDialog(null)}
+          onConfirm={() => {
+            setHasChanges(false)
+            setSaveDialog("success")
+          }}
+          title="Save Navigation Changes"
+        />
+      ) : null}
+
+      {saveDialog === "success" ? (
+        <ContentDialog
+          confirmLabel="OK"
+          message="Navigation changes have been saved successfully."
+          onConfirm={() => setSaveDialog(null)}
+          title="Saved"
+        />
+      ) : null}
+
+      {deleteTarget ? (
+        <ContentDialog
+          confirmLabel="Delete"
+          message={
+            deleteTargetChildren
+              ? "Are you sure you want to delete this menu? All child menus will also be removed."
+              : "Are you sure you want to delete this menu?"
+          }
+          onCancel={() => setDeleteTargetId(null)}
+          onConfirm={handleDeleteMenu}
+          title={`Delete ${deleteTarget.name}`}
+          tone="danger"
+        />
       ) : null}
     </div>
   )
@@ -1079,6 +1267,35 @@ function updateNavigationItem(
       ...group,
       children: group.children.map((child) =>
         child.id === id ? { ...child, ...patch } : child
+      ),
+    }
+  })
+}
+
+function setNavigationSortOrder(
+  tree: NavigationGroup[],
+  id: string,
+  nextOrder: number
+) {
+  const normalizedOrder = Math.max(1, Math.floor(nextOrder || 1))
+  const topIndex = tree.findIndex((item) => item.id === id)
+
+  if (topIndex >= 0) {
+    const targetIndex = Math.min(normalizedOrder - 1, tree.length - 1)
+    return normalizeGroupSortOrder(reorderArray(tree, topIndex, targetIndex))
+  }
+
+  return tree.map((group) => {
+    const childIndex = group.children.findIndex((item) => item.id === id)
+
+    if (childIndex < 0) return group
+
+    const targetIndex = Math.min(normalizedOrder - 1, group.children.length - 1)
+
+    return {
+      ...group,
+      children: normalizeSortOrder(
+        reorderArray(group.children, childIndex, targetIndex)
       ),
     }
   })
@@ -1130,6 +1347,70 @@ function moveNavigationChild(
   })
 }
 
+function deleteNavigationItem(tree: NavigationGroup[], id: string) {
+  if (tree.some((group) => group.id === id)) {
+    return normalizeGroupSortOrder(tree.filter((group) => group.id !== id))
+  }
+
+  return tree.map((group) => ({
+    ...group,
+    children: normalizeSortOrder(
+      group.children.filter((child) => child.id !== id)
+    ),
+  }))
+}
+
+function duplicateNavigationItem(tree: NavigationGroup[], id: string) {
+  const groupIndex = tree.findIndex((group) => group.id === id)
+
+  if (groupIndex >= 0) {
+    const source = tree[groupIndex]
+    const newId = createNavigationId("top-menu")
+    const copy: NavigationGroup = {
+      ...source,
+      children: source.children.map((child) => ({
+        ...child,
+        id: createNavigationId("sub-menu"),
+        name: `${child.name} Copy`,
+      })),
+      id: newId,
+      name: `${source.name} Copy`,
+    }
+    const nextTree = [...tree]
+    nextTree.splice(groupIndex + 1, 0, copy)
+
+    return { newId, tree: normalizeGroupSortOrder(nextTree) }
+  }
+
+  const parent = findParentMenu(tree, id)
+
+  if (!parent) return { newId: id, tree }
+
+  const childIndex = parent.children.findIndex((child) => child.id === id)
+  const source = parent.children[childIndex]
+  const newId = createNavigationId("sub-menu")
+  const copy: NavigationChild = {
+    ...source,
+    id: newId,
+    name: `${source.name} Copy`,
+  }
+
+  return {
+    newId,
+    tree: tree.map((group) => {
+      if (group.id !== parent.id) return group
+
+      const children = [...group.children]
+      children.splice(childIndex + 1, 0, copy)
+
+      return {
+        ...group,
+        children: normalizeSortOrder(children),
+      }
+    }),
+  }
+}
+
 function reorderNavigationItem(
   tree: NavigationGroup[],
   draggedId: string,
@@ -1173,6 +1454,10 @@ function normalizeSortOrder(items: NavigationChild[]) {
 
 function normalizeGroupSortOrder(items: NavigationGroup[]) {
   return items.map((item, index) => ({ ...item, sortOrder: index + 1 }))
+}
+
+function createNavigationId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 }
 
 function FoundationTable({
@@ -1271,23 +1556,36 @@ function TreeRow({
   active,
   item,
   level,
+  onDelete,
+  onDuplicate,
   onClick,
+  onToggleVisibility,
 }: {
   active: boolean
   item: NavigationChild
   level: 1 | 2
+  onDelete: () => void
+  onDuplicate: () => void
   onClick: () => void
+  onToggleVisibility: () => void
 }) {
   return (
-    <button
+    <div
       className={cn(
-        "group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition",
+        "group flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-left transition",
         active
           ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100"
           : "text-slate-700 hover:bg-slate-50 hover:text-slate-950"
       )}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          onClick()
+        }
+      }}
       onClick={onClick}
-      type="button"
+      role="button"
+      tabIndex={0}
     >
       <GripVertical className="size-4 shrink-0 text-slate-300 transition group-hover:text-slate-500" />
       {level === 1 ? (
@@ -1307,7 +1605,176 @@ function TreeRow({
       <span className="shrink-0 rounded-full bg-white px-2 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">
         {item.sortOrder}
       </span>
-    </button>
+      <div className="flex shrink-0 items-center gap-1 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
+        <button
+          className={cn(
+            "h-7 rounded-lg px-2 text-xs font-bold transition",
+            item.visibility === "Visible"
+              ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+              : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+          )}
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggleVisibility()
+          }}
+          type="button"
+        >
+          {item.visibility === "Visible" ? "Hide" : "Show"}
+        </button>
+        <button
+          aria-label={`Duplicate ${item.name}`}
+          className="inline-flex size-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white hover:text-violet-600 hover:shadow-sm"
+          onClick={(event) => {
+            event.stopPropagation()
+            onDuplicate()
+          }}
+          type="button"
+        >
+          <Copy className="size-3.5" />
+        </button>
+        <button
+          aria-label={`Delete ${item.name}`}
+          className="inline-flex size-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+          onClick={(event) => {
+            event.stopPropagation()
+            onDelete()
+          }}
+          type="button"
+        >
+          <Trash2 className="size-3.5" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function NavigationMenuDialog({
+  form,
+  mode,
+  onCancel,
+  onChange,
+  onCreate,
+  parentOptions,
+}: {
+  form: NavigationMenuForm
+  mode: "sub" | "top"
+  onCancel: () => void
+  onChange: (patch: Partial<NavigationMenuForm>) => void
+  onCreate: () => void
+  parentOptions: Array<{ id: string; name: string }>
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
+      <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="border-b border-slate-100 p-6">
+          <h2 className="text-lg font-bold text-slate-950">
+            {mode === "top" ? "Add Top Menu" : "Add Sub Menu"}
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Create a mock navigation item and place it in the website menu tree.
+          </p>
+        </div>
+        <div className="grid gap-5 p-6 md:grid-cols-2">
+          {mode === "sub" ? (
+            <label className="block">
+              <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                Parent Menu
+              </span>
+              <select
+                className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
+                onChange={(event) => onChange({ parentId: event.target.value })}
+                value={form.parentId}
+              >
+                {parentOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <ContentInput
+            label="Menu Name"
+            value={form.name}
+            onChange={(value) => onChange({ name: value })}
+          />
+          <ContentInput
+            label="URL"
+            value={form.url}
+            onChange={(value) => onChange({ url: value })}
+          />
+          <ContentInput
+            label="Icon"
+            value={form.icon}
+            onChange={(value) => onChange({ icon: value })}
+          />
+          <ContentSelect
+            label="Visibility"
+            options={["Visible", "Hidden"]}
+            value={form.visibility}
+            onChange={(value) =>
+              onChange({ visibility: value as NavigationVisibility })
+            }
+          />
+          <ContentTextArea
+            label="Description"
+            value={form.description}
+            onChange={(value) => onChange({ description: value })}
+          />
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 p-6">
+          <AdminButton onClick={onCancel} variant="secondary">
+            Cancel
+          </AdminButton>
+          <AdminButton onClick={onCreate} variant="primary">
+            Create
+          </AdminButton>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ContentDialog({
+  confirmLabel = "Save",
+  message,
+  onCancel,
+  onConfirm,
+  title,
+  tone = "default",
+}: {
+  confirmLabel?: string
+  message: string
+  onCancel?: () => void
+  onConfirm: () => void
+  title: string
+  tone?: "danger" | "default"
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+        <h2 className="text-lg font-bold text-slate-950">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{message}</p>
+        <div className="mt-6 flex justify-end gap-2">
+          {onCancel ? (
+            <AdminButton variant="secondary" onClick={onCancel}>
+              Cancel
+            </AdminButton>
+          ) : null}
+          <AdminButton
+            className={
+              tone === "danger"
+                ? "bg-red-600 shadow-red-600/20 hover:bg-red-700 hover:shadow-red-600/25"
+                : undefined
+            }
+            onClick={onConfirm}
+            variant="primary"
+          >
+            {confirmLabel}
+          </AdminButton>
+        </div>
+      </div>
+    </div>
   )
 }
 
