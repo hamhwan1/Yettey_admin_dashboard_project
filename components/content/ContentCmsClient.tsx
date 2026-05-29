@@ -3,7 +3,9 @@
 import type { ReactNode } from "react"
 import { useMemo, useState } from "react"
 import {
+  ChevronDown,
   Copy,
+  GripVertical,
   Image as ImageIcon,
   Plus,
   Search,
@@ -42,6 +44,22 @@ type MediaAsset = {
   type: "Image" | "Video" | "Thumbnail"
   updatedDate: string
   url: string
+}
+
+type NavigationVisibility = "Hidden" | "Visible"
+
+type NavigationChild = {
+  description: string
+  icon: string
+  id: string
+  name: string
+  sortOrder: number
+  url: string
+  visibility: NavigationVisibility
+}
+
+type NavigationGroup = NavigationChild & {
+  children: NavigationChild[]
 }
 
 const blogCategories = [
@@ -102,6 +120,142 @@ const mediaAssets: MediaAsset[] = [
     type: "Thumbnail",
     updatedDate: "May 24, 2026",
     url: "https://cdn.yettey.com/blog-thumbnail-ai-workflow.jpg",
+  },
+]
+
+const initialNavigationTree: NavigationGroup[] = [
+  {
+    children: [
+      {
+        description: "Digital asset management workspace",
+        icon: "folder",
+        id: "manage-assets",
+        name: "Manage Assets",
+        sortOrder: 1,
+        url: "/product/manage-assets",
+        visibility: "Visible",
+      },
+      {
+        description: "AI generation tools and workflow entry",
+        icon: "sparkles",
+        id: "create-with-ai",
+        name: "Create with AI",
+        sortOrder: 2,
+        url: "/product/create-with-ai",
+        visibility: "Visible",
+      },
+      {
+        description: "VPICK shortform creation workflow",
+        icon: "video",
+        id: "create-short-clips",
+        name: "Create Short Clips",
+        sortOrder: 3,
+        url: "/product/create-short-clips",
+        visibility: "Visible",
+      },
+      {
+        description: "Team collaboration and shared workspace",
+        icon: "users",
+        id: "work-with-team",
+        name: "Work with Team",
+        sortOrder: 4,
+        url: "/product/team",
+        visibility: "Visible",
+      },
+    ],
+    description: "Product capabilities and workflow entry points",
+    icon: "box",
+    id: "product",
+    name: "Product",
+    sortOrder: 1,
+    url: "/product",
+    visibility: "Visible",
+  },
+  {
+    children: [
+      {
+        description: "Creator-focused use cases and examples",
+        icon: "pen-tool",
+        id: "for-creators",
+        name: "For Creators",
+        sortOrder: 1,
+        url: "/use-cases/creators",
+        visibility: "Visible",
+      },
+      {
+        description: "Marketing campaign and content ops use cases",
+        icon: "megaphone",
+        id: "for-marketers",
+        name: "For Marketers",
+        sortOrder: 2,
+        url: "/use-cases/marketers",
+        visibility: "Hidden",
+      },
+      {
+        description: "Team workflow, approval, and workspace use cases",
+        icon: "building",
+        id: "for-teams",
+        name: "For Teams",
+        sortOrder: 3,
+        url: "/use-cases/teams",
+        visibility: "Visible",
+      },
+    ],
+    description: "Audience-specific landing destinations",
+    icon: "target",
+    id: "use-cases",
+    name: "Use Cases",
+    sortOrder: 2,
+    url: "/use-cases",
+    visibility: "Visible",
+  },
+  {
+    children: [
+      {
+        description: "Editorial articles and product stories",
+        icon: "book-open",
+        id: "blog",
+        name: "Blog",
+        sortOrder: 1,
+        url: "/blog",
+        visibility: "Visible",
+      },
+      {
+        description: "Educational guides and workflow docs",
+        icon: "map",
+        id: "guides",
+        name: "Guides",
+        sortOrder: 2,
+        url: "/guides",
+        visibility: "Visible",
+      },
+      {
+        description: "Support and help center destination",
+        icon: "help-circle",
+        id: "help-center",
+        name: "Help Center",
+        sortOrder: 3,
+        url: "/help",
+        visibility: "Visible",
+      },
+    ],
+    description: "Content, education, and support links",
+    icon: "library",
+    id: "resources",
+    name: "Resources",
+    sortOrder: 3,
+    url: "/resources",
+    visibility: "Visible",
+  },
+  {
+    children: [],
+    description: "Pricing page and plan comparison",
+    icon: "credit-card",
+    id: "pricing",
+    name: "Pricing",
+    sortOrder: 4,
+    url: "/pricing",
+    visibility: "Visible",
   },
 ]
 
@@ -649,25 +803,376 @@ function MediaLibraryFoundation() {
 }
 
 function NavigationFoundation() {
-  const rows = [
-    ["Manage Assets", "Digital asset workflow", "1", "Visible"],
-    ["Create with AI", "AI generation entry", "2", "Visible"],
-    ["Create Short Clips", "VPICK shortform landing", "3", "Visible"],
-    ["For Creators", "Creator use cases", "4", "Visible"],
-    ["For Marketers", "Marketing team use cases", "5", "Hidden"],
-    ["Blog", "Editorial content", "6", "Visible"],
-    ["Guides", "Help and education", "7", "Visible"],
-    ["Help Center", "Support destination", "8", "Visible"],
-  ]
+  const [navigationTree, setNavigationTree] = useState(initialNavigationTree)
+  const [selectedId, setSelectedId] = useState(initialNavigationTree[0].id)
+  const [draggedId, setDraggedId] = useState<string | null>(null)
+  const [hasChanges, setHasChanges] = useState(false)
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const selectedItem =
+    findNavigationItem(navigationTree, selectedId) ?? navigationTree[0]
+  const parentMenu = findParentMenu(navigationTree, selectedId)
+  const parentOptions = navigationTree.map((item) => item.name)
+
+  const markChanged = (nextTree: NavigationGroup[]) => {
+    setNavigationTree(nextTree)
+    setHasChanges(true)
+  }
+
+  const handleFieldChange = (
+    field: keyof NavigationChild,
+    value: string | number
+  ) => {
+    markChanged(
+      updateNavigationItem(navigationTree, selectedId, {
+        [field]: value,
+      })
+    )
+  }
+
+  const handleDrop = (targetId: string) => {
+    if (!draggedId || draggedId === targetId) {
+      setDraggedId(null)
+      return
+    }
+
+    const nextTree = reorderNavigationItem(navigationTree, draggedId, targetId)
+
+    if (nextTree !== navigationTree) {
+      markChanged(nextTree)
+    }
+
+    setDraggedId(null)
+  }
+
+  const handleAddTopMenu = () => {
+    const item: NavigationGroup = {
+      children: [],
+      description: "New top navigation group",
+      icon: "menu",
+      id: `top-menu-${Date.now()}`,
+      name: "New Top Menu",
+      sortOrder: navigationTree.length + 1,
+      url: "/new-menu",
+      visibility: "Hidden",
+    }
+
+    markChanged([...navigationTree, item])
+    setSelectedId(item.id)
+  }
+
+  const handleAddSubMenu = () => {
+    const parent = parentMenu ?? navigationTree.find((item) => item.id === selectedId)
+    const parentId = parent?.id ?? navigationTree[0].id
+    const parentItem = navigationTree.find((item) => item.id === parentId)
+    const child: NavigationChild = {
+      description: "New dropdown menu item",
+      icon: "link",
+      id: `sub-menu-${Date.now()}`,
+      name: "New Sub Menu",
+      sortOrder: (parentItem?.children.length ?? 0) + 1,
+      url: "/new-sub-menu",
+      visibility: "Hidden",
+    }
+
+    markChanged(addNavigationChild(navigationTree, parentId, child))
+    setSelectedId(child.id)
+  }
+
+  const handleParentChange = (parentName: string) => {
+    if (!parentMenu) return
+
+    const targetParent = navigationTree.find((item) => item.name === parentName)
+    if (!targetParent || targetParent.id === parentMenu.id) return
+
+    markChanged(moveNavigationChild(navigationTree, selectedId, targetParent.id))
+  }
 
   return (
-    <FoundationTable
-      description="Change menu labels, descriptions, order, icons, and visibility."
-      headers={["Menu Name", "Description", "Order", "Visibility"]}
-      rows={rows}
-      title="Top Navigation Menu"
-    />
+    <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+        <SectionHeader
+          description="Manage top navigation groups, dropdown items, visibility, and order."
+          title="Navigation Tree"
+        />
+        <div className="border-b border-slate-100 p-4">
+          <div className="flex flex-wrap gap-2">
+            <AdminButton className="h-9 px-3" onClick={handleAddTopMenu}>
+              <Plus className="size-4" />
+              Add Top Menu
+            </AdminButton>
+            <AdminButton className="h-9 px-3" onClick={handleAddSubMenu}>
+              <Plus className="size-4" />
+              Add Sub Menu
+            </AdminButton>
+          </div>
+        </div>
+        <div className="space-y-3 p-4">
+          {navigationTree.map((group) => (
+            <div
+              key={group.id}
+              draggable
+              onDragStart={() => setDraggedId(group.id)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => handleDrop(group.id)}
+            >
+              <TreeRow
+                active={selectedId === group.id}
+                item={group}
+                level={1}
+                onClick={() => setSelectedId(group.id)}
+              />
+              {group.children.length ? (
+                <div className="ml-7 mt-2 space-y-1 border-l border-slate-200 pl-3">
+                  {group.children.map((child) => (
+                    <div
+                      key={child.id}
+                      draggable
+                      onDragStart={() => setDraggedId(child.id)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={() => handleDrop(child.id)}
+                    >
+                      <TreeRow
+                        active={selectedId === child.id}
+                        item={child}
+                        level={2}
+                        onClick={() => setSelectedId(child.id)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="ml-11 mt-2 text-xs font-semibold text-slate-400">
+                  No dropdown items
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+        <SectionHeader
+          description="Edit the selected menu item as it appears on the website."
+          title="Selected Menu Detail"
+        />
+        <div className="grid gap-5 p-6 md:grid-cols-2">
+          <ContentInput
+            label="Menu Name"
+            value={selectedItem.name}
+            onChange={(value) => handleFieldChange("name", value)}
+          />
+          <ContentInput
+            label="URL"
+            value={selectedItem.url}
+            onChange={(value) => handleFieldChange("url", value)}
+          />
+          <ContentInput
+            label="Icon"
+            value={selectedItem.icon}
+            onChange={(value) => handleFieldChange("icon", value)}
+          />
+          <ContentInput
+            label="Sort Order"
+            type="number"
+            value={String(selectedItem.sortOrder)}
+            onChange={(value) =>
+              handleFieldChange("sortOrder", Number(value) || 1)
+            }
+          />
+          <ContentSelect
+            label="Visibility"
+            options={["Visible", "Hidden"]}
+            value={selectedItem.visibility}
+            onChange={(value) =>
+              handleFieldChange("visibility", value as NavigationVisibility)
+            }
+          />
+          <ContentSelect
+            disabled={!parentMenu}
+            label="Parent Menu"
+            options={parentOptions}
+            value={parentMenu?.name ?? "Top Level"}
+            onChange={handleParentChange}
+          />
+          <ContentTextArea
+            label="Description"
+            value={selectedItem.description}
+            onChange={(value) => handleFieldChange("description", value)}
+          />
+        </div>
+        <div className="flex flex-col gap-3 border-t border-slate-100 p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-bold text-slate-950">
+              Website navigation hierarchy
+            </p>
+            <p className="mt-1 text-sm text-slate-500">
+              Drag top menus or sibling submenu items to adjust visual order.
+            </p>
+          </div>
+          <AdminButton
+            disabled={!hasChanges}
+            onClick={() => setShowSaveDialog(true)}
+            variant="primary"
+          >
+            Save Changes
+          </AdminButton>
+        </div>
+      </section>
+
+      {showSaveDialog ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-slate-950">Save Navigation</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Do you want to save navigation changes?
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <AdminButton
+                variant="secondary"
+                onClick={() => setShowSaveDialog(false)}
+              >
+                Cancel
+              </AdminButton>
+              <AdminButton
+                onClick={() => {
+                  setHasChanges(false)
+                  setShowSaveDialog(false)
+                }}
+                variant="primary"
+              >
+                Save
+              </AdminButton>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
   )
+}
+
+function findNavigationItem(tree: NavigationGroup[], id: string): NavigationChild | null {
+  for (const group of tree) {
+    if (group.id === id) return group
+
+    const child = group.children.find((item) => item.id === id)
+    if (child) return child
+  }
+
+  return null
+}
+
+function findParentMenu(tree: NavigationGroup[], id: string) {
+  return tree.find((group) => group.children.some((child) => child.id === id))
+}
+
+function updateNavigationItem(
+  tree: NavigationGroup[],
+  id: string,
+  patch: Partial<NavigationChild>
+) {
+  return tree.map((group) => {
+    if (group.id === id) {
+      return { ...group, ...patch }
+    }
+
+    return {
+      ...group,
+      children: group.children.map((child) =>
+        child.id === id ? { ...child, ...patch } : child
+      ),
+    }
+  })
+}
+
+function addNavigationChild(
+  tree: NavigationGroup[],
+  parentId: string,
+  child: NavigationChild
+) {
+  return tree.map((group) =>
+    group.id === parentId
+      ? { ...group, children: [...group.children, child] }
+      : group
+  )
+}
+
+function moveNavigationChild(
+  tree: NavigationGroup[],
+  childId: string,
+  targetParentId: string
+) {
+  const sourceParent = findParentMenu(tree, childId)
+  const child = sourceParent?.children.find((item) => item.id === childId)
+
+  if (!sourceParent || !child) return tree
+
+  return tree.map((group) => {
+    if (group.id === sourceParent.id) {
+      return {
+        ...group,
+        children: normalizeSortOrder(
+          group.children.filter((item) => item.id !== childId)
+        ),
+      }
+    }
+
+    if (group.id === targetParentId) {
+      return {
+        ...group,
+        children: normalizeSortOrder([
+          ...group.children,
+          { ...child, sortOrder: group.children.length + 1 },
+        ]),
+      }
+    }
+
+    return group
+  })
+}
+
+function reorderNavigationItem(
+  tree: NavigationGroup[],
+  draggedId: string,
+  targetId: string
+) {
+  const topDraggedIndex = tree.findIndex((item) => item.id === draggedId)
+  const topTargetIndex = tree.findIndex((item) => item.id === targetId)
+
+  if (topDraggedIndex >= 0 && topTargetIndex >= 0) {
+    return normalizeGroupSortOrder(
+      reorderArray(tree, topDraggedIndex, topTargetIndex)
+    )
+  }
+
+  return tree.map((group) => {
+    const draggedIndex = group.children.findIndex((item) => item.id === draggedId)
+    const targetIndex = group.children.findIndex((item) => item.id === targetId)
+
+    if (draggedIndex < 0 || targetIndex < 0) return group
+
+    return {
+      ...group,
+      children: normalizeSortOrder(
+        reorderArray(group.children, draggedIndex, targetIndex)
+      ),
+    }
+  })
+}
+
+function reorderArray<T>(items: T[], fromIndex: number, toIndex: number) {
+  const nextItems = [...items]
+  const [item] = nextItems.splice(fromIndex, 1)
+  nextItems.splice(toIndex, 0, item)
+
+  return nextItems
+}
+
+function normalizeSortOrder(items: NavigationChild[]) {
+  return items.map((item, index) => ({ ...item, sortOrder: index + 1 }))
+}
+
+function normalizeGroupSortOrder(items: NavigationGroup[]) {
+  return items.map((item, index) => ({ ...item, sortOrder: index + 1 }))
 }
 
 function FoundationTable({
@@ -762,7 +1267,61 @@ function ModeButton({
   )
 }
 
-function ContentInput({ label, value }: { label: string; value: string }) {
+function TreeRow({
+  active,
+  item,
+  level,
+  onClick,
+}: {
+  active: boolean
+  item: NavigationChild
+  level: 1 | 2
+  onClick: () => void
+}) {
+  return (
+    <button
+      className={cn(
+        "group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition",
+        active
+          ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100"
+          : "text-slate-700 hover:bg-slate-50 hover:text-slate-950"
+      )}
+      onClick={onClick}
+      type="button"
+    >
+      <GripVertical className="size-4 shrink-0 text-slate-300 transition group-hover:text-slate-500" />
+      {level === 1 ? (
+        <ChevronDown className="size-4 shrink-0 text-slate-400" />
+      ) : (
+        <span className="size-4 shrink-0 rounded-full bg-slate-300" />
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-bold">{item.name}</span>
+          <StatusPill status={item.visibility} />
+        </div>
+        <p className="mt-1 truncate text-xs font-semibold text-slate-500">
+          {item.url}
+        </p>
+      </div>
+      <span className="shrink-0 rounded-full bg-white px-2 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">
+        {item.sortOrder}
+      </span>
+    </button>
+  )
+}
+
+function ContentInput({
+  label,
+  onChange,
+  type = "text",
+  value,
+}: {
+  label: string
+  onChange?: (value: string) => void
+  type?: string
+  value: string
+}) {
   return (
     <label className="block">
       <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -770,13 +1329,57 @@ function ContentInput({ label, value }: { label: string; value: string }) {
       </span>
       <input
         className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
-        defaultValue={value}
+        defaultValue={onChange ? undefined : value}
+        onChange={(event) => onChange?.(event.target.value)}
+        type={type}
+        value={onChange ? value : undefined}
       />
     </label>
   )
 }
 
-function ContentTextArea({ label, value }: { label: string; value: string }) {
+function ContentSelect({
+  disabled,
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  disabled?: boolean
+  label: string
+  onChange?: (value: string) => void
+  options: string[]
+  value: string
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+        {label}
+      </span>
+      <select
+        className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition disabled:bg-slate-50 disabled:text-slate-400 focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
+        disabled={disabled}
+        onChange={(event) => onChange?.(event.target.value)}
+        value={value}
+      >
+        {disabled ? <option>Top Level</option> : null}
+        {options.map((option) => (
+          <option key={option}>{option}</option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+function ContentTextArea({
+  label,
+  onChange,
+  value,
+}: {
+  label: string
+  onChange?: (value: string) => void
+  value: string
+}) {
   return (
     <label className="block md:col-span-2">
       <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -784,7 +1387,9 @@ function ContentTextArea({ label, value }: { label: string; value: string }) {
       </span>
       <textarea
         className="mt-2 min-h-28 w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-medium text-slate-950 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
-        defaultValue={value}
+        defaultValue={onChange ? undefined : value}
+        onChange={(event) => onChange?.(event.target.value)}
+        value={onChange ? value : undefined}
       />
     </label>
   )
