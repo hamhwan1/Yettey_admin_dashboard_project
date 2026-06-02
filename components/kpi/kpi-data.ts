@@ -1,176 +1,151 @@
+export type KpiDirection = "higher" | "lower"
+
 export type KpiTone = "amber" | "emerald" | "rose" | "sky" | "violet"
 
-export type KpiMetricType = "currency" | "number" | "percentage"
+export type KpiMetricType = "currency" | "percentage"
 
-export type KpiSummaryMetric = {
+export type KpiTrend = {
+  direction: "down" | "up"
+  value: number
+  unit: "%" | "pp"
+}
+
+export type BusinessKpiMetric = {
   current: number
   description: string
+  direction: KpiDirection
   id: string
   label: string
+  owner: string
+  precision?: number
+  riskThreshold?: number
   target: number
+  targetPrefix?: "<"
   tone: KpiTone
+  trend: KpiTrend
   type: KpiMetricType
 }
 
-export type KpiScoreboardMetric = KpiSummaryMetric & {
-  owner: string
-}
-
 export type KpiGoal = {
-  d7RetentionTarget: number
+  activationRateTarget: number
+  churnRateTarget: number
   d30RetentionTarget: number
   id: string
   mrrTarget: number
-  paidUsersTarget: number
   periodLabel: string
   periodType: KpiPeriodType
   service: KpiService
-  signupsTarget: number
-  visitorsTarget: number
+  signupConversionTarget: number
 }
 
 export type KpiPeriodType = "Monthly" | "Quarterly" | "Yearly"
 
 export type KpiService = "Overall" | "VPICK" | "Yettey"
 
-export const kpiSummaryMetrics: KpiSummaryMetric[] = [
+export const businessKpiMetrics: BusinessKpiMetric[] = [
   {
-    current: 375000000,
-    description: "Monthly recurring and campaign revenue pacing",
-    id: "revenue-goal",
-    label: "Revenue Goal",
-    target: 500000000,
-    tone: "violet",
-    type: "currency",
-  },
-  {
-    current: 16840,
-    description: "Account creation target across Yettey and VPICK",
-    id: "signup-goal",
-    label: "Signup Goal",
-    target: 25000,
+    current: 5.7,
+    description: "Visitor to signup conversion across website and product entry points",
+    direction: "higher",
+    id: "signup-conversion-rate",
+    label: "Signup Conversion Rate",
+    owner: "Acquisition",
+    precision: 1,
+    riskThreshold: 70,
+    target: 8,
     tone: "sky",
-    type: "number",
+    trend: { direction: "up", unit: "pp", value: 0.4 },
+    type: "percentage",
   },
   {
-    current: 4370,
-    description: "Active paid subscriptions and paid workspaces",
-    id: "paid-user-goal",
-    label: "Paid User Goal",
-    target: 6000,
-    tone: "emerald",
-    type: "number",
+    current: 54,
+    description: "Signup to first successful content generation",
+    direction: "higher",
+    id: "activation-rate",
+    label: "Activation Rate",
+    owner: "Product",
+    riskThreshold: 80,
+    target: 70,
+    tone: "violet",
+    trend: { direction: "down", unit: "pp", value: 3.2 },
+    type: "percentage",
   },
   {
     current: 47,
-    description: "D30 user retention target for creator cohorts",
-    id: "retention-goal",
-    label: "Retention Goal",
-    target: 65,
+    description: "Users returning after 30 days",
+    direction: "higher",
+    id: "d30-retention-rate",
+    label: "D30 Retention Rate",
+    owner: "Lifecycle",
+    riskThreshold: 80,
+    target: 60,
     tone: "amber",
+    trend: { direction: "down", unit: "pp", value: 1.8 },
     type: "percentage",
-  },
-]
-
-export const kpiScoreboardMetrics: KpiScoreboardMetric[] = [
-  {
-    current: 235869,
-    description: "Unique visitors in the current mock period",
-    id: "visitors",
-    label: "Visitors",
-    owner: "Growth",
-    target: 300000,
-    tone: "violet",
-    type: "number",
-  },
-  {
-    current: 16840,
-    description: "New registrations across both services",
-    id: "signups",
-    label: "Signups",
-    owner: "Acquisition",
-    target: 25000,
-    tone: "sky",
-    type: "number",
-  },
-  {
-    current: 4370,
-    description: "Paid users with an active plan",
-    id: "paid-users",
-    label: "Paid Users",
-    owner: "Revenue",
-    target: 6000,
-    tone: "emerald",
-    type: "number",
   },
   {
     current: 375000000,
-    description: "MRR pacing against the board target",
+    description: "Monthly recurring revenue from active subscriptions",
+    direction: "higher",
     id: "mrr",
     label: "MRR",
     owner: "Revenue",
+    riskThreshold: 75,
     target: 500000000,
-    tone: "violet",
+    tone: "emerald",
+    trend: { direction: "up", unit: "%", value: 6.1 },
     type: "currency",
   },
   {
-    current: 61,
-    description: "D7 cohort retention",
-    id: "d7-retention",
-    label: "D7 Retention",
-    owner: "Lifecycle",
-    target: 70,
-    tone: "amber",
-    type: "percentage",
-  },
-  {
-    current: 47,
-    description: "D30 cohort retention",
-    id: "d30-retention",
-    label: "D30 Retention",
-    owner: "Lifecycle",
-    target: 65,
+    current: 2.1,
+    description: "Subscription cancellation rate",
+    direction: "lower",
+    id: "churn-rate",
+    label: "Churn Rate",
+    owner: "Revenue",
+    precision: 1,
+    riskThreshold: 100,
+    target: 3,
+    targetPrefix: "<",
     tone: "rose",
+    trend: { direction: "down", unit: "pp", value: 0.6 },
     type: "percentage",
   },
 ]
 
 export const initialKpiGoals: KpiGoal[] = [
   {
-    d7RetentionTarget: 70,
-    d30RetentionTarget: 65,
+    activationRateTarget: 70,
+    churnRateTarget: 3,
+    d30RetentionTarget: 60,
     id: "goal-overall-jun",
     mrrTarget: 500000000,
-    paidUsersTarget: 6000,
     periodLabel: "June 2026",
     periodType: "Monthly",
     service: "Overall",
-    signupsTarget: 25000,
-    visitorsTarget: 300000,
+    signupConversionTarget: 8,
   },
   {
-    d7RetentionTarget: 73,
-    d30RetentionTarget: 66,
+    activationRateTarget: 74,
+    churnRateTarget: 2.8,
+    d30RetentionTarget: 63,
     id: "goal-yettey-q2",
     mrrTarget: 320000000,
-    paidUsersTarget: 3900,
     periodLabel: "Q2 2026",
     periodType: "Quarterly",
     service: "Yettey",
-    signupsTarget: 15500,
-    visitorsTarget: 180000,
+    signupConversionTarget: 8.4,
   },
   {
-    d7RetentionTarget: 68,
-    d30RetentionTarget: 58,
+    activationRateTarget: 66,
+    churnRateTarget: 3.2,
+    d30RetentionTarget: 55,
     id: "goal-vpick-q2",
     mrrTarget: 180000000,
-    paidUsersTarget: 2100,
     periodLabel: "Q2 2026",
     periodType: "Quarterly",
     service: "VPICK",
-    signupsTarget: 9500,
-    visitorsTarget: 120000,
+    signupConversionTarget: 7.2,
   },
 ]
 
@@ -178,7 +153,11 @@ export const kpiPeriodTypes: KpiPeriodType[] = ["Monthly", "Quarterly", "Yearly"
 
 export const kpiServices: KpiService[] = ["Overall", "Yettey", "VPICK"]
 
-export function formatKpiValue(value: number, type: KpiMetricType) {
+export function formatKpiValue(
+  value: number,
+  type: KpiMetricType,
+  precision = 0
+) {
   if (type === "currency") {
     if (value >= 100000000) {
       return `₩${Math.round(value / 1000000).toLocaleString()}M`
@@ -191,33 +170,61 @@ export function formatKpiValue(value: number, type: KpiMetricType) {
     }).format(value)
   }
 
-  if (type === "percentage") {
-    return `${value}%`
-  }
-
-  return value.toLocaleString()
+  return `${value.toFixed(precision)}%`
 }
 
-export function getKpiProgress(current: number, target: number) {
-  if (!target) {
+export function formatKpiTarget(metric: BusinessKpiMetric) {
+  return `${metric.targetPrefix ?? ""}${formatKpiValue(
+    metric.target,
+    metric.type,
+    metric.precision
+  )}`
+}
+
+export function formatTrend(trend: KpiTrend) {
+  const sign = trend.direction === "up" ? "+" : "-"
+
+  return `${sign}${trend.value}${trend.unit}`
+}
+
+export function getKpiProgress(metric: BusinessKpiMetric) {
+  if (!metric.target) {
     return 0
   }
 
-  return Math.round((current / target) * 100)
+  if (metric.direction === "lower") {
+    return Math.min(100, Math.round((metric.target / metric.current) * 100))
+  }
+
+  return Math.min(100, Math.round((metric.current / metric.target) * 100))
 }
 
-export function getKpiStatus(progress: number) {
-  if (progress >= 90) {
-    return "Ahead"
+export function getKpiStatus(metric: BusinessKpiMetric) {
+  const progress = getKpiProgress(metric)
+
+  if (metric.direction === "lower" && metric.current <= metric.target) {
+    return "Healthy"
   }
 
-  if (progress >= 75) {
-    return "On Track"
+  if (metric.direction === "higher" && metric.current >= metric.target) {
+    return "Healthy"
   }
 
-  if (progress >= 65) {
+  if (progress >= (metric.riskThreshold ?? 80)) {
     return "Watch"
   }
 
   return "At Risk"
+}
+
+export function isKpiAtRisk(metric: BusinessKpiMetric) {
+  return getKpiStatus(metric) === "At Risk"
+}
+
+export function isTrendHealthy(metric: BusinessKpiMetric) {
+  if (metric.direction === "lower") {
+    return metric.trend.direction === "down"
+  }
+
+  return metric.trend.direction === "up"
 }

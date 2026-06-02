@@ -28,22 +28,21 @@ import {
 type GoalForm = Omit<KpiGoal, "id">
 
 const emptyGoalForm: GoalForm = {
-  d7RetentionTarget: 70,
+  activationRateTarget: 70,
+  churnRateTarget: 3,
   d30RetentionTarget: 60,
   mrrTarget: 100000000,
-  paidUsersTarget: 1500,
   periodLabel: "June 2026",
   periodType: "Monthly",
   service: "Overall",
-  signupsTarget: 5000,
-  visitorsTarget: 75000,
+  signupConversionTarget: 8,
 }
 
 export default function KpiGoalsClient() {
   const [goals, setGoals] = useState<KpiGoal[]>(initialKpiGoals)
   const [editingId, setEditingId] = useState<string | null>(goals[0]?.id ?? null)
   const [form, setForm] = useState<GoalForm>(() => toGoalForm(goals[0] ?? emptyGoalForm))
-  const [feedback, setFeedback] = useState("Mock targets ready")
+  const [feedback, setFeedback] = useState("Mock health targets ready")
 
   const editingGoal = useMemo(
     () => goals.find((goal) => goal.id === editingId) ?? null,
@@ -53,7 +52,7 @@ export default function KpiGoalsClient() {
   const handleAddGoal = () => {
     setEditingId(null)
     setForm(emptyGoalForm)
-    setFeedback("New mock goal draft started")
+    setFeedback("New business health target draft started")
   }
 
   const handleEditGoal = (goal: KpiGoal) => {
@@ -73,7 +72,7 @@ export default function KpiGoalsClient() {
       setForm(toGoalForm(nextGoals[0] ?? emptyGoalForm))
     }
 
-    setFeedback(`${deletedGoal?.service ?? "Goal"} target deleted in mock state`)
+    setFeedback(`${deletedGoal?.service ?? "Goal"} health target deleted`)
   }
 
   const handleSaveGoal = () => {
@@ -81,7 +80,7 @@ export default function KpiGoalsClient() {
       setGoals((current) =>
         current.map((goal) => (goal.id === editingId ? { ...goal, ...form } : goal))
       )
-      setFeedback(`${form.service} ${form.periodLabel} target saved`)
+      setFeedback(`${form.service} ${form.periodLabel} health target saved`)
       return
     }
 
@@ -92,7 +91,7 @@ export default function KpiGoalsClient() {
 
     setGoals((current) => [newGoal, ...current])
     setEditingId(newGoal.id)
-    setFeedback(`${newGoal.service} ${newGoal.periodLabel} target added`)
+    setFeedback(`${newGoal.service} ${newGoal.periodLabel} health target added`)
   }
 
   return (
@@ -100,7 +99,7 @@ export default function KpiGoalsClient() {
       <PageHeader
         breadcrumbs={[{ label: "Dashboards" }, { label: "KPI" }, { label: "Goals" }]}
         title="KPI Goals"
-        description="Manage service-level KPI targets with mock add, edit, delete, and save actions."
+        description="Manage service-level business health targets with mock add, edit, delete, and save actions."
         actions={
           <AdminButton onClick={handleAddGoal} variant="primary">
             <Plus className="size-4" />
@@ -127,7 +126,7 @@ export default function KpiGoalsClient() {
                 Goal Sets
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Targets by service and reporting period.
+                Core health thresholds by service and reporting period.
               </p>
             </div>
             <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-600">
@@ -142,11 +141,11 @@ export default function KpiGoalsClient() {
                 <tr>
                   <th className="px-6 py-4">Service</th>
                   <th className="px-6 py-4">Period</th>
-                  <th className="px-6 py-4">Visitors</th>
-                  <th className="px-6 py-4">Signups</th>
-                  <th className="px-6 py-4">Paid Users</th>
+                  <th className="px-6 py-4">Signup Conversion</th>
+                  <th className="px-6 py-4">Activation</th>
+                  <th className="px-6 py-4">D30 Retention</th>
                   <th className="px-6 py-4">MRR</th>
-                  <th className="px-6 py-4">Retention</th>
+                  <th className="px-6 py-4">Churn</th>
                   <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -172,19 +171,19 @@ export default function KpiGoalsClient() {
                         </p>
                       </td>
                       <td className="whitespace-nowrap px-6 py-5 font-semibold text-slate-700">
-                        {goal.visitorsTarget.toLocaleString()}
+                        {formatKpiValue(goal.signupConversionTarget, "percentage", 1)}
                       </td>
                       <td className="whitespace-nowrap px-6 py-5 font-semibold text-slate-700">
-                        {goal.signupsTarget.toLocaleString()}
+                        {formatKpiValue(goal.activationRateTarget, "percentage")}
                       </td>
                       <td className="whitespace-nowrap px-6 py-5 font-semibold text-slate-700">
-                        {goal.paidUsersTarget.toLocaleString()}
+                        {formatKpiValue(goal.d30RetentionTarget, "percentage")}
                       </td>
                       <td className="whitespace-nowrap px-6 py-5 font-semibold text-slate-700">
                         {formatKpiValue(goal.mrrTarget, "currency")}
                       </td>
                       <td className="whitespace-nowrap px-6 py-5 font-semibold text-slate-700">
-                        D7 {goal.d7RetentionTarget}% / D30 {goal.d30RetentionTarget}%
+                        &lt;{formatKpiValue(goal.churnRateTarget, "percentage", 1)}
                       </td>
                       <td className="px-6 py-5">
                         <div className="flex justify-end gap-2">
@@ -246,22 +245,39 @@ function GoalEditor({
   const metricFields: Array<{
     key: keyof Pick<
       GoalForm,
-      | "d7RetentionTarget"
+      | "activationRateTarget"
+      | "churnRateTarget"
       | "d30RetentionTarget"
       | "mrrTarget"
-      | "paidUsersTarget"
-      | "signupsTarget"
-      | "visitorsTarget"
+      | "signupConversionTarget"
     >
     label: string
+    step?: number
     suffix?: string
   }> = [
-    { key: "visitorsTarget", label: "Visitors Target" },
-    { key: "signupsTarget", label: "Signups Target" },
-    { key: "paidUsersTarget", label: "Paid Users Target" },
-    { key: "mrrTarget", label: "MRR Target" },
-    { key: "d7RetentionTarget", label: "D7 Retention Target", suffix: "%" },
-    { key: "d30RetentionTarget", label: "D30 Retention Target", suffix: "%" },
+    {
+      key: "signupConversionTarget",
+      label: "Signup Conversion Target",
+      step: 0.1,
+      suffix: "%",
+    },
+    {
+      key: "activationRateTarget",
+      label: "Activation Rate Target",
+      suffix: "%",
+    },
+    {
+      key: "d30RetentionTarget",
+      label: "D30 Retention Target",
+      suffix: "%",
+    },
+    { key: "mrrTarget", label: "MRR Target", step: 1000000 },
+    {
+      key: "churnRateTarget",
+      label: "Churn Rate Target",
+      step: 0.1,
+      suffix: "%",
+    },
   ]
 
   return (
@@ -274,7 +290,7 @@ function GoalEditor({
           <p className="mt-1 text-sm text-slate-500">
             {editingGoal
               ? `${editingGoal.service} ${editingGoal.periodLabel}`
-              : "Create a new target set in mock state."}
+              : "Create a new health threshold set in mock state."}
           </p>
         </div>
         <button
@@ -335,6 +351,7 @@ function GoalEditor({
             <NumberField
               key={field.key}
               label={field.label}
+              step={field.step}
               suffix={field.suffix}
               value={form[field.key]}
               onChange={(value) => updateForm({ [field.key]: value })}
@@ -383,11 +400,13 @@ function Field({
 function NumberField({
   label,
   onChange,
+  step = 1,
   suffix,
   value,
 }: {
   label: string
   onChange: (value: number) => void
+  step?: number
   suffix?: string
   value: number
 }) {
@@ -401,6 +420,7 @@ function NumberField({
           className="min-w-0 flex-1 px-3 text-sm font-semibold text-slate-950 outline-none"
           min={0}
           onChange={(event) => onChange(Number(event.target.value))}
+          step={step}
           type="number"
           value={value}
         />
@@ -436,14 +456,13 @@ function ServicePill({ service }: { service: KpiService }) {
 
 function toGoalForm(goal: GoalForm | KpiGoal): GoalForm {
   return {
-    d7RetentionTarget: goal.d7RetentionTarget,
+    activationRateTarget: goal.activationRateTarget,
+    churnRateTarget: goal.churnRateTarget,
     d30RetentionTarget: goal.d30RetentionTarget,
     mrrTarget: goal.mrrTarget,
-    paidUsersTarget: goal.paidUsersTarget,
     periodLabel: goal.periodLabel,
     periodType: goal.periodType,
     service: goal.service,
-    signupsTarget: goal.signupsTarget,
-    visitorsTarget: goal.visitorsTarget,
+    signupConversionTarget: goal.signupConversionTarget,
   }
 }
