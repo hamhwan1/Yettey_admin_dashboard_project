@@ -15,6 +15,7 @@ import {
   Search,
   Settings,
   Sparkles,
+  Target,
   UserPlus,
   Users,
 } from "lucide-react"
@@ -96,6 +97,21 @@ export const sidebarNavigation: Record<TopMenuKey, SidebarItem[]> = {
       title: "Revenue",
       href: "/dashboard/revenue",
       icon: TrendingUp,
+    },
+    {
+      title: "KPI",
+      href: "/dashboard/kpi",
+      icon: Target,
+      children: [
+        {
+          title: "KPI Overview",
+          href: "/dashboard/kpi",
+        },
+        {
+          title: "KPI Goals",
+          href: "/dashboard/kpi/goals",
+        },
+      ],
     },
   ],
   users: [

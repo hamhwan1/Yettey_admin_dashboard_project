@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useState } from "react"
 import { ChevronDown, ChevronRight } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -37,23 +38,37 @@ function SidebarLink({
   const Icon = item.icon
   const hasChildren = Boolean(item.children?.length)
   const isActive = isSidebarItemActive(item, pathname)
+  const [expandedOverride, setExpandedOverride] = useState<boolean | null>(null)
+  const expanded = expandedOverride ?? isActive
 
   return (
     <div>
       {item.href ? (
-        <Link
-          href={item.href}
+        <div
           className={cn(
             "flex h-9 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-950",
             isActive && "bg-slate-200/70 text-slate-950 shadow-inner"
           )}
         >
-          {Icon ? <Icon className="size-4" aria-hidden="true" /> : null}
-          <span className="min-w-0 flex-1">{item.title}</span>
+          <Link href={item.href} className="flex min-w-0 flex-1 items-center gap-3">
+            {Icon ? <Icon className="size-4 shrink-0" aria-hidden="true" /> : null}
+            <span className="min-w-0 flex-1 truncate">{item.title}</span>
+          </Link>
           {hasChildren ? (
-            <ChevronDown className="size-4 text-slate-500" aria-hidden="true" />
+            <button
+              aria-label={expanded ? `Collapse ${item.title}` : `Expand ${item.title}`}
+              className="flex size-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition hover:bg-white hover:text-slate-950 hover:shadow-sm"
+              onClick={() => setExpandedOverride(!expanded)}
+              type="button"
+            >
+              {expanded ? (
+                <ChevronDown className="size-4" aria-hidden="true" />
+              ) : (
+                <ChevronRight className="size-4" aria-hidden="true" />
+              )}
+            </button>
           ) : null}
-        </Link>
+        </div>
       ) : (
         <div className="flex h-9 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-slate-600">
           {Icon ? <Icon className="size-4" aria-hidden="true" /> : null}
@@ -61,7 +76,7 @@ function SidebarLink({
         </div>
       )}
 
-      {item.children?.length ? (
+      {item.children?.length && expanded ? (
         <div className="mt-2 space-y-2 pl-3">
           {item.children.map((child) => (
             <ChildSidebarLink key={child.title} item={child} pathname={pathname} />
