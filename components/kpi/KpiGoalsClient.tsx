@@ -102,7 +102,7 @@ const emptyKpiForm: KpiForm = {
   calculationType: "manual",
   description: "Describe why this KPI matters and how administrators should interpret it.",
   direction: "higher",
-  displayOrder: 11,
+  displayOrder: 12,
   format: "percentage",
   name: "New KPI",
   periodType: "Monthly",

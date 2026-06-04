@@ -76,6 +76,7 @@ export type KpiConfiguration = {
 }
 
 export const kpiNameOptions = [
+  "Visitors",
   "Signup Conversion Rate",
   "Activation Rate",
   "D30 Retention",
@@ -161,10 +162,41 @@ export const initialEnterpriseContracts: EnterpriseContract[] = [
 export const initialKpiConfigurations: KpiConfiguration[] = [
   {
     calculationType: "manual",
+    currentValue: 235869,
+    description: "Total unique visitors across website and product entry points.",
+    direction: "higher",
+    displayOrder: 1,
+    format: "number",
+    history: [
+      {
+        changedBy,
+        date: "2026-06-01",
+        id: "kpi-history-visitors-1",
+        newValue: "300,000",
+        previousValue: "250,000",
+        reason: "Visitor target aligned to executive funnel reporting",
+      },
+    ],
+    id: "visitors",
+    lastUpdated: "2026-06-01",
+    name: "Visitors",
+    periodLabel: "June 2026",
+    periodType: "Monthly",
+    pinned: true,
+    representative: true,
+    riskThreshold: 75,
+    service: "Overall",
+    showOnOverview: true,
+    targetValue: 300000,
+    tone: "violet",
+    trend: { direction: "up", unit: "%", value: 8.2 },
+  },
+  {
+    calculationType: "manual",
     currentValue: 5.7,
     description: "Visitor to signup conversion across website and product entry points.",
     direction: "higher",
-    displayOrder: 1,
+    displayOrder: 2,
     format: "percentage",
     history: [
       {
@@ -196,7 +228,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     currentValue: 54,
     description: "Signup to first successful content generation. This is a priority Yettey health signal.",
     direction: "higher",
-    displayOrder: 2,
+    displayOrder: 3,
     format: "percentage",
     history: [
       {
@@ -227,7 +259,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     currentValue: 47,
     description: "Users returning after 30 days.",
     direction: "higher",
-    displayOrder: 3,
+    displayOrder: 4,
     format: "percentage",
     history: [
       {
@@ -258,7 +290,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     currentValue: 375000000,
     description: "Total revenue combining subscription revenue and active enterprise contracts.",
     direction: "higher",
-    displayOrder: 4,
+    displayOrder: 5,
     format: "currency",
     history: [
       {
@@ -289,7 +321,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     currentValue: 2.1,
     description: "Subscription cancellation rate. Lower is healthier.",
     direction: "lower",
-    displayOrder: 5,
+    displayOrder: 6,
     format: "percentage",
     history: [
       {
@@ -322,7 +354,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     currentValue: 18.4,
     description: "Signup to paid subscription conversion across self-serve plans.",
     direction: "higher",
-    displayOrder: 6,
+    displayOrder: 7,
     format: "percentage",
     history: [
       {
@@ -354,7 +386,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     currentValue: 0,
     description: "Manual enterprise contract revenue from active contracts.",
     direction: "higher",
-    displayOrder: 7,
+    displayOrder: 8,
     format: "currency",
     history: [
       {
@@ -385,7 +417,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     currentValue: 86000,
     description: "Average revenue per paying account.",
     direction: "higher",
-    displayOrder: 8,
+    displayOrder: 9,
     format: "currency",
     history: [
       {
@@ -415,7 +447,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     currentValue: 980000,
     description: "Estimated customer lifetime value.",
     direction: "higher",
-    displayOrder: 9,
+    displayOrder: 10,
     format: "currency",
     history: [
       {
@@ -445,7 +477,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     currentValue: 152000,
     description: "Customer acquisition cost. Lower is healthier.",
     direction: "lower",
-    displayOrder: 10,
+    displayOrder: 11,
     format: "currency",
     history: [
       {

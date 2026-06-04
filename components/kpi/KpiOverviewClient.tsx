@@ -27,11 +27,15 @@ import {
 
 export default function KpiOverviewClient() {
   const { contracts, kpis } = useKpiManagementStore()
-  const visibleKpis = kpis
-    .filter((kpi) => !kpi.archived && kpi.showOnOverview)
-    .sort((a, b) => a.displayOrder - b.displayOrder)
-  const representativeKpis = visibleKpis.filter((kpi) => kpi.representative)
-  const scoreboardKpis = visibleKpis.filter((kpi) => !kpi.representative)
+  const overviewKpis = kpis.filter(
+    (kpi) => !kpi.archived && kpi.showOnOverview
+  )
+  const representativeKpis = overviewKpis
+    .filter((kpi) => kpi.representative)
+    .sort(sortKpisByDisplayOrder)
+  const scoreboardKpis = overviewKpis
+    .filter((kpi) => !kpi.representative)
+    .sort(sortKpisByDisplayOrder)
 
   return (
     <DashboardLayout>
@@ -222,6 +226,19 @@ function representativeGridClass(count: number) {
   }
 
   return ""
+}
+
+function sortKpisByDisplayOrder(
+  first: KpiConfiguration,
+  second: KpiConfiguration
+) {
+  return normalizedDisplayOrder(first) - normalizedDisplayOrder(second)
+}
+
+function normalizedDisplayOrder(kpi: KpiConfiguration) {
+  return Number.isFinite(kpi.displayOrder)
+    ? kpi.displayOrder
+    : Number.MAX_SAFE_INTEGER
 }
 
 function ProgressMeter({ progress, tone }: { progress: number; tone: KpiTone }) {

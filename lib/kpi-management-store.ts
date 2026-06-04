@@ -17,6 +17,19 @@ import {
 const mockChangedBy = "Ham Hwan"
 const mockToday = "2026-06-04"
 
+const legacyDefaultKpiOrders = new Map([
+  ["signup-conversion-rate", 1],
+  ["activation-rate", 2],
+  ["d30-retention", 3],
+  ["mrr", 4],
+  ["churn-rate", 5],
+  ["paid-conversion-rate", 6],
+  ["enterprise-revenue", 7],
+  ["arpu", 8],
+  ["ltv", 9],
+  ["cac", 10],
+])
+
 type KpiManagementState = {
   contracts: EnterpriseContract[]
   kpis: KpiConfiguration[]
@@ -193,7 +206,9 @@ export const useKpiManagementStore = create<KpiManagementState>()(
           contracts: (persisted?.contracts ?? currentState.contracts).map(
             normalizeContract
           ),
-          kpis: (persisted?.kpis ?? currentState.kpis).map(normalizeKpi),
+          kpis: mergeKpisWithInitialDefaults(
+            persisted?.kpis ?? currentState.kpis
+          ),
         }
       },
       name: "yettey-kpi-management",
@@ -305,4 +320,57 @@ function normalizeKpi(kpi: KpiConfiguration): KpiConfiguration {
     representative: kpi.representative ?? kpi.pinned ?? false,
     targetPrefix: kpi.direction === "lower" ? "<" : undefined,
   }
+}
+
+function mergeKpisWithInitialDefaults(kpis: KpiConfiguration[]) {
+  const normalizedKpis = kpis.map(normalizeKpi)
+  const adoptUpdatedDefaultOrder = usesLegacyDefaultKpiOrder(normalizedKpis)
+  const usedKpiIds = new Set<string>()
+
+  const defaultKpis = initialKpiConfigurations.map((defaultKpi) => {
+    const existingKpi = normalizedKpis.find(
+      (kpi) =>
+        kpi.id === defaultKpi.id ||
+        normalizeKpiName(kpi.name) === normalizeKpiName(defaultKpi.name)
+    )
+
+    if (!existingKpi) {
+      return normalizeKpi(defaultKpi)
+    }
+
+    usedKpiIds.add(existingKpi.id)
+
+    if (adoptUpdatedDefaultOrder && legacyDefaultKpiOrders.has(existingKpi.id)) {
+      return normalizeKpi({
+        ...existingKpi,
+        displayOrder: defaultKpi.displayOrder,
+      })
+    }
+
+    return existingKpi
+  })
+
+  const customKpis = normalizedKpis.filter((kpi) => !usedKpiIds.has(kpi.id))
+
+  return [...defaultKpis, ...customKpis]
+}
+
+function usesLegacyDefaultKpiOrder(kpis: KpiConfiguration[]) {
+  const hasVisitors = kpis.some(
+    (kpi) => normalizeKpiName(kpi.name) === "visitors"
+  )
+
+  if (hasVisitors) {
+    return false
+  }
+
+  return kpis.every((kpi) => {
+    const legacyOrder = legacyDefaultKpiOrders.get(kpi.id)
+
+    return legacyOrder === undefined || kpi.displayOrder === legacyOrder
+  })
+}
+
+function normalizeKpiName(name: string) {
+  return name.trim().toLowerCase()
 }
