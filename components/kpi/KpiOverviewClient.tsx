@@ -4,14 +4,9 @@ import {
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
-  BadgeDollarSign,
-  Building2,
   CheckCircle2,
-  CreditCard,
   Gauge,
   Target,
-  TrendingUp,
-  UserPlus,
 } from "lucide-react"
 
 import PageHeader from "@/components/admin/PageHeader"
@@ -33,19 +28,6 @@ import {
   type KpiConfiguration,
   type KpiTone,
 } from "./kpi-data"
-
-const summaryIcons = {
-  "activation-rate": Gauge,
-  "arpu": BadgeDollarSign,
-  "cac": AlertTriangle,
-  "churn-rate": AlertTriangle,
-  "d30-retention": Target,
-  "enterprise-revenue": Building2,
-  "ltv": TrendingUp,
-  "mrr": CreditCard,
-  "paid-conversion-rate": CreditCard,
-  "signup-conversion-rate": UserPlus,
-}
 
 export default function KpiOverviewClient() {
   const { contracts, kpis } = useKpiManagementStore()
@@ -169,8 +151,6 @@ function KpiSummaryCard({
 }) {
   const currentValue = getKpiCurrentValue(metric, contracts)
   const progress = getKpiProgress(metric, contracts)
-  const status = getKpiStatus(metric, contracts)
-  const Icon = summaryIcons[metric.id as keyof typeof summaryIcons] ?? TrendingUp
   const formattedCurrentValue = formatKpiValue(
     currentValue,
     metric.format,
@@ -178,28 +158,18 @@ function KpiSummaryCard({
   )
 
   return (
-    <article className="flex min-h-64 flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-[0_2px_4px_rgba(15,23,42,0.08),0_16px_32px_rgba(15,23,42,0.08)]">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-500">{metric.name}</p>
-          <p
-            className={cn(
-              "mt-3 max-w-full whitespace-nowrap font-bold tracking-tight text-slate-950",
-              valueSizeClass(formattedCurrentValue)
-            )}
-            title={getCurrentValueTitle(metric, contracts)}
-          >
-            {formattedCurrentValue}
-          </p>
-        </div>
-        <span
+    <article className="flex min-h-56 flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-[0_2px_4px_rgba(15,23,42,0.08),0_16px_32px_rgba(15,23,42,0.08)]">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-slate-500">{metric.name}</p>
+        <p
           className={cn(
-            "flex size-11 shrink-0 items-center justify-center rounded-xl",
-            toneClass(metric.tone, "soft")
+            "mt-3 max-w-full whitespace-nowrap font-bold tracking-tight text-slate-950",
+            valueSizeClass(formattedCurrentValue)
           )}
+          title={getCurrentValueTitle(metric, contracts)}
         >
-          <Icon className="size-5" aria-hidden="true" />
-        </span>
+          {formattedCurrentValue}
+        </p>
       </div>
 
       <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50 p-3">
@@ -220,60 +190,8 @@ function KpiSummaryCard({
         <ProgressBar progress={progress} tone={metric.tone} className="mt-3" />
       </div>
 
-      {metric.calculationType === "totalRevenue" ? (
-        <RevenueBreakdownDetails
-          contracts={contracts}
-          subscriptionRevenue={metric.currentValue}
-        />
-      ) : null}
-
-      <div className="mt-auto pt-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <TrendBadge metric={metric} />
-          <StatusBadge tone={statusTone(status)}>{status}</StatusBadge>
-        </div>
-        <p className="mt-4 text-sm leading-5 text-slate-500">{metric.description}</p>
-      </div>
+      <p className="mt-5 text-sm leading-5 text-slate-500">{metric.description}</p>
     </article>
-  )
-}
-
-function RevenueBreakdownDetails({
-  contracts,
-  subscriptionRevenue,
-}: {
-  contracts: EnterpriseContract[]
-  subscriptionRevenue: number
-}) {
-  const enterpriseRevenue = getActiveEnterpriseRevenue(contracts)
-  const totalRevenue = subscriptionRevenue + enterpriseRevenue
-
-  return (
-    <details className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
-      <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-emerald-700">
-        Revenue Detail
-      </summary>
-      <dl className="mt-3 space-y-2 text-sm">
-        <div className="flex items-center justify-between gap-3">
-          <dt className="font-semibold text-emerald-700">Subscription Revenue</dt>
-          <dd className="font-bold text-slate-950">
-            {formatKpiValue(subscriptionRevenue, "currency")}
-          </dd>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <dt className="font-semibold text-emerald-700">Enterprise Revenue</dt>
-          <dd className="font-bold text-slate-950">
-            {formatKpiValue(enterpriseRevenue, "currency")}
-          </dd>
-        </div>
-        <div className="flex items-center justify-between gap-3 border-t border-emerald-100 pt-2">
-          <dt className="font-bold text-emerald-800">Total Revenue</dt>
-          <dd className="font-bold text-slate-950">
-            {formatKpiValue(totalRevenue, "currency")}
-          </dd>
-        </div>
-      </dl>
-    </details>
   )
 }
 
