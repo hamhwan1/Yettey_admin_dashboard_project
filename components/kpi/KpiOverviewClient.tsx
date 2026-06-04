@@ -50,7 +50,7 @@ const summaryIcons = {
 export default function KpiOverviewClient() {
   const { contracts, kpis } = useKpiManagementStore()
   const visibleKpis = kpis
-    .filter((kpi) => kpi.showOnOverview)
+    .filter((kpi) => !kpi.archived && kpi.showOnOverview)
     .sort((a, b) => a.displayOrder - b.displayOrder)
   const pinnedKpis = visibleKpis.filter((kpi) => kpi.pinned)
   const scoreboardKpis = visibleKpis.filter((kpi) => !kpi.pinned)
@@ -177,7 +177,10 @@ function KpiSummaryCard({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-slate-500">{metric.name}</p>
-          <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
+          <p
+            className="mt-3 text-3xl font-bold tracking-tight text-slate-950"
+            title={getCurrentValueTitle(metric, contracts)}
+          >
             {formatKpiValue(currentValue, metric.format, metric.precision)}
           </p>
         </div>
@@ -210,7 +213,10 @@ function KpiSummaryCard({
       </div>
 
       {metric.calculationType === "totalRevenue" ? (
-        <RevenueBreakdown contracts={contracts} subscriptionRevenue={metric.currentValue} />
+        <RevenueBreakdownDetails
+          contracts={contracts}
+          subscriptionRevenue={metric.currentValue}
+        />
       ) : null}
 
       <div className="mt-auto pt-5">
@@ -224,7 +230,7 @@ function KpiSummaryCard({
   )
 }
 
-function RevenueBreakdown({
+function RevenueBreakdownDetails({
   contracts,
   subscriptionRevenue,
 }: {
@@ -235,10 +241,10 @@ function RevenueBreakdown({
   const totalRevenue = subscriptionRevenue + enterpriseRevenue
 
   return (
-    <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
-      <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
-        Revenue Breakdown
-      </p>
+    <details className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
+      <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-emerald-700">
+        Revenue Detail
+      </summary>
       <dl className="mt-3 space-y-2 text-sm">
         <div className="flex items-center justify-between gap-3">
           <dt className="font-semibold text-emerald-700">Subscription Revenue</dt>
@@ -259,7 +265,7 @@ function RevenueBreakdown({
           </dd>
         </div>
       </dl>
-    </div>
+    </details>
   )
 }
 
