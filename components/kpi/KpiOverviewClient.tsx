@@ -1,11 +1,8 @@
 "use client"
 
 import {
-  AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
-  CheckCircle2,
-  Gauge,
   Target,
 } from "lucide-react"
 
@@ -22,7 +19,6 @@ import {
   getKpiCurrentValue,
   getKpiProgress,
   getKpiStatus,
-  isKpiAtRisk,
   isTrendHealthy,
   type EnterpriseContract,
   type KpiConfiguration,
@@ -36,7 +32,6 @@ export default function KpiOverviewClient() {
     .sort((a, b) => a.displayOrder - b.displayOrder)
   const representativeKpis = visibleKpis.filter((kpi) => kpi.representative)
   const scoreboardKpis = visibleKpis.filter((kpi) => !kpi.representative)
-  const riskMetrics = visibleKpis.filter((kpi) => isKpiAtRisk(kpi, contracts))
 
   return (
     <DashboardLayout>
@@ -56,88 +51,94 @@ export default function KpiOverviewClient() {
         )}
       </section>
 
-      <div className="grid gap-8 xl:grid-cols-[1fr_360px]">
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
-          <div className="flex flex-col gap-3 border-b border-slate-100 p-6 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold tracking-tight text-slate-950">
-                KPI Scoreboard
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Supporting KPIs selected by administrators for the overview.
-              </p>
-            </div>
-            <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-600">
-              <Target className="size-4 text-violet-600" />
-              {scoreboardKpis.length} visible KPIs
-            </div>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight text-slate-950">
+              KPI Scoreboard
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Supporting KPIs selected by administrators for the overview.
+            </p>
           </div>
+          <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-600">
+            <Target className="size-4 text-violet-600" />
+            {scoreboardKpis.length} visible KPIs
+          </div>
+        </div>
 
-          {scoreboardKpis.length ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-[940px] w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th className="px-6 py-4">KPI</th>
-                    <th className="px-6 py-4">Current</th>
-                    <th className="px-6 py-4">Target</th>
-                    <th className="px-6 py-4">Progress</th>
-                    <th className="px-6 py-4">Trend</th>
-                    <th className="px-6 py-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {scoreboardKpis.map((metric) => {
-                    const progress = getKpiProgress(metric, contracts)
-                    const status = getKpiStatus(metric, contracts)
+        {scoreboardKpis.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1080px] table-fixed text-sm">
+              <colgroup>
+                <col className="w-[30%]" />
+                <col className="w-[15%]" />
+                <col className="w-[15%]" />
+                <col className="w-[20%]" />
+                <col className="w-[10%]" />
+                <col className="w-[10%]" />
+              </colgroup>
+              <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-6 py-4">KPI</th>
+                  <th className="px-6 py-4">Current</th>
+                  <th className="px-6 py-4">Target</th>
+                  <th className="px-6 py-4">Progress</th>
+                  <th className="px-6 py-4">Trend</th>
+                  <th className="px-6 py-4">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {scoreboardKpis.map((metric) => {
+                  const progress = getKpiProgress(metric, contracts)
+                  const status = getKpiStatus(metric, contracts)
 
-                    return (
-                      <tr key={metric.id} className="transition hover:bg-violet-50/40">
-                        <td className="px-6 py-5">
-                          <div>
-                            <p className="font-bold text-slate-950">{metric.name}</p>
-                            <p className="mt-1 text-xs font-semibold text-slate-500">
-                              {metric.service} / {metric.periodType}
-                            </p>
-                          </div>
-                        </td>
-                        <td
-                          className="whitespace-nowrap px-6 py-5 font-semibold text-slate-800"
-                          title={getCurrentValueTitle(metric, contracts)}
-                        >
-                          {formatKpiValue(
-                            getKpiCurrentValue(metric, contracts),
-                            metric.format,
-                            metric.precision
-                          )}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-5 font-semibold text-slate-500">
-                          {formatKpiTarget(metric)}
-                        </td>
-                        <td className="px-6 py-5">
-                          <ProgressMeter progress={progress} tone={metric.tone} />
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-5">
-                          <TrendBadge metric={metric} />
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-5">
-                          <StatusBadge tone={statusTone(status)}>{status}</StatusBadge>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="p-6">
-              <EmptyPanel message="No non-pinned KPIs are visible on the scoreboard." />
-            </div>
-          )}
-        </section>
-
-        <RiskKpiPanel contracts={contracts} metrics={riskMetrics} />
-      </div>
+                  return (
+                    <tr key={metric.id} className="transition hover:bg-violet-50/40">
+                      <td className="px-6 py-5">
+                        <div className="min-w-0">
+                          <p className="whitespace-nowrap font-bold text-slate-950">
+                            {metric.name}
+                          </p>
+                          <p className="mt-1 text-xs font-semibold text-slate-500">
+                            {metric.service} / {metric.periodType}
+                          </p>
+                        </div>
+                      </td>
+                      <td
+                        className="whitespace-nowrap px-6 py-5 font-semibold text-slate-800"
+                        title={getCurrentValueTitle(metric, contracts)}
+                      >
+                        {formatKpiValue(
+                          getKpiCurrentValue(metric, contracts),
+                          metric.format,
+                          metric.precision
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-5 font-semibold text-slate-500">
+                        {formatKpiTarget(metric)}
+                      </td>
+                      <td className="px-6 py-5">
+                        <ProgressMeter progress={progress} tone={metric.tone} />
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-5">
+                        <TrendBadge metric={metric} />
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-5">
+                        <StatusBadge tone={statusTone(status)}>{status}</StatusBadge>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-6">
+            <EmptyPanel message="No non-pinned KPIs are visible on the scoreboard." />
+          </div>
+        )}
+      </section>
     </DashboardLayout>
   )
 }
@@ -192,92 +193,6 @@ function KpiSummaryCard({
 
       <p className="mt-5 text-sm leading-5 text-slate-500">{metric.description}</p>
     </article>
-  )
-}
-
-function RiskKpiPanel({
-  contracts,
-  metrics,
-}: {
-  contracts: EnterpriseContract[]
-  metrics: KpiConfiguration[]
-}) {
-  return (
-    <aside className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight text-slate-950">
-            Risk KPI
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Visible KPIs below their intervention threshold.
-          </p>
-        </div>
-        <span className="flex size-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
-          <AlertTriangle className="size-5" />
-        </span>
-      </div>
-
-      <div className="mt-6 space-y-3">
-        {metrics.length ? (
-          metrics.map((metric) => {
-            const currentValue = getKpiCurrentValue(metric, contracts)
-            const progress = getKpiProgress(metric, contracts)
-            const critical = progress < 75
-
-            return (
-              <div
-                key={metric.id}
-                className={cn(
-                  "rounded-2xl border p-4",
-                  critical
-                    ? "border-rose-100 bg-rose-50/70"
-                    : "border-amber-100 bg-amber-50/70"
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    className={cn(
-                      "flex size-8 shrink-0 items-center justify-center rounded-full",
-                      critical
-                        ? "bg-rose-100 text-rose-600"
-                        : "bg-amber-100 text-amber-600"
-                    )}
-                  >
-                    {critical ? (
-                      <AlertTriangle className="size-4" />
-                    ) : (
-                      <Gauge className="size-4" />
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-slate-950">
-                      {metric.name}
-                    </p>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">
-                      {formatKpiValue(currentValue, metric.format, metric.precision)} /{" "}
-                      {formatKpiTarget(metric)}
-                    </p>
-                  </div>
-                  <p className="shrink-0 text-lg font-bold text-slate-950">
-                    {progress}%
-                  </p>
-                </div>
-              </div>
-            )
-          })
-        ) : (
-          <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="size-5 text-emerald-600" />
-              <p className="text-sm font-bold text-emerald-700">
-                All visible KPIs are within the current health threshold.
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-    </aside>
   )
 }
 
