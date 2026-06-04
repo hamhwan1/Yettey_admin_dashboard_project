@@ -41,7 +41,12 @@ export default function KpiOverviewClient() {
         description="Monitor administrator-selected business health indicators for Yettey and VPICK."
       />
 
-      <section className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+      <section
+        className={cn(
+          "mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3",
+          representativeGridClass(representativeKpis.length)
+        )}
+      >
         {representativeKpis.length ? (
           representativeKpis.map((metric) => (
             <KpiSummaryCard key={metric.id} contracts={contracts} metric={metric} />
@@ -159,12 +164,14 @@ function KpiSummaryCard({
   )
 
   return (
-    <article className="flex min-h-56 flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-[0_2px_4px_rgba(15,23,42,0.08),0_16px_32px_rgba(15,23,42,0.08)]">
+    <article className="flex min-h-56 min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-[0_2px_4px_rgba(15,23,42,0.08),0_16px_32px_rgba(15,23,42,0.08)] min-[1180px]:p-4">
       <div className="min-w-0">
-        <p className="text-sm font-semibold text-slate-500">{metric.name}</p>
+        <p className="text-xs font-semibold leading-4 text-slate-500">
+          {metric.name}
+        </p>
         <p
           className={cn(
-            "mt-3 max-w-full whitespace-nowrap font-bold tracking-tight text-slate-950",
+            "mt-3 max-w-full whitespace-nowrap font-bold leading-tight tracking-tight text-slate-950 tabular-nums",
             valueSizeClass(formattedCurrentValue)
           )}
           title={getCurrentValueTitle(metric, contracts)}
@@ -178,7 +185,12 @@ function KpiSummaryCard({
           <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
             Target
           </span>
-          <span className="text-sm font-bold text-slate-950">
+          <span
+            className={cn(
+              "min-w-0 max-w-full whitespace-nowrap text-right font-bold text-slate-950 tabular-nums",
+              compactValueSizeClass(formatKpiTarget(metric))
+            )}
+          >
             {formatKpiTarget(metric)}
           </span>
         </div>
@@ -186,14 +198,30 @@ function KpiSummaryCard({
           <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
             Progress
           </span>
-          <span className="text-sm font-bold text-slate-950">{progress}%</span>
+          <span className="whitespace-nowrap text-sm font-bold text-slate-950 tabular-nums">
+            {progress}%
+          </span>
         </div>
         <ProgressBar progress={progress} tone={metric.tone} className="mt-3" />
       </div>
 
-      <p className="mt-5 text-sm leading-5 text-slate-500">{metric.description}</p>
+      <p className="mt-5 text-xs leading-5 text-slate-500">
+        {metric.description}
+      </p>
     </article>
   )
+}
+
+function representativeGridClass(count: number) {
+  if (count >= 5) {
+    return "[@media(min-width:1180px)]:grid-cols-5"
+  }
+
+  if (count === 4) {
+    return "[@media(min-width:1180px)]:grid-cols-4"
+  }
+
+  return ""
 }
 
 function ProgressMeter({ progress, tone }: { progress: number; tone: KpiTone }) {
@@ -315,16 +343,32 @@ function toneClass(tone: KpiTone, variant: "soft" | "solid") {
 
 function valueSizeClass(value: string) {
   if (value.length >= 18) {
-    return "text-lg"
+    return "text-xs"
   }
 
   if (value.length >= 15) {
-    return "text-xl"
+    return "text-sm"
+  }
+
+  if (value.length >= 13) {
+    return "text-base"
   }
 
   if (value.length >= 12) {
-    return "text-2xl"
+    return "text-lg"
   }
 
   return "text-3xl"
+}
+
+function compactValueSizeClass(value: string) {
+  if (value.length >= 18) {
+    return "text-[10px]"
+  }
+
+  if (value.length >= 13) {
+    return "text-[11px]"
+  }
+
+  return "text-sm"
 }
