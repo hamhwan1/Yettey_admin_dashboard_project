@@ -11,6 +11,7 @@ import {
   Plus,
   RotateCcw,
   Save,
+  Search,
   Settings2,
 } from "lucide-react"
 
@@ -22,6 +23,7 @@ import { useKpiManagementStore } from "@/lib/kpi-management-store"
 import { cn } from "@/lib/utils"
 import {
   createKpiId,
+  formatEditableNumber,
   formatKpiTarget,
   formatKpiValue,
   getActiveEnterpriseRevenue,
@@ -31,6 +33,7 @@ import {
   kpiNameOptions,
   kpiPeriodTypes,
   kpiServices,
+  parseEditableNumber,
   type EnterpriseContract,
   type EnterpriseContractStatus,
   type KpiCalculationType,
@@ -57,10 +60,13 @@ type KpiForm = Pick<
   | "name"
   | "periodType"
   | "pinned"
+  | "representative"
   | "service"
   | "showOnOverview"
   | "targetValue"
 >
+
+type ArchiveFilter = "active" | "all" | "archived"
 
 const contractStatuses: EnterpriseContractStatus[] = ["Active", "Expired", "Pending"]
 
@@ -101,6 +107,7 @@ const emptyKpiForm: KpiForm = {
   name: "New KPI",
   periodType: "Monthly",
   pinned: false,
+  representative: false,
   service: "Overall",
   showOnOverview: false,
   targetValue: 0,
@@ -115,32 +122,63 @@ export default function KpiGoalsClient() {
     contracts,
     kpis,
     resetKpiManagement,
+    restoreContract,
+    restoreKpi,
   } = useKpiManagementStore()
   const [kpiModalOpen, setKpiModalOpen] = useState(false)
   const [contractModalOpen, setContractModalOpen] = useState(false)
+  const [contractArchiveFilter, setContractArchiveFilter] =
+    useState<ArchiveFilter>("active")
+  const [contractSearch, setContractSearch] = useState("")
+  const [kpiArchiveFilter, setKpiArchiveFilter] = useState<ArchiveFilter>("active")
   const [kpiForm, setKpiForm] = useState<KpiForm>(() => ({
     ...emptyKpiForm,
     displayOrder: getNextKpiOrder(initialKpiConfigurations),
   }))
+  const [kpiSearch, setKpiSearch] = useState("")
   const [contractForm, setContractForm] =
     useState<ContractForm>(emptyContractForm)
   const [feedback, setFeedback] = useState("KPI list architecture ready")
 
-  const activeKpis = useMemo(
+  const filteredKpis = useMemo(
     () =>
       kpis
-        .filter((kpi) => !kpi.archived)
+        .filter((kpi) => matchesArchiveFilter(kpi.archived, kpiArchiveFilter))
+        .filter((kpi) =>
+          matchesSearch(kpiSearch, [
+            kpi.name,
+            kpi.description,
+            kpi.service,
+            kpi.periodLabel,
+            kpi.periodType,
+          ])
+        )
         .sort((a, b) => a.displayOrder - b.displayOrder),
-    [kpis]
+    [kpiArchiveFilter, kpiSearch, kpis]
   )
-  const activeContracts = useMemo(
+  const filteredContracts = useMemo(
     () =>
       contracts
-        .filter((contract) => !contract.archived)
+        .filter((contract) =>
+          matchesArchiveFilter(contract.archived, contractArchiveFilter)
+        )
+        .filter((contract) =>
+          matchesSearch(contractSearch, [
+            contract.companyName,
+            contract.contractStatus,
+            contract.contractStartDate,
+            contract.contractEndDate,
+            contract.notes,
+          ])
+        )
         .sort((a, b) => a.companyName.localeCompare(b.companyName)),
-    [contracts]
+    [contractArchiveFilter, contractSearch, contracts]
   )
   const activeEnterpriseRevenue = getActiveEnterpriseRevenue(contracts)
+  const activeKpiCount = kpis.filter((kpi) => !kpi.archived).length
+  const archivedKpiCount = kpis.filter((kpi) => kpi.archived).length
+  const activeContractCount = contracts.filter((contract) => !contract.archived).length
+  const archivedContractCount = contracts.filter((contract) => contract.archived).length
 
   const openKpiModal = () => {
     setKpiForm({ ...emptyKpiForm, displayOrder: getNextKpiOrder(kpis) })
@@ -245,27 +283,53 @@ export default function KpiGoalsClient() {
           <p className="font-bold text-violet-700">{feedback}</p>
         </div>
         <p className="font-semibold text-violet-600">
-          {activeKpis.length} active KPIs / {activeKpis.filter((kpi) => kpi.showOnOverview).length} overview KPIs
+          {activeKpiCount} active KPIs / {archivedKpiCount} archived
         </p>
       </div>
 
       <div className="space-y-8">
         <KpiListTable
+          archiveFilter={kpiArchiveFilter}
           contracts={contracts}
-          kpis={activeKpis}
+          kpis={filteredKpis}
           onArchive={(kpi) => {
             archiveKpi(kpi.id)
             setFeedback(`${kpi.name} archived from active KPI list`)
+          }}
+          onFilterChange={setKpiArchiveFilter}
+          onRestore={(kpi) => {
+            restoreKpi(kpi.id)
+            setFeedback(`${kpi.name} restored to active KPI list`)
+          }}
+          onSearchChange={setKpiSearch}
+          search={kpiSearch}
+          totals={{
+            active: activeKpiCount,
+            archived: archivedKpiCount,
+            all: kpis.length,
           }}
         />
 
         <EnterpriseRevenueList
           activeEnterpriseRevenue={activeEnterpriseRevenue}
-          contracts={activeContracts}
+          archiveFilter={contractArchiveFilter}
+          contracts={filteredContracts}
           onAdd={openContractModal}
           onArchive={(contract) => {
             archiveContract(contract.id)
             setFeedback(`${contract.companyName} contract archived`)
+          }}
+          onFilterChange={setContractArchiveFilter}
+          onRestore={(contract) => {
+            restoreContract(contract.id)
+            setFeedback(`${contract.companyName} contract restored`)
+          }}
+          onSearchChange={setContractSearch}
+          search={contractSearch}
+          totals={{
+            active: activeContractCount,
+            archived: archivedContractCount,
+            all: contracts.length,
           }}
         />
       </div>
@@ -292,13 +356,25 @@ export default function KpiGoalsClient() {
 }
 
 function KpiListTable({
+  archiveFilter,
   contracts,
   kpis,
   onArchive,
+  onFilterChange,
+  onRestore,
+  onSearchChange,
+  search,
+  totals,
 }: {
+  archiveFilter: ArchiveFilter
   contracts: EnterpriseContract[]
   kpis: KpiConfiguration[]
   onArchive: (kpi: KpiConfiguration) => void
+  onFilterChange: (filter: ArchiveFilter) => void
+  onRestore: (kpi: KpiConfiguration) => void
+  onSearchChange: (value: string) => void
+  search: string
+  totals: Record<ArchiveFilter, number>
 }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
@@ -311,9 +387,21 @@ function KpiListTable({
             Active business KPIs with current status and target ownership.
           </p>
         </div>
-        <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-600">
-          <CalendarRange className="size-4 text-violet-600" />
-          Monthly / Quarterly / Yearly
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <SearchField
+            onChange={onSearchChange}
+            placeholder="Search KPIs"
+            value={search}
+          />
+          <ArchiveFilterControl
+            activeFilter={archiveFilter}
+            onChange={onFilterChange}
+            totals={totals}
+          />
+          <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-600">
+            <CalendarRange className="size-4 text-violet-600" />
+            Monthly / Quarterly / Yearly
+          </div>
         </div>
       </div>
 
@@ -347,6 +435,11 @@ function KpiListTable({
                     <p className="mt-1 line-clamp-1 max-w-80 text-xs font-semibold text-slate-500">
                       {kpi.description}
                     </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <MiniFlag active={kpi.showOnOverview}>Overview</MiniFlag>
+                      <MiniFlag active={kpi.representative}>Representative</MiniFlag>
+                      <MiniFlag active={kpi.pinned}>Pinned</MiniFlag>
+                    </div>
                   </td>
                   <td className="whitespace-nowrap px-6 py-5 font-semibold text-slate-700">
                     {kpi.service}
@@ -387,14 +480,30 @@ function KpiListTable({
                       >
                         <Pencil className="size-4" />
                       </ActionLink>
-                      <ActionButton label="Archive" onClick={() => onArchive(kpi)}>
-                        <Archive className="size-4" />
-                      </ActionButton>
+                      {kpi.archived ? (
+                        <ActionButton label="Restore" onClick={() => onRestore(kpi)}>
+                          <RotateCcw className="size-4" />
+                        </ActionButton>
+                      ) : (
+                        <ActionButton label="Archive" onClick={() => onArchive(kpi)}>
+                          <Archive className="size-4" />
+                        </ActionButton>
+                      )}
                     </div>
                   </td>
                 </tr>
               )
             })}
+            {!kpis.length ? (
+              <tr>
+                <td
+                  className="px-6 py-8 text-sm font-semibold text-slate-500"
+                  colSpan={8}
+                >
+                  No KPI records match this filter.
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>
@@ -404,14 +513,26 @@ function KpiListTable({
 
 function EnterpriseRevenueList({
   activeEnterpriseRevenue,
+  archiveFilter,
   contracts,
   onAdd,
   onArchive,
+  onFilterChange,
+  onRestore,
+  onSearchChange,
+  search,
+  totals,
 }: {
   activeEnterpriseRevenue: number
+  archiveFilter: ArchiveFilter
   contracts: EnterpriseContract[]
   onAdd: () => void
   onArchive: (contract: EnterpriseContract) => void
+  onFilterChange: (filter: ArchiveFilter) => void
+  onRestore: (contract: EnterpriseContract) => void
+  onSearchChange: (value: string) => void
+  search: string
+  totals: Record<ArchiveFilter, number>
 }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
@@ -424,7 +545,17 @@ function EnterpriseRevenueList({
             Dedicated contract records used in total revenue calculations.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <SearchField
+            onChange={onSearchChange}
+            placeholder="Search contracts"
+            value={search}
+          />
+          <ArchiveFilterControl
+            activeFilter={archiveFilter}
+            onChange={onFilterChange}
+            totals={totals}
+          />
           <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">
             <Building2 className="size-4" />
             {formatKpiValue(activeEnterpriseRevenue, "currency")} active
@@ -450,8 +581,13 @@ function EnterpriseRevenueList({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {contracts.map((contract) => (
-              <tr key={contract.id} className="transition hover:bg-violet-50/40">
+            {contracts.map((contract) => {
+              const displayStatus = contract.archived
+                ? "Archived"
+                : contract.contractStatus
+
+              return (
+                <tr key={contract.id} className="transition hover:bg-violet-50/40">
                 <td className="whitespace-nowrap px-6 py-5">
                   <Link
                     className="font-bold text-slate-950 transition hover:text-violet-700"
@@ -470,8 +606,14 @@ function EnterpriseRevenueList({
                   {contract.contractEndDate}
                 </td>
                 <td className="whitespace-nowrap px-6 py-5">
-                  <StatusBadge tone={contractStatusTone(contract.contractStatus)}>
-                    {contract.contractStatus}
+                  <StatusBadge
+                    tone={
+                      contract.archived
+                        ? "danger"
+                        : contractStatusTone(contract.contractStatus)
+                    }
+                  >
+                    {displayStatus}
                   </StatusBadge>
                 </td>
                 <td className="whitespace-nowrap px-6 py-5 font-semibold text-slate-500">
@@ -491,16 +633,36 @@ function EnterpriseRevenueList({
                     >
                       <Pencil className="size-4" />
                     </ActionLink>
-                    <ActionButton
-                      label="Archive"
-                      onClick={() => onArchive(contract)}
-                    >
-                      <Archive className="size-4" />
-                    </ActionButton>
+                    {contract.archived ? (
+                      <ActionButton
+                        label="Restore"
+                        onClick={() => onRestore(contract)}
+                      >
+                        <RotateCcw className="size-4" />
+                      </ActionButton>
+                    ) : (
+                      <ActionButton
+                        label="Archive"
+                        onClick={() => onArchive(contract)}
+                      >
+                        <Archive className="size-4" />
+                      </ActionButton>
+                    )}
                   </div>
                 </td>
+                </tr>
+              )
+            })}
+            {!contracts.length ? (
+              <tr>
+                <td
+                  className="px-6 py-8 text-sm font-semibold text-slate-500"
+                  colSpan={7}
+                >
+                  No enterprise revenue records match this filter.
+                </td>
               </tr>
-            ))}
+            ) : null}
           </tbody>
         </table>
       </div>
@@ -592,11 +754,16 @@ function KpiCreateModal({
           value={form.calculationType}
         />
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <ToggleField
             checked={form.showOnOverview}
             label="Show on KPI Overview"
             onChange={() => updateForm({ showOnOverview: !form.showOnOverview })}
+          />
+          <ToggleField
+            checked={form.representative}
+            label="Representative KPI"
+            onChange={() => updateForm({ representative: !form.representative })}
           />
           <ToggleField
             checked={form.pinned}
@@ -727,7 +894,6 @@ function FieldLabel({ children }: { children: ReactNode }) {
 function NumberField({
   label,
   onChange,
-  step = 1,
   suffix,
   value,
 }: {
@@ -743,11 +909,10 @@ function NumberField({
       <div className="mt-2 flex h-11 overflow-hidden rounded-xl border border-slate-200 bg-white focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-500/10">
         <input
           className="min-w-0 flex-1 px-3 text-sm font-semibold text-slate-950 outline-none"
-          min={0}
-          onChange={(event) => onChange(Number(event.target.value))}
-          step={step}
-          type="number"
-          value={value}
+          inputMode="decimal"
+          onChange={(event) => onChange(parseEditableNumber(event.target.value))}
+          type="text"
+          value={formatEditableNumber(value)}
         />
         {suffix ? (
           <span className="flex items-center border-l border-slate-100 bg-slate-50 px-3 text-sm font-bold text-slate-500">
@@ -839,6 +1004,80 @@ function ToggleField({
         />
       </span>
     </button>
+  )
+}
+
+function ArchiveFilterControl({
+  activeFilter,
+  onChange,
+  totals,
+}: {
+  activeFilter: ArchiveFilter
+  onChange: (filter: ArchiveFilter) => void
+  totals: Record<ArchiveFilter, number>
+}) {
+  const filters: ArchiveFilter[] = ["active", "archived", "all"]
+
+  return (
+    <div className="inline-flex h-10 w-fit rounded-xl border border-slate-200 bg-slate-50 p-1">
+      {filters.map((filter) => (
+        <button
+          className={cn(
+            "rounded-lg px-3 text-xs font-bold capitalize transition",
+            activeFilter === filter
+              ? "bg-white text-violet-700 shadow-sm"
+              : "text-slate-500 hover:text-slate-900"
+          )}
+          key={filter}
+          onClick={() => onChange(filter)}
+          type="button"
+        >
+          {filter} {totals[filter]}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function MiniFlag({
+  active,
+  children,
+}: {
+  active: boolean
+  children: ReactNode
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-5 items-center rounded-full px-2 text-[11px] font-bold",
+        active ? "bg-violet-50 text-violet-700" : "bg-slate-100 text-slate-500"
+      )}
+    >
+      {children}
+    </span>
+  )
+}
+
+function SearchField({
+  onChange,
+  placeholder,
+  value,
+}: {
+  onChange: (value: string) => void
+  placeholder: string
+  value: string
+}) {
+  return (
+    <label className="relative block w-full sm:w-56">
+      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+      <input
+        className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm font-semibold text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        type="search"
+        value={value}
+      />
+    </label>
   )
 }
 
@@ -978,6 +1217,27 @@ function getDefaultPeriodLabel(periodType: KpiPeriodType) {
 
 function getNextKpiOrder(kpis: KpiConfiguration[]) {
   return Math.max(0, ...kpis.map((kpi) => Number(kpi.displayOrder) || 0)) + 1
+}
+
+function matchesArchiveFilter(
+  archived: boolean | undefined,
+  filter: ArchiveFilter
+) {
+  if (filter === "all") {
+    return true
+  }
+
+  return filter === "archived" ? Boolean(archived) : !archived
+}
+
+function matchesSearch(search: string, values: string[]) {
+  const query = search.trim().toLowerCase()
+
+  if (!query) {
+    return true
+  }
+
+  return values.some((value) => value.toLowerCase().includes(query))
 }
 
 function getRevenueTitle(

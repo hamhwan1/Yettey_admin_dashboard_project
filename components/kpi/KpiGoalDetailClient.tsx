@@ -20,6 +20,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout"
 import { useKpiManagementStore } from "@/lib/kpi-management-store"
 import { cn } from "@/lib/utils"
 import {
+  formatEditableNumber,
   formatKpiTarget,
   formatKpiValue,
   formatTrend,
@@ -30,6 +31,7 @@ import {
   isTrendHealthy,
   kpiPeriodTypes,
   kpiServices,
+  parseEditableNumber,
   type EnterpriseContract,
   type KpiCalculationType,
   type KpiConfiguration,
@@ -51,6 +53,7 @@ type KpiEditForm = Pick<
   | "periodLabel"
   | "periodType"
   | "pinned"
+  | "representative"
   | "service"
   | "showOnOverview"
   | "targetValue"
@@ -124,6 +127,7 @@ export default function KpiGoalDetailClient({
       periodType: form.periodType,
       pinned: form.pinned,
       precision: form.format === "percentage" ? 1 : 0,
+      representative: form.representative,
       service: form.service,
       showOnOverview: form.showOnOverview,
       targetPrefix: form.direction === "lower" ? "<" : undefined,
@@ -221,6 +225,9 @@ function InfoSection({ kpi }: { kpi: KpiConfiguration }) {
       <div className="mt-5 flex flex-wrap gap-2">
         <FlagBadge active={kpi.showOnOverview} icon={<Eye className="size-3.5" />}>
           {kpi.showOnOverview ? "Visible" : "Hidden"}
+        </FlagBadge>
+        <FlagBadge active={kpi.representative} icon={<Pin className="size-3.5" />}>
+          {kpi.representative ? "Representative" : "Supporting KPI"}
         </FlagBadge>
         <FlagBadge active={kpi.pinned} icon={<Pin className="size-3.5" />}>
           {kpi.pinned ? "Pinned" : "Not Pinned"}
@@ -414,11 +421,16 @@ function KpiEditModal({
           options={kpiCalculationTypes}
           value={form.calculationType}
         />
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <ToggleField
             checked={form.showOnOverview}
             label="Show on KPI Overview"
             onChange={() => updateForm({ showOnOverview: !form.showOnOverview })}
+          />
+          <ToggleField
+            checked={form.representative}
+            label="Representative KPI"
+            onChange={() => updateForm({ representative: !form.representative })}
           />
           <ToggleField
             checked={form.pinned}
@@ -609,7 +621,6 @@ function ModalShell({
 function NumberField({
   label,
   onChange,
-  step = 1,
   suffix,
   value,
 }: {
@@ -625,11 +636,10 @@ function NumberField({
       <div className="mt-2 flex h-11 overflow-hidden rounded-xl border border-slate-200 bg-white focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-500/10">
         <input
           className="min-w-0 flex-1 px-3 text-sm font-semibold text-slate-950 outline-none"
-          min={0}
-          onChange={(event) => onChange(Number(event.target.value))}
-          step={step}
-          type="number"
-          value={value}
+          inputMode="decimal"
+          onChange={(event) => onChange(parseEditableNumber(event.target.value))}
+          type="text"
+          value={formatEditableNumber(value)}
         />
         {suffix ? (
           <span className="flex items-center border-l border-slate-100 bg-slate-50 px-3 text-sm font-bold text-slate-500">
@@ -791,6 +801,7 @@ function toKpiEditForm(kpi: KpiConfiguration): KpiEditForm {
     periodLabel: kpi.periodLabel,
     periodType: kpi.periodType,
     pinned: kpi.pinned,
+    representative: kpi.representative,
     reason: "Target adjustment after business review",
     service: kpi.service,
     showOnOverview: kpi.showOnOverview,

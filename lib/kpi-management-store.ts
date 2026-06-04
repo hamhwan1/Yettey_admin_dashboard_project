@@ -24,9 +24,9 @@ type KpiManagementState = {
   addKpi: (kpi: KpiConfiguration) => void
   archiveContract: (contractId: string) => void
   archiveKpi: (kpiId: string) => void
-  deleteContract: (contractId: string) => void
-  deleteKpi: (kpiId: string) => void
   resetKpiManagement: () => void
+  restoreContract: (contractId: string) => void
+  restoreKpi: (kpiId: string) => void
   updateContract: (
     contractId: string,
     patch: Partial<EnterpriseContract>
@@ -88,23 +88,54 @@ export const useKpiManagementStore = create<KpiManagementState>()(
                 ...(kpi.history ?? []),
               ],
               lastUpdated: mockToday,
-              showOnOverview: false,
             }
           }),
-        })),
-      deleteContract: (contractId) =>
-        set((state) => ({
-          contracts: state.contracts.filter((contract) => contract.id !== contractId),
-        })),
-      deleteKpi: (kpiId) =>
-        set((state) => ({
-          kpis: state.kpis.filter((kpi) => kpi.id !== kpiId),
         })),
       resetKpiManagement: () =>
         set({
           contracts: initialEnterpriseContracts,
           kpis: initialKpiConfigurations,
         }),
+      restoreContract: (contractId) =>
+        set((state) => ({
+          contracts: state.contracts.map((contract) => {
+            if (contract.id !== contractId) {
+              return contract
+            }
+
+            return {
+              ...contract,
+              archived: false,
+              history: [
+                createContractHistory("Archive Status", "Archived", "Active"),
+                ...(contract.history ?? []),
+              ],
+              lastUpdated: mockToday,
+            }
+          }),
+        })),
+      restoreKpi: (kpiId) =>
+        set((state) => ({
+          kpis: state.kpis.map((kpi) => {
+            if (kpi.id !== kpiId) {
+              return kpi
+            }
+
+            return {
+              ...kpi,
+              archived: false,
+              history: [
+                createKpiHistory(
+                  "Archived",
+                  formatKpiTarget(kpi),
+                  "KPI restored to active management"
+                ),
+                ...(kpi.history ?? []),
+              ],
+              lastUpdated: mockToday,
+            }
+          }),
+        })),
       updateContract: (contractId, patch) =>
         set((state) => ({
           contracts: state.contracts.map((contract) => {
@@ -271,6 +302,7 @@ function normalizeKpi(kpi: KpiConfiguration): KpiConfiguration {
     archived: kpi.archived ?? false,
     history: kpi.history ?? [],
     lastUpdated: kpi.lastUpdated ?? mockToday,
+    representative: kpi.representative ?? kpi.pinned ?? false,
     targetPrefix: kpi.direction === "lower" ? "<" : undefined,
   }
 }

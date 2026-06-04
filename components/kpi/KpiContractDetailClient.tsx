@@ -10,8 +10,10 @@ import StatusBadge from "@/components/admin/StatusBadge"
 import DashboardLayout from "@/components/layout/DashboardLayout"
 import { useKpiManagementStore } from "@/lib/kpi-management-store"
 import {
+  formatEditableNumber,
   formatKpiValue,
   getActiveEnterpriseRevenue,
+  parseEditableNumber,
   type EnterpriseContract,
   type EnterpriseContractStatus,
 } from "./kpi-data"
@@ -456,7 +458,6 @@ function ModalShell({
 function NumberField({
   label,
   onChange,
-  step = 1,
   value,
 }: {
   label: string
@@ -469,11 +470,10 @@ function NumberField({
       <FieldLabel>{label}</FieldLabel>
       <input
         className={fieldClassName}
-        min={0}
-        onChange={(event) => onChange(Number(event.target.value))}
-        step={step}
-        type="number"
-        value={value}
+        inputMode="decimal"
+        onChange={(event) => onChange(parseEditableNumber(event.target.value))}
+        type="text"
+        value={formatEditableNumber(value)}
       />
     </label>
   )

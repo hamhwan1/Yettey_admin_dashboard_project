@@ -52,8 +52,8 @@ export default function KpiOverviewClient() {
   const visibleKpis = kpis
     .filter((kpi) => !kpi.archived && kpi.showOnOverview)
     .sort((a, b) => a.displayOrder - b.displayOrder)
-  const pinnedKpis = visibleKpis.filter((kpi) => kpi.pinned)
-  const scoreboardKpis = visibleKpis.filter((kpi) => !kpi.pinned)
+  const representativeKpis = visibleKpis.filter((kpi) => kpi.representative)
+  const scoreboardKpis = visibleKpis.filter((kpi) => !kpi.representative)
   const riskMetrics = visibleKpis.filter((kpi) => isKpiAtRisk(kpi, contracts))
 
   return (
@@ -65,12 +65,12 @@ export default function KpiOverviewClient() {
       />
 
       <section className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-        {pinnedKpis.length ? (
-          pinnedKpis.map((metric) => (
+        {representativeKpis.length ? (
+          representativeKpis.map((metric) => (
             <KpiSummaryCard key={metric.id} contracts={contracts} metric={metric} />
           ))
         ) : (
-          <EmptyPanel message="No pinned KPIs are configured for the top area." />
+          <EmptyPanel message="No representative KPIs are configured for the top area." />
         )}
       </section>
 
@@ -82,7 +82,7 @@ export default function KpiOverviewClient() {
                 KPI Scoreboard
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Non-pinned KPIs selected by administrators for the overview.
+                Supporting KPIs selected by administrators for the overview.
               </p>
             </div>
             <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-600">
@@ -171,6 +171,11 @@ function KpiSummaryCard({
   const progress = getKpiProgress(metric, contracts)
   const status = getKpiStatus(metric, contracts)
   const Icon = summaryIcons[metric.id as keyof typeof summaryIcons] ?? TrendingUp
+  const formattedCurrentValue = formatKpiValue(
+    currentValue,
+    metric.format,
+    metric.precision
+  )
 
   return (
     <article className="flex min-h-64 flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-[0_2px_4px_rgba(15,23,42,0.08),0_16px_32px_rgba(15,23,42,0.08)]">
@@ -178,10 +183,13 @@ function KpiSummaryCard({
         <div className="min-w-0">
           <p className="text-sm font-semibold text-slate-500">{metric.name}</p>
           <p
-            className="mt-3 text-3xl font-bold tracking-tight text-slate-950"
+            className={cn(
+              "mt-3 max-w-full whitespace-nowrap font-bold tracking-tight text-slate-950",
+              valueSizeClass(formattedCurrentValue)
+            )}
             title={getCurrentValueTitle(metric, contracts)}
           >
-            {formatKpiValue(currentValue, metric.format, metric.precision)}
+            {formattedCurrentValue}
           </p>
         </div>
         <span
@@ -470,4 +478,20 @@ function toneClass(tone: KpiTone, variant: "soft" | "solid") {
   }
 
   return tones[tone][variant]
+}
+
+function valueSizeClass(value: string) {
+  if (value.length >= 18) {
+    return "text-lg"
+  }
+
+  if (value.length >= 15) {
+    return "text-xl"
+  }
+
+  if (value.length >= 12) {
+    return "text-2xl"
+  }
+
+  return "text-3xl"
 }

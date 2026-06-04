@@ -65,6 +65,7 @@ export type KpiConfiguration = {
   periodType: KpiPeriodType
   pinned: boolean
   precision?: number
+  representative: boolean
   riskThreshold?: number
   service: KpiService
   showOnOverview: boolean
@@ -107,8 +108,8 @@ export const initialEnterpriseContracts: EnterpriseContract[] = [
         date: "2026-06-01",
         field: "Contract Amount",
         id: "contract-history-blue-ocean-1",
-        newValue: "\u20a990M",
-        previousValue: "\u20a982M",
+        newValue: "\u20a990,000,000",
+        previousValue: "\u20a982,000,000",
       },
     ],
     id: "enterprise-blue-ocean",
@@ -182,6 +183,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     periodType: "Monthly",
     pinned: true,
     precision: 1,
+    representative: true,
     riskThreshold: 70,
     service: "Overall",
     showOnOverview: true,
@@ -212,6 +214,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     periodLabel: "June 2026",
     periodType: "Monthly",
     pinned: true,
+    representative: true,
     riskThreshold: 80,
     service: "Overall",
     showOnOverview: true,
@@ -242,6 +245,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     periodLabel: "June 2026",
     periodType: "Monthly",
     pinned: true,
+    representative: true,
     riskThreshold: 80,
     service: "Overall",
     showOnOverview: true,
@@ -261,8 +265,8 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
         changedBy,
         date: "2026-06-01",
         id: "kpi-history-total-revenue-1",
-        newValue: "\u20a9500M",
-        previousValue: "\u20a9450M",
+        newValue: "\u20a9500,000,000",
+        previousValue: "\u20a9450,000,000",
         reason: "Subscription plus enterprise revenue target aligned to June plan",
       },
     ],
@@ -272,6 +276,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     periodLabel: "June 2026",
     periodType: "Monthly",
     pinned: true,
+    representative: true,
     riskThreshold: 75,
     service: "Overall",
     showOnOverview: true,
@@ -303,6 +308,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     periodType: "Monthly",
     pinned: false,
     precision: 1,
+    representative: false,
     riskThreshold: 100,
     service: "Overall",
     showOnOverview: true,
@@ -335,6 +341,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     periodType: "Monthly",
     pinned: false,
     precision: 1,
+    representative: false,
     riskThreshold: 80,
     service: "Overall",
     showOnOverview: true,
@@ -354,8 +361,8 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
         changedBy,
         date: "2026-05-18",
         id: "kpi-history-enterprise-revenue-1",
-        newValue: "\u20a9200M",
-        previousValue: "\u20a9150M",
+        newValue: "\u20a9200,000,000",
+        previousValue: "\u20a9150,000,000",
         reason: "Enterprise sales forecast updated after contract pipeline review",
       },
     ],
@@ -365,6 +372,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     periodLabel: "June 2026",
     periodType: "Monthly",
     pinned: false,
+    representative: false,
     riskThreshold: 75,
     service: "Overall",
     showOnOverview: true,
@@ -395,6 +403,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     periodLabel: "June 2026",
     periodType: "Monthly",
     pinned: false,
+    representative: false,
     service: "Overall",
     showOnOverview: false,
     targetValue: 95000,
@@ -424,6 +433,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     periodLabel: "Q2 2026",
     periodType: "Quarterly",
     pinned: false,
+    representative: false,
     service: "Overall",
     showOnOverview: false,
     targetValue: 1200000,
@@ -453,6 +463,7 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     periodLabel: "Q2 2026",
     periodType: "Quarterly",
     pinned: false,
+    representative: false,
     riskThreshold: 95,
     service: "Overall",
     showOnOverview: false,
@@ -468,10 +479,6 @@ export function createKpiId(name: string) {
 
 export function formatKpiValue(value: number, format: KpiFormat, precision = 0) {
   if (format === "currency") {
-    if (value >= 100000000) {
-      return `\u20a9${Math.round(value / 1000000).toLocaleString()}M`
-    }
-
     return new Intl.NumberFormat("ko-KR", {
       currency: "KRW",
       maximumFractionDigits: 0,
@@ -484,6 +491,26 @@ export function formatKpiValue(value: number, format: KpiFormat, precision = 0) 
   }
 
   return `${value.toFixed(precision)}%`
+}
+
+export function formatEditableNumber(value: number) {
+  if (!Number.isFinite(value)) {
+    return ""
+  }
+
+  return value.toLocaleString("en-US", {
+    maximumFractionDigits: 4,
+  })
+}
+
+export function parseEditableNumber(value: string) {
+  const normalized = value.replace(/,/g, "").replace(/[^\d.]/g, "")
+
+  if (!normalized) {
+    return 0
+  }
+
+  return Number(normalized)
 }
 
 export function formatKpiTarget(kpi: KpiConfiguration) {
