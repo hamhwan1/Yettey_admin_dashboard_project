@@ -88,7 +88,9 @@ type KpiDetailField = {
 }
 
 type KpiDetailRow = {
+  endDate: string
   month: string
+  startDate: string
   values: Record<string, number>
 }
 
@@ -115,13 +117,12 @@ type KpiCardContextItem = {
   value: string
 }
 
-type KpiDetailReportPeriod = KpiPeriodType | "Custom Range"
+type KpiDetailAggregation = KpiPeriodType
 
-const kpiDetailReportPeriods: KpiDetailReportPeriod[] = [
+const kpiDetailAggregations: KpiDetailAggregation[] = [
   "Monthly",
   "Quarterly",
   "Yearly",
-  "Custom Range",
 ]
 
 const overviewServiceProfiles: Record<KpiService, OverviewServiceProfile> = {
@@ -477,13 +478,20 @@ function KpiDetailModal({
   metric: KpiConfiguration
   onClose: () => void
 }) {
-  const [reportPeriod, setReportPeriod] =
-    useState<KpiDetailReportPeriod>(metric.periodType)
+  const dateBounds = getKpiDetailDateBounds(detailRows)
+  const [aggregation, setAggregation] =
+    useState<KpiDetailAggregation>(metric.periodType)
+  const [startDate, setStartDate] = useState(dateBounds.startDate)
+  const [endDate, setEndDate] = useState(dateBounds.endDate)
   const [isExporting, setIsExporting] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
+  const filteredRows = useMemo(
+    () => filterKpiDetailRowsByDateRange(detailRows, startDate, endDate),
+    [detailRows, endDate, startDate]
+  )
   const reportRows = useMemo(
-    () => buildKpiDetailReportRows(detailRows, reportPeriod, metric),
-    [detailRows, metric, reportPeriod]
+    () => buildKpiDetailReportRows(filteredRows, aggregation, metric),
+    [aggregation, filteredRows, metric]
   )
   const model = useMemo(
     () => buildKpiDetailModel(metric, reportRows),
@@ -495,18 +503,21 @@ function KpiDetailModal({
   }))
   const reportPeriodLabel = getKpiDetailReportPeriodLabel(
     reportRows,
-    reportPeriod
+    startDate,
+    endDate
   )
   const exportPayload = useMemo(
     () =>
       buildKpiDetailExportPayload({
+        aggregation,
+        endDate,
         metric,
         model,
-        reportPeriod,
         reportPeriodLabel,
         rows: reportRows,
+        startDate,
       }),
-    [metric, model, reportPeriod, reportPeriodLabel, reportRows]
+    [aggregation, endDate, metric, model, reportPeriodLabel, reportRows, startDate]
   )
 
   useEffect(() => {
@@ -521,6 +532,30 @@ function KpiDetailModal({
       downloadXlsxReport(exportPayload)
     } finally {
       setIsExporting(false)
+    }
+  }
+
+  const updateStartDate = (value: string) => {
+    if (!value) {
+      return
+    }
+
+    setStartDate(value)
+
+    if (value > endDate) {
+      setEndDate(value)
+    }
+  }
+
+  const updateEndDate = (value: string) => {
+    if (!value) {
+      return
+    }
+
+    setEndDate(value)
+
+    if (value < startDate) {
+      setStartDate(value)
     }
   }
 
@@ -569,19 +604,45 @@ function KpiDetailModal({
         </section>
 
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_minmax(220px,0.7fr)] xl:items-end">
             <SegmentedFilter
-              label="Period Selector"
-              onChange={setReportPeriod}
-              options={kpiDetailReportPeriods}
-              value={reportPeriod}
+              label="Aggregation"
+              onChange={setAggregation}
+              options={kpiDetailAggregations}
+              value={aggregation}
             />
-            <div className="text-sm text-slate-500 lg:max-w-sm lg:text-right">
-              Export uses {metric.service} data with the selected{" "}
+            <div>
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                Date Range
+              </p>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
+                <DateInput
+                  label="Start Date"
+                  max={dateBounds.endDate}
+                  min={dateBounds.startDate}
+                  onChange={updateStartDate}
+                  value={startDate}
+                />
+                <span className="hidden text-sm font-bold text-slate-400 sm:block">
+                  ~
+                </span>
+                <DateInput
+                  label="End Date"
+                  max={dateBounds.endDate}
+                  min={dateBounds.startDate}
+                  onChange={updateEndDate}
+                  value={endDate}
+                />
+              </div>
+            </div>
+            <div className="text-sm text-slate-500 xl:text-right">
+              Export uses {metric.service} data with{" "}
+              <span className="font-semibold text-slate-700">{aggregation}</span>{" "}
+              aggregation for{" "}
               <span className="font-semibold text-slate-700">
                 {reportPeriodLabel}
-              </span>{" "}
-              report period.
+              </span>
+              .
             </div>
           </div>
         </section>
@@ -678,7 +739,7 @@ function KpiDetailModal({
             <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-5 py-3">Month</th>
+                  <th className="px-5 py-3">Period</th>
                   {model.tableFields.map((field) => (
                     <th key={field.key} className="px-5 py-3 text-right">
                       {field.label}
@@ -752,6 +813,38 @@ function KpiDetailChartLegend({ fields }: { fields: KpiDetailField[] }) {
         </span>
       ))}
     </div>
+  )
+}
+
+function DateInput({
+  label,
+  max,
+  min,
+  onChange,
+  value,
+}: {
+  label: string
+  max: string
+  min: string
+  onChange: (value: string) => void
+  value: string
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-slate-400">
+        {label}
+      </span>
+      <input
+        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
+        max={max}
+        min={min}
+        onChange={(event) => onChange(event.target.value)}
+        onInput={(event) => onChange(event.currentTarget.value)}
+        required
+        type="date"
+        value={value}
+      />
+    </label>
   )
 }
 
@@ -859,6 +952,15 @@ function normalizedDisplayOrder(kpi: KpiConfiguration) {
 }
 
 const monthlyKpiMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+
+const monthlyKpiDateRanges = [
+  { endDate: "2026-01-31", startDate: "2026-01-01" },
+  { endDate: "2026-02-28", startDate: "2026-02-01" },
+  { endDate: "2026-03-31", startDate: "2026-03-01" },
+  { endDate: "2026-04-30", startDate: "2026-04-01" },
+  { endDate: "2026-05-31", startDate: "2026-05-01" },
+  { endDate: "2026-06-30", startDate: "2026-06-01" },
+]
 
 const detailChartColors = [
   "#7c3aed",
@@ -974,29 +1076,72 @@ function getKpiCardContextItems(
   return []
 }
 
+function getKpiDetailDateBounds(rows: KpiDetailRow[]) {
+  return {
+    endDate: rows.at(-1)?.endDate ?? "2026-06-30",
+    startDate: rows[0]?.startDate ?? "2026-01-01",
+  }
+}
+
+function filterKpiDetailRowsByDateRange(
+  rows: KpiDetailRow[],
+  startDate: string,
+  endDate: string
+) {
+  return rows.filter(
+    (row) => row.endDate >= startDate && row.startDate <= endDate
+  )
+}
+
 function buildKpiDetailReportRows(
   rows: KpiDetailRow[],
-  reportPeriod: KpiDetailReportPeriod,
+  aggregation: KpiDetailAggregation,
   metric: KpiConfiguration
 ) {
-  if (reportPeriod === "Monthly") {
+  if (aggregation === "Monthly") {
     return rows
   }
 
-  if (reportPeriod === "Custom Range") {
-    return rows.slice(Math.max(0, rows.length - 4))
+  if (aggregation === "Quarterly") {
+    return Array.from(groupKpiRowsByPeriod(rows, getKpiQuarterLabel).entries()).map(
+      ([label, groupRows]) => aggregateKpiDetailRows(label, groupRows, metric)
+    )
   }
 
-  if (reportPeriod === "Quarterly") {
-    return [
-      aggregateKpiDetailRows("Q1", rows.slice(0, 3), metric),
-      aggregateKpiDetailRows("Q2", rows.slice(3, 6), metric),
-    ].filter((row) => Object.keys(row.values).length)
-  }
-
-  return [aggregateKpiDetailRows("2026", rows, metric)].filter((row) =>
-    Object.keys(row.values).length
+  return Array.from(groupKpiRowsByPeriod(rows, getKpiYearLabel).entries()).map(
+    ([label, groupRows]) => aggregateKpiDetailRows(label, groupRows, metric)
   )
+}
+
+function groupKpiRowsByPeriod(
+  rows: KpiDetailRow[],
+  getLabel: (row: KpiDetailRow) => string
+) {
+  const groups = new Map<string, KpiDetailRow[]>()
+
+  rows.forEach((row) => {
+    const label = getLabel(row)
+    const currentRows = groups.get(label) ?? []
+
+    groups.set(label, [...currentRows, row])
+  })
+
+  return groups
+}
+
+function getKpiQuarterLabel(row: KpiDetailRow) {
+  const month = Number(row.startDate.slice(5, 7))
+  const quarter = Math.ceil(month / 3)
+
+  return `Q${quarter}`
+}
+
+function getKpiYearLabel(row: KpiDetailRow) {
+  return row.startDate.slice(0, 4)
+}
+
+function formatKpiDateRange(startDate: string, endDate: string) {
+  return startDate === endDate ? startDate : `${startDate} - ${endDate}`
 }
 
 function aggregateKpiDetailRows(
@@ -1005,7 +1150,7 @@ function aggregateKpiDetailRows(
   metric: KpiConfiguration
 ): KpiDetailRow {
   if (!rows.length) {
-    return { month: label, values: {} }
+    return { endDate: "", month: label, startDate: "", values: {} }
   }
 
   const fieldModel = getKpiDetailFieldModel(metric)
@@ -1028,43 +1173,48 @@ function aggregateKpiDetailRows(
       : rowValues.reduce((total, value) => total + value, 0)
   })
 
-  return normalizeKpiDetailRow({ month: label, values }, metric)
+  return normalizeKpiDetailRow(
+    {
+      endDate: rows.at(-1)?.endDate ?? rows[0].endDate,
+      month: label,
+      startDate: rows[0].startDate,
+      values,
+    },
+    metric
+  )
 }
 
 function getKpiDetailReportPeriodLabel(
   rows: KpiDetailRow[],
-  reportPeriod: KpiDetailReportPeriod
+  startDate: string,
+  endDate: string
 ) {
   if (!rows.length) {
-    return reportPeriod
+    return formatKpiDateRange(startDate, endDate)
   }
 
-  if (reportPeriod === "Quarterly") {
-    return rows.map((row) => row.month).join(" / ")
-  }
+  const first = rows[0]?.startDate ?? startDate
+  const last = rows.at(-1)?.endDate ?? endDate
 
-  if (reportPeriod === "Yearly") {
-    return rows[0]?.month ?? "2026"
-  }
-
-  const first = rows[0]?.month
-  const last = rows.at(-1)?.month
-
-  return first && last && first !== last ? `${first} - ${last}` : first ?? reportPeriod
+  return formatKpiDateRange(first, last)
 }
 
 function buildKpiDetailExportPayload({
+  aggregation,
+  endDate,
   metric,
   model,
-  reportPeriod,
   reportPeriodLabel,
   rows,
+  startDate,
 }: {
+  aggregation: KpiDetailAggregation
+  endDate: string
   metric: KpiConfiguration
   model: KpiDetailModel
-  reportPeriod: KpiDetailReportPeriod
   reportPeriodLabel: string
   rows: KpiDetailRow[]
+  startDate: string
 }): ExportReportPayload {
   return {
     datasets: [
@@ -1081,13 +1231,17 @@ function buildKpiDetailExportPayload({
       "kpi-detail",
       normalizeKpiKey(metric.name),
       normalizeKpiKey(metric.service),
-      normalizeKpiKey(reportPeriod),
+      normalizeKpiKey(aggregation),
+      startDate,
+      endDate,
     ].join("-"),
     filters: {
+      Aggregation: aggregation,
+      "End Date": endDate,
       KPI: metric.name,
       "Selected Service": metric.service,
       "Overview Period": metric.periodType,
-      "Detail Period": reportPeriod,
+      "Start Date": startDate,
       "Report Range": reportPeriodLabel,
     },
     kpis: model.summaryItems.map((item) => ({
@@ -1134,10 +1288,17 @@ function createMockKpiDetailRows(
   const primaryValue = getFallbackAwareCurrentKpiValue(metric, contracts)
   const ratios = getMonthlyKpiRatios(detailType, metric)
 
-  return monthlyKpiMonths.map((month, index) =>
-    normalizeKpiDetailRow(
+  return monthlyKpiMonths.map((month, index) => {
+    const dateRange = monthlyKpiDateRanges[index] ?? {
+      endDate: "2026-01-31",
+      startDate: "2026-01-01",
+    }
+
+    return normalizeKpiDetailRow(
       {
+        endDate: dateRange.endDate,
         month,
+        startDate: dateRange.startDate,
         values: createMockKpiDetailValues({
           contracts,
           detailType,
@@ -1148,7 +1309,7 @@ function createMockKpiDetailRows(
       },
       metric
     )
-  )
+  })
 }
 
 function createMockKpiDetailValues({
