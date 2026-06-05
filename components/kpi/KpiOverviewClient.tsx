@@ -109,6 +109,11 @@ type KpiDetailModel = {
   tableFields: KpiDetailField[]
 }
 
+type KpiCardContextItem = {
+  label: string
+  value: string
+}
+
 const overviewServiceProfiles: Record<KpiService, OverviewServiceProfile> = {
   Overall: {
     cacScale: 1,
@@ -382,6 +387,7 @@ function KpiSummaryCard({
   onOpen: () => void
 }) {
   const currentValue = getLatestKpiDetailValue(metric, detailRows)
+  const contextItems = getKpiCardContextItems(metric, detailRows)
   const progress = getKpiProgressFromValue(metric, currentValue)
   const formattedCurrentValue = formatKpiValue(
     currentValue,
@@ -410,6 +416,27 @@ function KpiSummaryCard({
           {formattedCurrentValue}
         </p>
       </div>
+
+      {contextItems.length ? (
+        <div className="mt-3 space-y-1.5 rounded-xl border border-slate-100 bg-white/70 px-3 py-2">
+          {contextItems.map((item) => (
+            <div
+              className="flex min-w-0 items-center justify-between gap-2 text-xs"
+              key={item.label}
+            >
+              <span className="truncate font-semibold text-slate-500">
+                {item.label}
+              </span>
+              <span
+                className="shrink-0 whitespace-nowrap font-bold text-slate-950 tabular-nums"
+                title={`${item.value} ${item.label}`}
+              >
+                {item.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50 p-3">
         <div className="flex items-center justify-between gap-3">
@@ -890,6 +917,100 @@ function getKpiSeriesKey(metric: KpiConfiguration) {
   return `${metric.service}-${metric.periodType}-${normalizeKpiKey(metric.name)}`
 }
 
+function getKpiCardContextItems(
+  metric: KpiConfiguration,
+  rows: KpiDetailRow[]
+): KpiCardContextItem[] {
+  const values = rows.at(-1)?.values
+
+  if (!values) {
+    return []
+  }
+
+  const detailType = getKpiDetailType(metric)
+
+  if (detailType === "visitors") {
+    return [
+      {
+        label: "Organic Visitors",
+        value: formatKpiValue(
+          values.organicVisitors ??
+            sumValues(values, ["yetteyOrganicVisitors", "vpickOrganicVisitors"]),
+          "number"
+        ),
+      },
+      {
+        label: "Paid Visitors",
+        value: formatKpiValue(
+          values.paidVisitors ??
+            sumValues(values, ["yetteyPaidVisitors", "vpickPaidVisitors"]),
+          "number"
+        ),
+      },
+    ]
+  }
+
+  if (detailType === "signupConversion") {
+    return [
+      {
+        label: "Signups",
+        value: formatKpiValue(values.totalSignups, "number"),
+      },
+    ]
+  }
+
+  if (detailType === "activation") {
+    return [
+      {
+        label: "Activated Users",
+        value: formatKpiValue(values.activatedUsers, "number"),
+      },
+    ]
+  }
+
+  if (detailType === "retention") {
+    return [
+      {
+        label: "Retained Users",
+        value: formatKpiValue(values.retainedUsers, "number"),
+      },
+    ]
+  }
+
+  if (detailType === "revenue") {
+    return [
+      {
+        label: "Subscription Users",
+        value: formatKpiValue(values.subscriptionUsers, "number"),
+      },
+      {
+        label: "Enterprise Customers",
+        value: formatKpiValue(values.enterpriseCustomers, "number"),
+      },
+    ]
+  }
+
+  if (detailType === "churn") {
+    return [
+      {
+        label: "Churned Users",
+        value: formatKpiValue(values.churnedUsers, "number"),
+      },
+    ]
+  }
+
+  if (detailType === "paidConversion") {
+    return [
+      {
+        label: "Paid Users",
+        value: formatKpiValue(values.paidUsers, "number"),
+      },
+    ]
+  }
+
+  return []
+}
+
 function createMockKpiDetailRows(
   metric: KpiConfiguration,
   contracts: EnterpriseContract[]
@@ -1269,15 +1390,32 @@ function getKpiDetailFieldModel(
           detailField("yetteyEnterpriseRevenue", "Yettey Enterprise", "currency", 1),
           detailField("vpickSubscriptionRevenue", "VPICK Subscription", "currency", 2),
           detailField("vpickEnterpriseRevenue", "VPICK Enterprise", "currency", 3),
+          detailField("subscriptionUsers", "Subscription Users", "number", 4),
+          detailField("enterpriseCustomers", "Enterprise Customers", "number", 5),
         ]
       : [
           detailField("subscriptionRevenue", "Subscription Revenue", "currency", 0),
           detailField("enterpriseRevenue", "Enterprise Revenue", "currency", 1),
+          detailField("subscriptionUsers", "Subscription Users", "number", 2),
+          detailField("enterpriseCustomers", "Enterprise Customers", "number", 3),
         ]
     const totalRevenue = detailField("totalRevenue", "Total Revenue", "currency", 4)
+    const revenueChartFields = isOverall
+      ? [
+          detailField("yetteySubscriptionRevenue", "Yettey Subscription", "currency", 0),
+          detailField("yetteyEnterpriseRevenue", "Yettey Enterprise", "currency", 1),
+          detailField("vpickSubscriptionRevenue", "VPICK Subscription", "currency", 2),
+          detailField("vpickEnterpriseRevenue", "VPICK Enterprise", "currency", 3),
+          totalRevenue,
+        ]
+      : [
+          detailField("subscriptionRevenue", "Subscription Revenue", "currency", 0),
+          detailField("enterpriseRevenue", "Enterprise Revenue", "currency", 1),
+          totalRevenue,
+        ]
 
     return {
-      chartFields: [...editFields, totalRevenue],
+      chartFields: revenueChartFields,
       editFields,
       primaryValueKey: "totalRevenue",
       tableFields: [...editFields, totalRevenue],
@@ -1373,6 +1511,8 @@ function getKpiDetailSummaryItems(
                   summaryItem("Subscription Revenue", values.subscriptionRevenue, "currency"),
                   summaryItem("Enterprise Revenue", values.enterpriseRevenue, "currency"),
                   summaryItem("Total Revenue", values.totalRevenue, "currency"),
+                  summaryItem("Subscription Users", values.subscriptionUsers, "number"),
+                  summaryItem("Enterprise Customers", values.enterpriseCustomers, "number"),
                 ]
               : detailType === "churn"
                 ? [
@@ -1452,6 +1592,8 @@ function normalizeKpiDetailRow(row: KpiDetailRow, metric: KpiConfiguration) {
     values.enterpriseRevenue = isOverall
       ? sumValues(values, ["yetteyEnterpriseRevenue", "vpickEnterpriseRevenue"])
       : values.enterpriseRevenue ?? 0
+    values.subscriptionUsers = values.subscriptionUsers ?? 0
+    values.enterpriseCustomers = values.enterpriseCustomers ?? 0
     values.totalRevenue = sumValues(values, [
       "subscriptionRevenue",
       "enterpriseRevenue",
@@ -1670,10 +1812,20 @@ function getRevenueDetailValues(
     getActiveEnterpriseRevenue(contracts) ||
     getContextualRevenue(170000000, metric)
   const subscriptionRevenue = Math.max(value - enterpriseRevenue, 0)
+  const subscriptionUsers = Math.max(
+    1,
+    Math.round(getContextualCount(1247, metric) * ratio)
+  )
+  const enterpriseCustomers = Math.max(
+    1,
+    Math.round(getContextualCount(8, metric) * ratio)
+  )
 
   return {
     enterpriseRevenue: Math.round(enterpriseRevenue * ratio),
+    enterpriseCustomers,
     subscriptionRevenue: Math.round(subscriptionRevenue * ratio),
+    subscriptionUsers,
   }
 }
 
@@ -1682,6 +1834,8 @@ function splitOverallRevenueValues(values: Record<string, number>) {
   const enterpriseRevenue = values.enterpriseRevenue ?? 0
 
   return {
+    enterpriseCustomers: values.enterpriseCustomers ?? 0,
+    subscriptionUsers: values.subscriptionUsers ?? 0,
     vpickEnterpriseRevenue: Math.round(enterpriseRevenue * 0.45),
     vpickSubscriptionRevenue: Math.round(subscriptionRevenue * 0.36),
     yetteyEnterpriseRevenue: Math.round(enterpriseRevenue * 0.55),
