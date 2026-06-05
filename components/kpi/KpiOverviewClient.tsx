@@ -39,6 +39,7 @@ import {
   parseEditableNumber,
   type EnterpriseContract,
   type KpiConfiguration,
+  type KpiFormat,
   type KpiPeriodType,
   type KpiService,
   type KpiTone,
@@ -74,12 +75,39 @@ type ServiceFunnelMetrics = {
 
 type ServiceFunnelMetricKey = Exclude<keyof ServiceFunnelMetrics, "service">
 
-type MonthlyKpiPoint = {
-  month: string
-  value: number
+type KpiDetailField = {
+  axis?: "left" | "right"
+  color?: string
+  format: KpiFormat
+  key: string
+  label: string
+  precision?: number
 }
 
-type MonthlyKpiSeriesState = Record<string, MonthlyKpiPoint[]>
+type KpiDetailRow = {
+  month: string
+  values: Record<string, number>
+}
+
+type KpiDetailRowsState = Record<string, KpiDetailRow[]>
+
+type KpiDetailType =
+  | "activation"
+  | "churn"
+  | "generic"
+  | "paidConversion"
+  | "retention"
+  | "revenue"
+  | "signupConversion"
+  | "visitors"
+
+type KpiDetailModel = {
+  chartFields: KpiDetailField[]
+  editFields: KpiDetailField[]
+  primaryValueKey: string
+  summaryItems: Array<{ label: string; value: string }>
+  tableFields: KpiDetailField[]
+}
 
 const overviewServiceProfiles: Record<KpiService, OverviewServiceProfile> = {
   Overall: {
@@ -161,8 +189,8 @@ const managedOverviewServices: Array<Exclude<KpiService, "Overall">> = [
 export default function KpiOverviewClient() {
   const { contracts, kpis } = useKpiManagementStore()
   const [detailMetric, setDetailMetric] = useState<KpiConfiguration | null>(null)
-  const [monthlyKpiSeries, setMonthlyKpiSeries] =
-    useState<MonthlyKpiSeriesState>({})
+  const [kpiDetailRows, setKpiDetailRows] =
+    useState<KpiDetailRowsState>({})
   const [selectedService, setSelectedService] = useState<KpiService>("Overall")
   const [selectedPeriod, setSelectedPeriod] = useState<KpiPeriodType>("Monthly")
   const overviewContracts = useMemo(
@@ -210,12 +238,12 @@ export default function KpiOverviewClient() {
             <KpiSummaryCard
               key={`${metric.id}-${selectedService}-${selectedPeriod}`}
               contracts={overviewContracts}
-              metric={metric}
-              monthlyValues={getMonthlyKpiSeries(
+              detailRows={getKpiDetailRows(
                 metric,
                 overviewContracts,
-                monthlyKpiSeries
+                kpiDetailRows
               )}
+              metric={metric}
               onOpen={() => setDetailMetric(metric)}
             />
           ))
@@ -322,15 +350,15 @@ export default function KpiOverviewClient() {
         <KpiDetailModal
           key={getKpiSeriesKey(detailMetric)}
           contracts={overviewContracts}
-          metric={detailMetric}
-          monthlyValues={getMonthlyKpiSeries(
+          detailRows={getKpiDetailRows(
             detailMetric,
             overviewContracts,
-            monthlyKpiSeries
+            kpiDetailRows
           )}
+          metric={detailMetric}
           onClose={() => setDetailMetric(null)}
           onSave={(nextValues) => {
-            setMonthlyKpiSeries((current) => ({
+            setKpiDetailRows((current) => ({
               ...current,
               [getKpiSeriesKey(detailMetric)]: nextValues,
             }))
@@ -344,16 +372,16 @@ export default function KpiOverviewClient() {
 
 function KpiSummaryCard({
   contracts,
+  detailRows,
   metric,
-  monthlyValues,
   onOpen,
 }: {
   contracts: EnterpriseContract[]
+  detailRows: KpiDetailRow[]
   metric: KpiConfiguration
-  monthlyValues: MonthlyKpiPoint[]
   onOpen: () => void
 }) {
-  const currentValue = getLatestMonthlyValue(monthlyValues)
+  const currentValue = getLatestKpiDetailValue(metric, detailRows)
   const progress = getKpiProgressFromValue(metric, currentValue)
   const formattedCurrentValue = formatKpiValue(
     currentValue,
@@ -416,21 +444,24 @@ function KpiSummaryCard({
 }
 
 function KpiDetailModal({
+  detailRows,
   metric,
-  monthlyValues,
   onClose,
   onSave,
 }: {
   contracts: EnterpriseContract[]
+  detailRows: KpiDetailRow[]
   metric: KpiConfiguration
-  monthlyValues: MonthlyKpiPoint[]
   onClose: () => void
-  onSave: (values: MonthlyKpiPoint[]) => void
+  onSave: (values: KpiDetailRow[]) => void
 }) {
-  const [draftValues, setDraftValues] = useState(monthlyValues)
+  const [draftRows, setDraftRows] = useState(detailRows)
   const [isMounted, setIsMounted] = useState(false)
-  const currentValue = getLatestMonthlyValue(draftValues)
-  const achievement = getKpiProgressFromValue(metric, currentValue)
+  const model = buildKpiDetailModel(metric, draftRows)
+  const chartRows = draftRows.map((row) => ({
+    month: row.month,
+    ...row.values,
+  }))
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setIsMounted(true))
@@ -438,12 +469,25 @@ function KpiDetailModal({
     return () => cancelAnimationFrame(frame)
   }, [])
 
-  const updateDraftValue = (index: number, value: number) => {
-    setDraftValues((current) =>
-      current.map((point, pointIndex) =>
-        pointIndex === index
-          ? { ...point, value: normalizeMonthlyKpiValue(value, metric) }
-          : point
+  const updateDraftValue = (
+    index: number,
+    field: KpiDetailField,
+    value: number
+  ) => {
+    setDraftRows((current) =>
+      current.map((row, rowIndex) =>
+        rowIndex === index
+          ? normalizeKpiDetailRow(
+              {
+                ...row,
+                values: {
+                  ...row.values,
+                  [field.key]: normalizeDetailFieldValue(value, field),
+                },
+              },
+              metric
+            )
+          : row
       )
     )
   }
@@ -481,13 +525,14 @@ function KpiDetailModal({
           <h3 className="text-lg font-semibold tracking-tight text-slate-950">
             KPI Summary
           </h3>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <KpiDetailSummaryCard
-              label="Current"
-              value={formatKpiValue(currentValue, metric.format, metric.precision)}
-            />
-            <KpiDetailSummaryCard label="Target" value={formatKpiTarget(metric)} />
-            <KpiDetailSummaryCard label="Achievement" value={`${achievement}%`} />
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {model.summaryItems.map((item) => (
+              <KpiDetailSummaryCard
+                key={item.label}
+                label={item.label}
+                value={item.value}
+              />
+            ))}
           </div>
         </section>
 
@@ -505,30 +550,52 @@ function KpiDetailModal({
               Jan - Jun
             </span>
           </div>
+          <KpiDetailChartLegend fields={model.chartFields} />
           <div className="h-80">
             {isMounted ? (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={draftValues} margin={{ left: 4, right: 16, top: 8 }}>
+                <LineChart data={chartRows} margin={{ left: 4, right: 16, top: 8 }}>
                   <CartesianGrid stroke="#eef2f7" vertical={false} />
                   <XAxis dataKey="month" tickLine={false} axisLine={false} />
                   <YAxis
-                    tickFormatter={(value) => formatKpiChartValue(value, metric)}
+                    yAxisId="left"
+                    tickFormatter={(value) =>
+                      formatKpiChartAxisValue(value, model.chartFields, "left")
+                    }
                     tickLine={false}
                     axisLine={false}
-                    width={metric.format === "currency" ? 104 : 64}
+                    width={getChartAxisWidth(model.chartFields, "left")}
                   />
+                  {hasRightAxis(model.chartFields) ? (
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      tickFormatter={(value) =>
+                        formatKpiChartAxisValue(value, model.chartFields, "right")
+                      }
+                      tickLine={false}
+                      axisLine={false}
+                      width={64}
+                    />
+                  ) : null}
                   <Tooltip
-                    formatter={(value) => formatKpiChartValue(value, metric)}
+                    formatter={(value, name) =>
+                      formatKpiChartTooltipValue(value, name, model.chartFields)
+                    }
                     labelFormatter={(label) => `${label}`}
                   />
-                  <Line
-                    dataKey="value"
-                    dot={{ r: 4 }}
-                    name={metric.name}
-                    stroke="#7c3aed"
-                    strokeWidth={2.8}
-                    type="monotone"
-                  />
+                  {model.chartFields.map((field) => (
+                    <Line
+                      dataKey={field.key}
+                      dot={{ r: 3 }}
+                      key={field.key}
+                      name={field.label}
+                      stroke={field.color ?? "#7c3aed"}
+                      strokeWidth={2.6}
+                      type="monotone"
+                      yAxisId={field.axis ?? "left"}
+                    />
+                  ))}
                 </LineChart>
               </ResponsiveContainer>
             ) : (
@@ -547,28 +614,30 @@ function KpiDetailModal({
             <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-5 py-3">KPI</th>
-                  {draftValues.map((point) => (
-                    <th key={point.month} className="px-5 py-3 text-right">
-                      {point.month}
+                  <th className="px-5 py-3">Month</th>
+                  {model.tableFields.map((field) => (
+                    <th key={field.key} className="px-5 py-3 text-right">
+                      {field.label}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                <tr className="border-t border-slate-100">
+              <tbody className="divide-y divide-slate-100">
+                {draftRows.map((row) => (
+                <tr key={row.month}>
                   <td className="whitespace-nowrap px-5 py-4 font-bold text-slate-950">
-                    {metric.name}
+                    {row.month}
                   </td>
-                  {draftValues.map((point) => (
+                  {model.tableFields.map((field) => (
                     <td
-                      key={point.month}
+                      key={field.key}
                       className="whitespace-nowrap px-5 py-4 text-right font-semibold text-slate-700"
                     >
-                      {formatKpiValue(point.value, metric.format, metric.precision)}
+                      {formatDetailValue(row.values[field.key] ?? 0, field)}
                     </td>
                   ))}
                 </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -583,32 +652,45 @@ function KpiDetailModal({
               Edit monthly mock values for the selected KPI.
             </p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {draftValues.map((point, index) => (
-              <label key={point.month} className="block">
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  {point.month}
-                </span>
-                <div className="mt-2 flex h-11 overflow-hidden rounded-xl border border-slate-200 bg-white focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-500/10">
-                  <input
-                    className="min-w-0 flex-1 px-3 text-sm font-semibold text-slate-950 outline-none"
-                    inputMode="decimal"
-                    onChange={(event) =>
-                      updateDraftValue(
-                        index,
-                        parseEditableNumber(event.target.value)
-                      )
-                    }
-                    type="text"
-                    value={formatEditableNumber(point.value)}
-                  />
-                  {metric.format === "percentage" ? (
-                    <span className="flex items-center border-l border-slate-100 bg-slate-50 px-3 text-sm font-bold text-slate-500">
-                      %
-                    </span>
-                  ) : null}
+          <div className="space-y-4">
+            {draftRows.map((row, rowIndex) => (
+              <div
+                className="rounded-xl border border-slate-200 bg-white p-4"
+                key={row.month}
+              >
+                <p className="mb-3 text-sm font-bold text-slate-950">
+                  {row.month}
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {model.editFields.map((field) => (
+                    <label key={field.key} className="block">
+                      <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                        {field.label}
+                      </span>
+                      <div className="mt-2 flex h-11 overflow-hidden rounded-xl border border-slate-200 bg-white focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-500/10">
+                        <input
+                          className="min-w-0 flex-1 px-3 text-sm font-semibold text-slate-950 outline-none"
+                          inputMode="decimal"
+                          onChange={(event) =>
+                            updateDraftValue(
+                              rowIndex,
+                              field,
+                              parseEditableNumber(event.target.value)
+                            )
+                          }
+                          type="text"
+                          value={formatEditableNumber(row.values[field.key] ?? 0)}
+                        />
+                        {field.format === "percentage" ? (
+                          <span className="flex items-center border-l border-slate-100 bg-slate-50 px-3 text-sm font-bold text-slate-500">
+                            %
+                          </span>
+                        ) : null}
+                      </div>
+                    </label>
+                  ))}
                 </div>
-              </label>
+              </div>
             ))}
           </div>
 
@@ -622,7 +704,7 @@ function KpiDetailModal({
             </button>
             <button
               className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white shadow-sm shadow-violet-600/20 transition hover:bg-violet-700"
-              onClick={() => onSave(draftValues)}
+              onClick={() => onSave(draftRows)}
               type="button"
             >
               <Save className="size-4" />
@@ -656,6 +738,25 @@ function KpiDetailSummaryCard({
       >
         {value}
       </p>
+    </div>
+  )
+}
+
+function KpiDetailChartLegend({ fields }: { fields: KpiDetailField[] }) {
+  return (
+    <div className="mb-5 flex flex-wrap items-center gap-3">
+      {fields.map((field) => (
+        <span
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500"
+          key={field.key}
+        >
+          <span
+            className="size-2.5 rounded-full"
+            style={{ backgroundColor: field.color ?? "#7c3aed" }}
+          />
+          {field.label}
+        </span>
+      ))}
     </div>
   )
 }
@@ -765,14 +866,23 @@ function normalizedDisplayOrder(kpi: KpiConfiguration) {
 
 const monthlyKpiMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
 
-function getMonthlyKpiSeries(
+const detailChartColors = [
+  "#7c3aed",
+  "#0ea5e9",
+  "#10b981",
+  "#f59e0b",
+  "#f43f5e",
+  "#64748b",
+]
+
+function getKpiDetailRows(
   metric: KpiConfiguration,
   contracts: EnterpriseContract[],
-  seriesState: MonthlyKpiSeriesState
+  rowsState: KpiDetailRowsState
 ) {
   return (
-    seriesState[getKpiSeriesKey(metric)] ??
-    createMockMonthlyKpiSeries(metric, contracts)
+    rowsState[getKpiSeriesKey(metric)] ??
+    createMockKpiDetailRows(metric, contracts)
   )
 }
 
@@ -780,30 +890,139 @@ function getKpiSeriesKey(metric: KpiConfiguration) {
   return `${metric.service}-${metric.periodType}-${normalizeKpiKey(metric.name)}`
 }
 
-function createMockMonthlyKpiSeries(
+function createMockKpiDetailRows(
   metric: KpiConfiguration,
   contracts: EnterpriseContract[]
-): MonthlyKpiPoint[] {
-  const normalizedName = normalizeKpiKey(metric.name)
-  const currentValue = getKpiCurrentValue(metric, contracts)
-  const finalValue =
-    currentValue > 0
-      ? currentValue
-      : getFallbackCurrentKpiValue(normalizedName, metric)
-  const ratios = getMonthlyKpiRatios(normalizedName, metric)
+): KpiDetailRow[] {
+  const detailType = getKpiDetailType(metric)
+  const primaryValue = getFallbackAwareCurrentKpiValue(metric, contracts)
+  const ratios = getMonthlyKpiRatios(detailType, metric)
 
-  return monthlyKpiMonths.map((month, index) => ({
-    month,
-    value: normalizeMonthlyKpiValue(finalValue * ratios[index], metric),
-  }))
+  return monthlyKpiMonths.map((month, index) =>
+    normalizeKpiDetailRow(
+      {
+        month,
+        values: createMockKpiDetailValues({
+          contracts,
+          detailType,
+          metric,
+          ratio: ratios[index],
+          value: primaryValue,
+        }),
+      },
+      metric
+    )
+  )
 }
 
-function getFallbackCurrentKpiValue(
-  normalizedName: string,
+function createMockKpiDetailValues({
+  contracts,
+  detailType,
+  metric,
+  ratio,
+  value,
+}: {
+  contracts: EnterpriseContract[]
+  detailType: KpiDetailType
   metric: KpiConfiguration
+  ratio: number
+  value: number
+}) {
+  const isOverall = metric.service === "Overall"
+
+  if (detailType === "visitors") {
+    const totalVisitors = Math.round(value * ratio)
+
+    return isOverall
+      ? buildOverallVisitorValues(totalVisitors)
+      : buildServiceVisitorValues(totalVisitors, metric.service)
+  }
+
+  if (detailType === "signupConversion") {
+    const visitors = Math.round(getContextualCount(235869, metric) * ratio)
+    const conversionRate = normalizePercentageValue(value * ratio)
+    const totalSignups = Math.round(visitors * (conversionRate / 100))
+
+    return isOverall
+      ? {
+          ...buildOverallVisitorValues(visitors),
+          totalSignups,
+        }
+      : {
+          ...buildServiceVisitorValues(visitors, metric.service),
+          totalSignups,
+        }
+  }
+
+  if (detailType === "activation") {
+    const signups = Math.round(getContextualCount(13444, metric) * ratio)
+    const activationRate = normalizePercentageValue(value * ratio)
+    const activatedUsers = Math.round(signups * (activationRate / 100))
+
+    return isOverall
+      ? splitOverallCountValues(signups, activatedUsers, "signups", "activatedUsers")
+      : { activatedUsers, signups }
+  }
+
+  if (detailType === "retention") {
+    const activeUsers = Math.round(getContextualCount(4980, metric) * ratio)
+    const retentionRate = normalizePercentageValue(value * ratio)
+    const retainedUsers = Math.round(activeUsers * (retentionRate / 100))
+
+    return isOverall
+      ? splitOverallCountValues(
+          activeUsers,
+          retainedUsers,
+          "activeUsers",
+          "retainedUsers"
+        )
+      : { activeUsers, retainedUsers }
+  }
+
+  if (detailType === "revenue") {
+    const revenueValues = getRevenueDetailValues(metric, contracts, value, ratio)
+
+    return isOverall
+      ? splitOverallRevenueValues(revenueValues)
+      : revenueValues
+  }
+
+  if (detailType === "churn") {
+    const paidUsers = Math.round(getContextualCount(1524, metric) * ratio)
+    const churnRate = normalizePercentageValue(value * ratio)
+    const churnedUsers = Math.round(paidUsers * (churnRate / 100))
+
+    return isOverall
+      ? splitOverallCountValues(paidUsers, churnedUsers, "paidUsers", "churnedUsers")
+      : { churnedUsers, paidUsers }
+  }
+
+  if (detailType === "paidConversion") {
+    const signups = Math.round(getContextualCount(13444, metric) * ratio)
+    const paidConversionRate = normalizePercentageValue(value * ratio)
+    const paidUsers = Math.round(signups * (paidConversionRate / 100))
+
+    return isOverall
+      ? splitOverallCountValues(signups, paidUsers, "signups", "paidUsers")
+      : { paidUsers, signups }
+  }
+
+  return { value: normalizeDetailFieldValue(value * ratio, getGenericField(metric)) }
+}
+
+function getFallbackAwareCurrentKpiValue(
+  metric: KpiConfiguration,
+  contracts: EnterpriseContract[]
 ) {
+  const normalizedName = normalizeKpiKey(metric.name)
+  const currentValue = getKpiCurrentValue(metric, contracts)
+
+  if (currentValue > 0) {
+    return currentValue
+  }
+
   if (normalizedName === "visitors") {
-    return 235869
+    return getContextualCount(235869, metric)
   }
 
   if (normalizedName === "signup-conversion-rate") {
@@ -856,10 +1075,10 @@ function getFallbackCurrentKpiValue(
 }
 
 function getMonthlyKpiRatios(
-  normalizedName: string,
+  detailType: KpiDetailType,
   metric: KpiConfiguration
 ) {
-  if (metric.direction === "lower" || normalizedName === "churn-rate") {
+  if (metric.direction === "lower" || detailType === "churn") {
     return [1.43, 1.33, 1.24, 1.15, 1.07, 1]
   }
 
@@ -874,20 +1093,432 @@ function getMonthlyKpiRatios(
   return [0.51, 0.55, 0.62, 0.7, 0.82, 1]
 }
 
-function normalizeMonthlyKpiValue(value: number, metric: KpiConfiguration) {
-  if (!Number.isFinite(value)) {
-    return 0
-  }
+function buildKpiDetailModel(
+  metric: KpiConfiguration,
+  rows: KpiDetailRow[]
+): KpiDetailModel {
+  const fieldModel = getKpiDetailFieldModel(metric)
+  const latestRow = rows.at(-1)
 
-  if (metric.format === "percentage") {
-    return roundToPrecision(clamp(value, 0, 100), metric.precision ?? 1)
+  return {
+    ...fieldModel,
+    summaryItems: getKpiDetailSummaryItems(metric, latestRow, fieldModel),
   }
-
-  return Math.max(0, Math.round(value))
 }
 
-function getLatestMonthlyValue(values: MonthlyKpiPoint[]) {
-  return values.at(-1)?.value ?? 0
+function getKpiDetailFieldModel(
+  metric: KpiConfiguration
+): Omit<KpiDetailModel, "summaryItems"> {
+  const detailType = getKpiDetailType(metric)
+  const isOverall = metric.service === "Overall"
+
+  if (detailType === "visitors") {
+    const editFields = isOverall
+      ? [
+          detailField("yetteyOrganicVisitors", "Yettey Organic", "number", 0),
+          detailField("yetteyPaidVisitors", "Yettey Paid", "number", 1),
+          detailField("vpickOrganicVisitors", "VPICK Organic", "number", 2),
+          detailField("vpickPaidVisitors", "VPICK Paid", "number", 3),
+        ]
+      : [
+          detailField("organicVisitors", "Organic Visitors", "number", 0),
+          detailField("paidVisitors", "Paid Visitors", "number", 1),
+        ]
+    const totalField = detailField("totalVisitors", "Total Visitors", "number", 4)
+
+    return {
+      chartFields: [...editFields, totalField],
+      editFields,
+      primaryValueKey: "totalVisitors",
+      tableFields: [...editFields, totalField],
+    }
+  }
+
+  if (detailType === "signupConversion") {
+    const editFields = isOverall
+      ? [
+          detailField("yetteyOrganicVisitors", "Yettey Organic Visitors", "number", 0),
+          detailField("yetteyPaidVisitors", "Yettey Paid Visitors", "number", 1),
+          detailField("vpickOrganicVisitors", "VPICK Organic Visitors", "number", 2),
+          detailField("vpickPaidVisitors", "VPICK Paid Visitors", "number", 3),
+          detailField("totalSignups", "Total Signups", "number", 4),
+        ]
+      : [
+          detailField("organicVisitors", "Organic Visitors", "number", 0),
+          detailField("paidVisitors", "Paid Visitors", "number", 1),
+          detailField("totalSignups", "Total Signups", "number", 2),
+        ]
+    const conversionRate = detailField(
+      "conversionRate",
+      "Conversion Rate",
+      "percentage",
+      5,
+      { axis: "right", precision: 1 }
+    )
+    const chartFields = isOverall
+      ? [
+          detailField("yetteyOrganicSignups", "Yettey Organic Signups", "number", 0),
+          detailField("yetteyPaidSignups", "Yettey Paid Signups", "number", 1),
+          detailField("vpickOrganicSignups", "VPICK Organic Signups", "number", 2),
+          detailField("vpickPaidSignups", "VPICK Paid Signups", "number", 3),
+          detailField("totalSignups", "Total Signups", "number", 4),
+        ]
+      : [
+          detailField("organicSignups", "Organic Signups", "number", 0),
+          detailField("paidSignups", "Paid Signups", "number", 1),
+          detailField("totalSignups", "Total Signups", "number", 2),
+        ]
+
+    return {
+      chartFields,
+      editFields,
+      primaryValueKey: "conversionRate",
+      tableFields: [...editFields, conversionRate],
+    }
+  }
+
+  if (detailType === "activation" || detailType === "paidConversion") {
+    const countLabel = detailType === "activation" ? "Activated Users" : "Paid Users"
+    const countKey = detailType === "activation" ? "activatedUsers" : "paidUsers"
+    const rateKey = detailType === "activation" ? "activationRate" : "paidConversionRate"
+    const rateLabel =
+      detailType === "activation" ? "Activation Rate" : "Paid Conversion Rate"
+    const editFields = isOverall
+      ? [
+          detailField("yetteySignups", "Yettey Signups", "number", 0),
+          detailField(`yettey${capitalize(countKey)}`, `Yettey ${countLabel}`, "number", 1),
+          detailField("vpickSignups", "VPICK Signups", "number", 2),
+          detailField(`vpick${capitalize(countKey)}`, `VPICK ${countLabel}`, "number", 3),
+        ]
+      : [
+          detailField("signups", "Signups", "number", 0),
+          detailField(countKey, countLabel, "number", 1),
+        ]
+    const rateField = detailField(rateKey, rateLabel, "percentage", 4, {
+      axis: "right",
+      precision: 1,
+    })
+    const totalCountField = detailField(countKey, countLabel, "number", 4)
+
+    return {
+      chartFields: isOverall
+        ? [
+            detailField(`yettey${capitalize(countKey)}`, `Yettey ${countLabel}`, "number", 0),
+            detailField(`vpick${capitalize(countKey)}`, `VPICK ${countLabel}`, "number", 1),
+            totalCountField,
+            rateField,
+          ]
+        : [totalCountField, rateField],
+      editFields,
+      primaryValueKey: rateKey,
+      tableFields: isOverall
+        ? [
+            ...editFields,
+            detailField("signups", "Total Signups", "number", 4),
+            totalCountField,
+            rateField,
+          ]
+        : [...editFields, rateField],
+    }
+  }
+
+  if (detailType === "retention") {
+    const editFields = isOverall
+      ? [
+          detailField("yetteyActiveUsers", "Yettey Active Users", "number", 0),
+          detailField("yetteyRetainedUsers", "Yettey Retained Users", "number", 1),
+          detailField("vpickActiveUsers", "VPICK Active Users", "number", 2),
+          detailField("vpickRetainedUsers", "VPICK Retained Users", "number", 3),
+        ]
+      : [
+          detailField("activeUsers", "Active Users", "number", 0),
+          detailField("retainedUsers", "Retained Users", "number", 1),
+        ]
+    const retainedUsers = detailField("retainedUsers", "Retained Users", "number", 2)
+    const retentionRate = detailField("retentionRate", "Retention Rate", "percentage", 3, {
+      axis: "right",
+      precision: 1,
+    })
+
+    return {
+      chartFields: isOverall
+        ? [
+            detailField("yetteyRetainedUsers", "Yettey Retained Users", "number", 0),
+            detailField("vpickRetainedUsers", "VPICK Retained Users", "number", 1),
+            retainedUsers,
+            retentionRate,
+          ]
+        : [retainedUsers, retentionRate],
+      editFields,
+      primaryValueKey: "retentionRate",
+      tableFields: isOverall
+        ? [
+            ...editFields,
+            detailField("activeUsers", "Total Active Users", "number", 4),
+            retainedUsers,
+            retentionRate,
+          ]
+        : [...editFields, retentionRate],
+    }
+  }
+
+  if (detailType === "revenue") {
+    const editFields = isOverall
+      ? [
+          detailField("yetteySubscriptionRevenue", "Yettey Subscription", "currency", 0),
+          detailField("yetteyEnterpriseRevenue", "Yettey Enterprise", "currency", 1),
+          detailField("vpickSubscriptionRevenue", "VPICK Subscription", "currency", 2),
+          detailField("vpickEnterpriseRevenue", "VPICK Enterprise", "currency", 3),
+        ]
+      : [
+          detailField("subscriptionRevenue", "Subscription Revenue", "currency", 0),
+          detailField("enterpriseRevenue", "Enterprise Revenue", "currency", 1),
+        ]
+    const totalRevenue = detailField("totalRevenue", "Total Revenue", "currency", 4)
+
+    return {
+      chartFields: [...editFields, totalRevenue],
+      editFields,
+      primaryValueKey: "totalRevenue",
+      tableFields: [...editFields, totalRevenue],
+    }
+  }
+
+  if (detailType === "churn") {
+    const editFields = isOverall
+      ? [
+          detailField("yetteyPaidUsers", "Yettey Paid Users", "number", 0),
+          detailField("yetteyChurnedUsers", "Yettey Churned Users", "number", 1),
+          detailField("vpickPaidUsers", "VPICK Paid Users", "number", 2),
+          detailField("vpickChurnedUsers", "VPICK Churned Users", "number", 3),
+        ]
+      : [
+          detailField("paidUsers", "Paid Users", "number", 0),
+          detailField("churnedUsers", "Churned Users", "number", 1),
+        ]
+    const churnedUsers = detailField("churnedUsers", "Churned Users", "number", 2)
+    const churnRate = detailField("churnRate", "Churn Rate", "percentage", 3, {
+      axis: "right",
+      precision: 1,
+    })
+
+    return {
+      chartFields: isOverall
+        ? [
+            detailField("yetteyChurnedUsers", "Yettey Churned Users", "number", 0),
+            detailField("vpickChurnedUsers", "VPICK Churned Users", "number", 1),
+            churnedUsers,
+            churnRate,
+          ]
+        : [churnedUsers, churnRate],
+      editFields,
+      primaryValueKey: "churnRate",
+      tableFields: isOverall
+        ? [
+            ...editFields,
+            detailField("paidUsers", "Total Paid Users", "number", 4),
+            churnedUsers,
+            churnRate,
+          ]
+        : [...editFields, churnRate],
+    }
+  }
+
+  const genericField = getGenericField(metric)
+
+  return {
+    chartFields: [genericField],
+    editFields: [genericField],
+    primaryValueKey: genericField.key,
+    tableFields: [genericField],
+  }
+}
+
+function getKpiDetailSummaryItems(
+  metric: KpiConfiguration,
+  latestRow: KpiDetailRow | undefined,
+  model: Omit<KpiDetailModel, "summaryItems">
+) {
+  const values = latestRow?.values ?? {}
+  const primaryValue = values[model.primaryValueKey] ?? 0
+  const achievement = getKpiProgressFromValue(metric, primaryValue)
+  const detailType = getKpiDetailType(metric)
+  const countOrRateItems =
+    detailType === "visitors"
+      ? [
+          summaryItem("Organic Visitors", values.organicVisitors ?? sumValues(values, ["yetteyOrganicVisitors", "vpickOrganicVisitors"])),
+          summaryItem("Paid Visitors", values.paidVisitors ?? sumValues(values, ["yetteyPaidVisitors", "vpickPaidVisitors"])),
+          summaryItem("Total Visitors", values.totalVisitors, "number"),
+        ]
+      : detailType === "signupConversion"
+        ? [
+            summaryItem("Visitors", values.totalVisitors, "number"),
+            summaryItem("Signups", values.totalSignups, "number"),
+            summaryItem("Conversion Rate", values.conversionRate, "percentage", 1),
+          ]
+        : detailType === "activation"
+          ? [
+              summaryItem("Signups", values.signups, "number"),
+              summaryItem("Activated Users", values.activatedUsers, "number"),
+              summaryItem("Activation Rate", values.activationRate, "percentage", 1),
+            ]
+          : detailType === "retention"
+            ? [
+                summaryItem("Active Users", values.activeUsers, "number"),
+                summaryItem("Retained Users", values.retainedUsers, "number"),
+                summaryItem("Retention Rate", values.retentionRate, "percentage", 1),
+              ]
+            : detailType === "revenue"
+              ? [
+                  summaryItem("Subscription Revenue", values.subscriptionRevenue, "currency"),
+                  summaryItem("Enterprise Revenue", values.enterpriseRevenue, "currency"),
+                  summaryItem("Total Revenue", values.totalRevenue, "currency"),
+                ]
+              : detailType === "churn"
+                ? [
+                    summaryItem("Paid Users", values.paidUsers, "number"),
+                    summaryItem("Churned Users", values.churnedUsers, "number"),
+                    summaryItem("Churn Rate", values.churnRate, "percentage", 1),
+                  ]
+                : detailType === "paidConversion"
+                  ? [
+                      summaryItem("Signups", values.signups, "number"),
+                      summaryItem("Paid Users", values.paidUsers, "number"),
+                      summaryItem("Paid Conversion", values.paidConversionRate, "percentage", 1),
+                    ]
+                  : [
+                      {
+                        label: "Current",
+                        value: formatKpiValue(primaryValue, metric.format, metric.precision),
+                      },
+                    ]
+
+  return [
+    ...countOrRateItems,
+    { label: "Target", value: formatKpiTarget(metric) },
+    { label: "Achievement", value: `${achievement}%` },
+  ]
+}
+
+function normalizeKpiDetailRow(row: KpiDetailRow, metric: KpiConfiguration) {
+  const detailType = getKpiDetailType(metric)
+  const values = { ...row.values }
+  const isOverall = metric.service === "Overall"
+
+  if (detailType === "visitors") {
+    values.totalVisitors = isOverall
+      ? sumValues(values, [
+          "yetteyOrganicVisitors",
+          "yetteyPaidVisitors",
+          "vpickOrganicVisitors",
+          "vpickPaidVisitors",
+        ])
+      : sumValues(values, ["organicVisitors", "paidVisitors"])
+  }
+
+  if (detailType === "signupConversion") {
+    values.totalVisitors = isOverall
+      ? sumValues(values, [
+          "yetteyOrganicVisitors",
+          "yetteyPaidVisitors",
+          "vpickOrganicVisitors",
+          "vpickPaidVisitors",
+        ])
+      : sumValues(values, ["organicVisitors", "paidVisitors"])
+    values.conversionRate = percent(values.totalSignups, values.totalVisitors, 1)
+    assignSignupBreakdown(values, isOverall)
+  }
+
+  if (detailType === "activation") {
+    normalizeRateFromCounts(values, isOverall, {
+      denominator: "signups",
+      numerator: "activatedUsers",
+      rate: "activationRate",
+    })
+  }
+
+  if (detailType === "retention") {
+    normalizeRateFromCounts(values, isOverall, {
+      denominator: "activeUsers",
+      numerator: "retainedUsers",
+      rate: "retentionRate",
+    })
+  }
+
+  if (detailType === "revenue") {
+    values.subscriptionRevenue = isOverall
+      ? sumValues(values, ["yetteySubscriptionRevenue", "vpickSubscriptionRevenue"])
+      : values.subscriptionRevenue ?? 0
+    values.enterpriseRevenue = isOverall
+      ? sumValues(values, ["yetteyEnterpriseRevenue", "vpickEnterpriseRevenue"])
+      : values.enterpriseRevenue ?? 0
+    values.totalRevenue = sumValues(values, [
+      "subscriptionRevenue",
+      "enterpriseRevenue",
+    ])
+  }
+
+  if (detailType === "churn") {
+    normalizeRateFromCounts(values, isOverall, {
+      denominator: "paidUsers",
+      numerator: "churnedUsers",
+      rate: "churnRate",
+    })
+  }
+
+  if (detailType === "paidConversion") {
+    normalizeRateFromCounts(values, isOverall, {
+      denominator: "signups",
+      numerator: "paidUsers",
+      rate: "paidConversionRate",
+    })
+  }
+
+  return { ...row, values: roundDetailValues(values) }
+}
+
+function getKpiDetailType(metric: KpiConfiguration): KpiDetailType {
+  const normalizedName = normalizeKpiKey(metric.name)
+
+  if (normalizedName === "visitors") {
+    return "visitors"
+  }
+
+  if (normalizedName === "signup-conversion-rate") {
+    return "signupConversion"
+  }
+
+  if (normalizedName === "activation-rate") {
+    return "activation"
+  }
+
+  if (normalizedName.includes("retention")) {
+    return "retention"
+  }
+
+  if (
+    normalizedName === "mrr" ||
+    normalizedName === "revenue" ||
+    normalizedName === "total-revenue"
+  ) {
+    return "revenue"
+  }
+
+  if (normalizedName === "churn-rate") {
+    return "churn"
+  }
+
+  if (normalizedName === "paid-conversion-rate") {
+    return "paidConversion"
+  }
+
+  return "generic"
+}
+
+function getLatestKpiDetailValue(metric: KpiConfiguration, rows: KpiDetailRow[]) {
+  const primaryValueKey = getKpiDetailFieldModel(metric).primaryValueKey
+
+  return rows.at(-1)?.values[primaryValueKey] ?? 0
 }
 
 function getKpiProgressFromValue(metric: KpiConfiguration, currentValue: number) {
@@ -902,14 +1533,262 @@ function getKpiProgressFromValue(metric: KpiConfiguration, currentValue: number)
   return Math.min(100, Math.round((currentValue / metric.targetValue) * 100))
 }
 
-function formatKpiChartValue(value: unknown, metric: KpiConfiguration) {
-  const numericValue = Number(value)
+function formatKpiChartAxisValue(
+  value: unknown,
+  fields: KpiDetailField[],
+  axis: "left" | "right"
+) {
+  const field = fields.find((item) => (item.axis ?? "left") === axis) ?? fields[0]
 
+  return formatDetailValue(Number(value), field)
+}
+
+function formatKpiChartTooltipValue(
+  value: unknown,
+  name: unknown,
+  fields: KpiDetailField[]
+) {
+  const label = String(name)
+  const field = fields.find((item) => item.label === label) ?? fields[0]
+
+  return [formatDetailValue(Number(value), field), label]
+}
+
+function hasRightAxis(fields: KpiDetailField[]) {
+  return fields.some((field) => field.axis === "right")
+}
+
+function getChartAxisWidth(fields: KpiDetailField[], axis: "left" | "right") {
+  const field = fields.find((item) => (item.axis ?? "left") === axis)
+
+  return field?.format === "currency" ? 110 : 70
+}
+
+function formatDetailValue(value: number, field: KpiDetailField) {
   return formatKpiValue(
-    Number.isFinite(numericValue) ? numericValue : 0,
-    metric.format,
-    metric.precision
+    Number.isFinite(value) ? value : 0,
+    field.format,
+    field.precision
   )
+}
+
+function normalizeDetailFieldValue(value: number, field: KpiDetailField) {
+  if (!Number.isFinite(value)) {
+    return 0
+  }
+
+  if (field.format === "percentage") {
+    return normalizePercentageValue(value)
+  }
+
+  return Math.max(0, Math.round(value))
+}
+
+function detailField(
+  key: string,
+  label: string,
+  format: KpiFormat,
+  colorIndex: number,
+  options: Partial<KpiDetailField> = {}
+): KpiDetailField {
+  return {
+    color: detailChartColors[colorIndex % detailChartColors.length],
+    format,
+    key,
+    label,
+    ...options,
+  }
+}
+
+function getGenericField(metric: KpiConfiguration) {
+  return detailField("value", metric.name, metric.format, 0, {
+    precision: metric.precision,
+  })
+}
+
+function summaryItem(
+  label: string,
+  value = 0,
+  format: KpiFormat = "number",
+  precision = 0
+) {
+  return {
+    label,
+    value: formatKpiValue(value, format, precision),
+  }
+}
+
+function buildServiceVisitorValues(totalVisitors: number, service: KpiService) {
+  const paidShare = service === "VPICK" ? 0.34 : 0.28
+  const paidVisitors = Math.round(totalVisitors * paidShare)
+
+  return {
+    organicVisitors: totalVisitors - paidVisitors,
+    paidVisitors,
+  }
+}
+
+function buildOverallVisitorValues(totalVisitors: number) {
+  const yetteyVisitors = Math.round(totalVisitors * overviewServiceProfiles.Yettey.countScale)
+  const vpickVisitors = totalVisitors - yetteyVisitors
+  const yetteyPaidVisitors = Math.round(yetteyVisitors * 0.28)
+  const vpickPaidVisitors = Math.round(vpickVisitors * 0.34)
+
+  return {
+    vpickOrganicVisitors: vpickVisitors - vpickPaidVisitors,
+    vpickPaidVisitors,
+    yetteyOrganicVisitors: yetteyVisitors - yetteyPaidVisitors,
+    yetteyPaidVisitors,
+  }
+}
+
+function splitOverallCountValues(
+  denominator: number,
+  numerator: number,
+  denominatorKey: string,
+  numeratorKey: string
+) {
+  const yetteyDenominator = Math.round(denominator * overviewServiceProfiles.Yettey.countScale)
+  const vpickDenominator = denominator - yetteyDenominator
+  const yetteyNumerator = Math.round(numerator * 0.58)
+
+  return {
+    [`vpick${capitalize(denominatorKey)}`]: vpickDenominator,
+    [`vpick${capitalize(numeratorKey)}`]: numerator - yetteyNumerator,
+    [`yettey${capitalize(denominatorKey)}`]: yetteyDenominator,
+    [`yettey${capitalize(numeratorKey)}`]: yetteyNumerator,
+  }
+}
+
+function getRevenueDetailValues(
+  metric: KpiConfiguration,
+  contracts: EnterpriseContract[],
+  value: number,
+  ratio: number
+) {
+  const enterpriseRevenue =
+    getActiveEnterpriseRevenue(contracts) ||
+    getContextualRevenue(170000000, metric)
+  const subscriptionRevenue = Math.max(value - enterpriseRevenue, 0)
+
+  return {
+    enterpriseRevenue: Math.round(enterpriseRevenue * ratio),
+    subscriptionRevenue: Math.round(subscriptionRevenue * ratio),
+  }
+}
+
+function splitOverallRevenueValues(values: Record<string, number>) {
+  const subscriptionRevenue = values.subscriptionRevenue ?? 0
+  const enterpriseRevenue = values.enterpriseRevenue ?? 0
+
+  return {
+    vpickEnterpriseRevenue: Math.round(enterpriseRevenue * 0.45),
+    vpickSubscriptionRevenue: Math.round(subscriptionRevenue * 0.36),
+    yetteyEnterpriseRevenue: Math.round(enterpriseRevenue * 0.55),
+    yetteySubscriptionRevenue: Math.round(subscriptionRevenue * 0.64),
+  }
+}
+
+function assignSignupBreakdown(
+  values: Record<string, number>,
+  isOverall: boolean
+) {
+  const totalSignups = values.totalSignups ?? 0
+  const totalVisitors = values.totalVisitors ?? 0
+
+  if (!totalVisitors) {
+    return
+  }
+
+  if (isOverall) {
+    ;[
+      ["yetteyOrganicVisitors", "yetteyOrganicSignups"],
+      ["yetteyPaidVisitors", "yetteyPaidSignups"],
+      ["vpickOrganicVisitors", "vpickOrganicSignups"],
+      ["vpickPaidVisitors", "vpickPaidSignups"],
+    ].forEach(([visitorKey, signupKey]) => {
+      values[signupKey] = Math.round(
+        totalSignups * ((values[visitorKey] ?? 0) / totalVisitors)
+      )
+    })
+
+    return
+  }
+
+  values.organicSignups = Math.round(
+    totalSignups * ((values.organicVisitors ?? 0) / totalVisitors)
+  )
+  values.paidSignups = totalSignups - values.organicSignups
+}
+
+function normalizeRateFromCounts(
+  values: Record<string, number>,
+  isOverall: boolean,
+  keys: {
+    denominator: string
+    numerator: string
+    rate: string
+  }
+) {
+  if (isOverall) {
+    values[keys.denominator] = sumValues(values, [
+      `yettey${capitalize(keys.denominator)}`,
+      `vpick${capitalize(keys.denominator)}`,
+    ])
+    values[keys.numerator] = sumValues(values, [
+      `yettey${capitalize(keys.numerator)}`,
+      `vpick${capitalize(keys.numerator)}`,
+    ])
+  }
+
+  values[keys.rate] = percent(values[keys.numerator], values[keys.denominator], 1)
+}
+
+function roundDetailValues(values: Record<string, number>) {
+  return Object.fromEntries(
+    Object.entries(values).map(([key, value]) => [
+      key,
+      key.toLowerCase().includes("rate")
+        ? normalizePercentageValue(value)
+        : Math.max(0, Math.round(value)),
+    ])
+  )
+}
+
+function getContextualCount(baseValue: number, metric: KpiConfiguration) {
+  return Math.round(
+    baseValue *
+      overviewServiceProfiles[metric.service].countScale *
+      overviewPeriodProfiles[metric.periodType].countScale
+  )
+}
+
+function getContextualRevenue(baseValue: number, metric: KpiConfiguration) {
+  return Math.round(
+    baseValue *
+      overviewServiceProfiles[metric.service].revenueScale *
+      overviewPeriodProfiles[metric.periodType].revenueScale
+  )
+}
+
+function percent(numerator = 0, denominator = 0, precision = 1) {
+  if (!denominator) {
+    return 0
+  }
+
+  return roundToPrecision((numerator / denominator) * 100, precision)
+}
+
+function normalizePercentageValue(value: number) {
+  return roundToPrecision(clamp(value, 0, 100), 1)
+}
+
+function sumValues(values: Record<string, number>, keys: string[]) {
+  return keys.reduce((total, key) => total + (values[key] ?? 0), 0)
+}
+
+function capitalize(value: string) {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`
 }
 
 function buildOverviewKpis(
