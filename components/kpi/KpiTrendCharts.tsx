@@ -11,7 +11,6 @@ import {
   YAxis,
 } from "recharts"
 
-import { cn } from "@/lib/utils"
 import type { KpiPeriodType, KpiService } from "./kpi-data"
 
 type KpiTrendPoint = {
@@ -23,9 +22,6 @@ type KpiTrendPoint = {
   visitorPaid: number
   visitorSignup: number
 }
-
-const serviceOptions: KpiService[] = ["Overall", "Yettey", "VPICK"]
-const periodOptions: KpiPeriodType[] = ["Monthly", "Quarterly", "Yearly"]
 
 const trendRows: Record<KpiPeriodType, KpiTrendPoint[]> = {
   Monthly: [
@@ -94,15 +90,19 @@ const serviceAdjustments: Record<
 }
 
 const conversionLegend = [
-  { color: "#3b82f6", label: "Visitor → Signup" },
-  { color: "#ef4444", label: "Signup → Activation" },
-  { color: "#f59e0b", label: "Visitor → Paid" },
+  { color: "#3b82f6", label: "Visitor to Signup" },
+  { color: "#ef4444", label: "Signup to Activation" },
+  { color: "#f59e0b", label: "Visitor to Paid" },
 ]
 
-export default function KpiTrendCharts() {
+export default function KpiTrendCharts({
+  period,
+  service,
+}: {
+  period: KpiPeriodType
+  service: KpiService
+}) {
   const [isMounted, setIsMounted] = useState(false)
-  const [period, setPeriod] = useState<KpiPeriodType>("Monthly")
-  const [service, setService] = useState<KpiService>("Overall")
   const rows = useMemo(() => buildTrendRows(service, period), [period, service])
 
   useEffect(() => {
@@ -121,20 +121,6 @@ export default function KpiTrendCharts() {
           <p className="mt-1 text-sm text-slate-500">
             Track whether core KPI signals are improving or declining over time.
           </p>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <SegmentedControl
-            label="Service"
-            onChange={setService}
-            options={serviceOptions}
-            value={service}
-          />
-          <SegmentedControl
-            label="Period"
-            onChange={setPeriod}
-            options={periodOptions}
-            value={period}
-          />
         </div>
       </div>
 
@@ -335,43 +321,6 @@ function ChartLegend({
           {item.label}
         </span>
       ))}
-    </div>
-  )
-}
-
-function SegmentedControl<T extends string>({
-  label,
-  onChange,
-  options,
-  value,
-}: {
-  label: string
-  onChange: (value: T) => void
-  options: T[]
-  value: T
-}) {
-  return (
-    <div>
-      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-        {label}
-      </p>
-      <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
-        {options.map((option) => (
-          <button
-            key={option}
-            className={cn(
-              "h-8 rounded-lg px-3 text-xs font-bold transition",
-              value === option
-                ? "bg-violet-600 text-white shadow-sm shadow-violet-600/20"
-                : "text-slate-500 hover:bg-slate-50 hover:text-slate-950"
-            )}
-            onClick={() => onChange(option)}
-            type="button"
-          >
-            {option}
-          </button>
-        ))}
-      </div>
     </div>
   )
 }

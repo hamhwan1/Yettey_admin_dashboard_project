@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo, useState } from "react"
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -21,15 +22,116 @@ import {
   getKpiProgress,
   getKpiStatus,
   isTrendHealthy,
+  kpiPeriodTypes,
+  kpiServices,
   type EnterpriseContract,
   type KpiConfiguration,
+  type KpiPeriodType,
+  type KpiService,
   type KpiTone,
 } from "./kpi-data"
 
+type OverviewServiceProfile = {
+  cacScale: number
+  countScale: number
+  enterpriseRevenueShare: number
+  ltvScale: number
+  percentageShifts: Partial<Record<string, number>>
+  revenueScale: number
+  unitRevenueScale: number
+}
+
+type OverviewPeriodProfile = {
+  countScale: number
+  label: string
+  percentageShift: number
+  revenueScale: number
+  unitRevenueScale: number
+}
+
+const overviewServiceProfiles: Record<KpiService, OverviewServiceProfile> = {
+  Overall: {
+    cacScale: 1,
+    countScale: 1,
+    enterpriseRevenueShare: 1,
+    ltvScale: 1,
+    percentageShifts: {},
+    revenueScale: 1,
+    unitRevenueScale: 1,
+  },
+  Yettey: {
+    cacScale: 0.92,
+    countScale: 0.62,
+    enterpriseRevenueShare: 0.55,
+    ltvScale: 1.03,
+    percentageShifts: {
+      "activation-rate": 6,
+      "churn-rate": -0.2,
+      "d30-retention": 2.5,
+      "paid-conversion-rate": -0.8,
+      "signup-conversion-rate": 0.4,
+    },
+    revenueScale: 0.64,
+    unitRevenueScale: 1.04,
+  },
+  VPICK: {
+    cacScale: 1.08,
+    countScale: 0.38,
+    enterpriseRevenueShare: 0.45,
+    ltvScale: 1.16,
+    percentageShifts: {
+      "activation-rate": -3,
+      "churn-rate": 0.3,
+      "d30-retention": -1.5,
+      "paid-conversion-rate": 1.4,
+      "signup-conversion-rate": 0.1,
+    },
+    revenueScale: 0.36,
+    unitRevenueScale: 1.12,
+  },
+}
+
+const overviewPeriodProfiles: Record<KpiPeriodType, OverviewPeriodProfile> = {
+  Monthly: {
+    countScale: 1,
+    label: "June 2026",
+    percentageShift: 0,
+    revenueScale: 1,
+    unitRevenueScale: 1,
+  },
+  Quarterly: {
+    countScale: 3.1,
+    label: "Q2 2026",
+    percentageShift: 0.6,
+    revenueScale: 3,
+    unitRevenueScale: 1.04,
+  },
+  Yearly: {
+    countScale: 12.4,
+    label: "2026",
+    percentageShift: 1.1,
+    revenueScale: 12,
+    unitRevenueScale: 1.08,
+  },
+}
+
+const periodRevenueKpiKeys = new Set([
+  "enterprise-revenue",
+  "mrr",
+  "total-revenue",
+])
+
 export default function KpiOverviewClient() {
   const { contracts, kpis } = useKpiManagementStore()
-  const overviewKpis = kpis.filter(
-    (kpi) => !kpi.archived && kpi.showOnOverview
+  const [selectedService, setSelectedService] = useState<KpiService>("Overall")
+  const [selectedPeriod, setSelectedPeriod] = useState<KpiPeriodType>("Monthly")
+  const overviewContracts = useMemo(
+    () => buildOverviewContracts(contracts, selectedService, selectedPeriod),
+    [contracts, selectedPeriod, selectedService]
+  )
+  const overviewKpis = useMemo(
+    () => buildOverviewKpis(kpis, selectedService, selectedPeriod),
+    [kpis, selectedPeriod, selectedService]
   )
   const representativeKpis = overviewKpis
     .filter((kpi) => kpi.representative)
@@ -46,6 +148,17 @@ export default function KpiOverviewClient() {
         description="Monitor administrator-selected business health indicators for Yettey and VPICK."
       />
 
+      <KpiOverviewFilterPanel
+        period={selectedPeriod}
+        service={selectedService}
+        onPeriodChange={setSelectedPeriod}
+        onReset={() => {
+          setSelectedService("Overall")
+          setSelectedPeriod("Monthly")
+        }}
+        onServiceChange={setSelectedService}
+      />
+
       <section
         className={cn(
           "mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3",
@@ -54,14 +167,18 @@ export default function KpiOverviewClient() {
       >
         {representativeKpis.length ? (
           representativeKpis.map((metric) => (
-            <KpiSummaryCard key={metric.id} contracts={contracts} metric={metric} />
+            <KpiSummaryCard
+              key={`${metric.id}-${selectedService}-${selectedPeriod}`}
+              contracts={overviewContracts}
+              metric={metric}
+            />
           ))
         ) : (
           <EmptyPanel message="No representative KPIs are configured for the top area." />
         )}
       </section>
 
-      <KpiTrendCharts />
+      <KpiTrendCharts period={selectedPeriod} service={selectedService} />
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
         <div className="flex flex-col gap-3 border-b border-slate-100 p-6 sm:flex-row sm:items-center sm:justify-between">
@@ -102,11 +219,14 @@ export default function KpiOverviewClient() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {scoreboardKpis.map((metric) => {
-                  const progress = getKpiProgress(metric, contracts)
-                  const status = getKpiStatus(metric, contracts)
+                  const progress = getKpiProgress(metric, overviewContracts)
+                  const status = getKpiStatus(metric, overviewContracts)
 
                   return (
-                    <tr key={metric.id} className="transition hover:bg-violet-50/40">
+                    <tr
+                      key={`${metric.id}-${selectedService}-${selectedPeriod}`}
+                      className="transition hover:bg-violet-50/40"
+                    >
                       <td className="px-6 py-5">
                         <div className="min-w-0">
                           <p className="whitespace-nowrap font-bold text-slate-950">
@@ -119,10 +239,10 @@ export default function KpiOverviewClient() {
                       </td>
                       <td
                         className="whitespace-nowrap px-6 py-5 font-semibold text-slate-800"
-                        title={getCurrentValueTitle(metric, contracts)}
+                        title={getCurrentValueTitle(metric, overviewContracts)}
                       >
                         {formatKpiValue(
-                          getKpiCurrentValue(metric, contracts),
+                          getKpiCurrentValue(metric, overviewContracts),
                           metric.format,
                           metric.precision
                         )}
@@ -219,6 +339,84 @@ function KpiSummaryCard({
   )
 }
 
+function KpiOverviewFilterPanel({
+  onPeriodChange,
+  onReset,
+  onServiceChange,
+  period,
+  service,
+}: {
+  onPeriodChange: (period: KpiPeriodType) => void
+  onReset: () => void
+  onServiceChange: (service: KpiService) => void
+  period: KpiPeriodType
+  service: KpiService
+}) {
+  return (
+    <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
+        <SegmentedFilter
+          label="Service"
+          onChange={onServiceChange}
+          options={kpiServices}
+          value={service}
+        />
+        <SegmentedFilter
+          label="Period"
+          onChange={onPeriodChange}
+          options={kpiPeriodTypes}
+          value={period}
+        />
+        <button
+          className="h-9 w-fit rounded-lg px-3 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-950"
+          onClick={onReset}
+          type="button"
+        >
+          Reset filters
+        </button>
+      </div>
+    </section>
+  )
+}
+
+function SegmentedFilter<T extends string>({
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  label: string
+  onChange: (value: T) => void
+  options: T[]
+  value: T
+}) {
+  return (
+    <div>
+      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => (
+          <button
+            key={option}
+            aria-pressed={value === option}
+            className={cn(
+              "h-9 rounded-lg px-3 text-sm font-semibold transition hover:bg-slate-100 hover:text-slate-950",
+              value === option
+                ? "bg-violet-600 text-white shadow-sm shadow-violet-600/20 hover:bg-violet-600 hover:text-white"
+                : "text-slate-600"
+            )}
+            onClick={() => onChange(option)}
+            type="button"
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function representativeGridClass(count: number) {
   if (count >= 5) {
     return "[@media(min-width:1180px)]:grid-cols-5"
@@ -242,6 +440,163 @@ function normalizedDisplayOrder(kpi: KpiConfiguration) {
   return Number.isFinite(kpi.displayOrder)
     ? kpi.displayOrder
     : Number.MAX_SAFE_INTEGER
+}
+
+function buildOverviewKpis(
+  kpis: KpiConfiguration[],
+  service: KpiService,
+  period: KpiPeriodType
+) {
+  const groupedKpis = new Map<string, KpiConfiguration[]>()
+
+  kpis
+    .filter((kpi) => !kpi.archived && kpi.showOnOverview)
+    .forEach((kpi) => {
+      const key = normalizeKpiKey(kpi.name)
+      const group = groupedKpis.get(key) ?? []
+
+      groupedKpis.set(key, [...group, kpi])
+    })
+
+  return Array.from(groupedKpis.values()).map((group) => {
+    const sourceKpi = pickOverviewSourceKpi(group, service, period)
+
+    if (sourceKpi.service === service && sourceKpi.periodType === period) {
+      return {
+        ...sourceKpi,
+        periodLabel: sourceKpi.periodLabel || overviewPeriodProfiles[period].label,
+      }
+    }
+
+    return adaptKpiToOverviewFilter(sourceKpi, service, period)
+  })
+}
+
+function pickOverviewSourceKpi(
+  kpis: KpiConfiguration[],
+  service: KpiService,
+  period: KpiPeriodType
+) {
+  return (
+    kpis.find((kpi) => kpi.service === service && kpi.periodType === period) ??
+    kpis.find((kpi) => kpi.service === service) ??
+    kpis.find((kpi) => kpi.service === "Overall" && kpi.periodType === period) ??
+    kpis.find((kpi) => kpi.service === "Overall") ??
+    kpis[0]
+  )
+}
+
+function adaptKpiToOverviewFilter(
+  kpi: KpiConfiguration,
+  service: KpiService,
+  period: KpiPeriodType
+): KpiConfiguration {
+  return {
+    ...kpi,
+    currentValue: adaptKpiNumericValue(kpi.currentValue, kpi, service, period),
+    periodLabel: overviewPeriodProfiles[period].label,
+    periodType: period,
+    service,
+    targetValue: adaptKpiNumericValue(
+      kpi.targetValue,
+      kpi,
+      service,
+      period,
+      "target"
+    ),
+    trend: {
+      ...kpi.trend,
+      value: roundToPrecision(
+        kpi.trend.value *
+          (service === "Overall" ? 1 : 1.08) *
+          (period === "Monthly" ? 1 : period === "Quarterly" ? 1.15 : 1.25),
+        1
+      ),
+    },
+  }
+}
+
+function buildOverviewContracts(
+  contracts: EnterpriseContract[],
+  service: KpiService,
+  period: KpiPeriodType
+) {
+  const serviceProfile = overviewServiceProfiles[service]
+  const periodProfile = overviewPeriodProfiles[period]
+
+  return contracts.map((contract) => ({
+    ...contract,
+    contractAmount: Math.round(
+      contract.contractAmount *
+        serviceProfile.enterpriseRevenueShare *
+        periodProfile.revenueScale
+    ),
+  }))
+}
+
+function adaptKpiNumericValue(
+  value: number,
+  kpi: KpiConfiguration,
+  service: KpiService,
+  period: KpiPeriodType,
+  valueType: "current" | "target" = "current"
+) {
+  const key = normalizeKpiKey(kpi.name)
+  const serviceProfile = overviewServiceProfiles[service]
+  const periodProfile = overviewPeriodProfiles[period]
+
+  if (kpi.format === "number") {
+    return Math.round(value * serviceProfile.countScale * periodProfile.countScale)
+  }
+
+  if (kpi.format === "currency") {
+    const periodScale = periodRevenueKpiKeys.has(key)
+      ? periodProfile.revenueScale
+      : periodProfile.unitRevenueScale
+    const serviceScale =
+      key === "cac"
+        ? serviceProfile.cacScale
+        : key === "ltv"
+          ? serviceProfile.ltvScale
+          : periodRevenueKpiKeys.has(key)
+            ? serviceProfile.revenueScale
+            : serviceProfile.unitRevenueScale
+
+    return Math.round(value * serviceScale * periodScale)
+  }
+
+  const serviceShift = serviceProfile.percentageShifts[key] ?? 0
+  const periodShift =
+    kpi.direction === "lower"
+      ? -periodProfile.percentageShift
+      : periodProfile.percentageShift
+  const shift =
+    valueType === "target"
+      ? serviceShift * 0.25 + periodShift * 0.25
+      : serviceShift + periodShift
+
+  return roundToPrecision(
+    clamp(value + shift, 0, 100),
+    kpi.precision ?? 0
+  )
+}
+
+function normalizeKpiKey(name: string) {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
+}
+
+function roundToPrecision(value: number, precision: number) {
+  const multiplier = 10 ** precision
+
+  return Math.round(value * multiplier) / multiplier
 }
 
 function ProgressMeter({ progress, tone }: { progress: number; tone: KpiTone }) {
