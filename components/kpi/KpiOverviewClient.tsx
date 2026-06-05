@@ -49,6 +49,18 @@ type OverviewPeriodProfile = {
   unitRevenueScale: number
 }
 
+type ServiceFunnelMetrics = {
+  activatedUsers: number
+  churnedUsers: number
+  paidUsers: number
+  retainedUsers: number
+  service: Exclude<KpiService, "Overall">
+  signups: number
+  visitors: number
+}
+
+type ServiceFunnelMetricKey = Exclude<keyof ServiceFunnelMetrics, "service">
+
 const overviewServiceProfiles: Record<KpiService, OverviewServiceProfile> = {
   Overall: {
     cacScale: 1,
@@ -465,7 +477,7 @@ function buildOverviewKpis(
 
   return Array.from(groupedKpis.values()).map((group) => {
     if (service === "Overall") {
-      return aggregateOverviewKpiGroup(group, period)
+      return aggregateOverviewKpiGroup(group, period, groupedKpis)
     }
 
     const sourceKpi = pickOverviewSourceKpi(group, service, period)
@@ -497,7 +509,8 @@ function pickOverviewSourceKpi(
 
 function aggregateOverviewKpiGroup(
   group: KpiConfiguration[],
-  period: KpiPeriodType
+  period: KpiPeriodType,
+  groupedKpis: Map<string, KpiConfiguration[]>
 ) {
   const serviceKpis = managedOverviewServices
     .map((service) => pickServiceKpiForOverall(group, service, period))
@@ -520,12 +533,24 @@ function aggregateOverviewKpiGroup(
 
   return {
     ...baseKpi,
-    currentValue: aggregateKpiValues(serviceKpis, "currentValue", key),
+    currentValue: aggregateKpiValues(
+      serviceKpis,
+      "currentValue",
+      key,
+      groupedKpis,
+      period
+    ),
     id: `overall-${key}-${period.toLowerCase()}`,
     periodLabel: overviewPeriodProfiles[period].label,
     periodType: period,
     service: "Overall" as KpiService,
-    targetValue: aggregateKpiValues(serviceKpis, "targetValue", key),
+    targetValue: aggregateKpiValues(
+      serviceKpis,
+      "targetValue",
+      key,
+      groupedKpis,
+      period
+    ),
     trend: aggregateTrend(serviceKpis),
   }
 }
@@ -545,7 +570,9 @@ function pickServiceKpiForOverall(
 function aggregateKpiValues(
   kpis: KpiConfiguration[],
   key: "currentValue" | "targetValue",
-  normalizedName: string
+  normalizedName: string,
+  groupedKpis: Map<string, KpiConfiguration[]>,
+  period: KpiPeriodType
 ) {
   const sample = kpis[0]
 
@@ -553,10 +580,185 @@ function aggregateKpiValues(
     return Math.round(kpis.reduce((total, kpi) => total + kpi[key], 0))
   }
 
+  if (sample.format === "percentage") {
+    const formulaValue = calculateOverallFormulaValue(
+      normalizedName,
+      key,
+      groupedKpis,
+      period,
+      sample.precision ?? 0
+    )
+
+    if (formulaValue !== null) {
+      return formulaValue
+    }
+  }
+
   return roundToPrecision(
     weightedAverage(kpis.map((kpi) => ({ service: kpi.service, value: kpi[key] }))),
     sample.precision ?? 0
   )
+}
+
+function calculateOverallFormulaValue(
+  normalizedName: string,
+  key: "currentValue" | "targetValue",
+  groupedKpis: Map<string, KpiConfiguration[]>,
+  period: KpiPeriodType,
+  precision: number
+) {
+  const funnels = managedOverviewServices
+    .map((service) => buildServiceFunnelMetrics(service, key, groupedKpis, period))
+    .filter((metrics): metrics is ServiceFunnelMetrics => Boolean(metrics))
+
+  if (!funnels.length) {
+    return null
+  }
+
+  if (normalizedName === "signup-conversion-rate") {
+    return percentFromTotals(funnels, "signups", "visitors", precision)
+  }
+
+  if (normalizedName === "activation-rate") {
+    return percentFromTotals(funnels, "activatedUsers", "signups", precision)
+  }
+
+  if (normalizedName === "paid-conversion-rate") {
+    return percentFromTotals(funnels, "paidUsers", "signups", precision)
+  }
+
+  if (normalizedName === "d30-retention") {
+    return percentFromTotals(funnels, "retainedUsers", "activatedUsers", precision)
+  }
+
+  if (normalizedName === "churn-rate") {
+    return percentFromTotals(funnels, "churnedUsers", "paidUsers", precision)
+  }
+
+  return null
+}
+
+function buildServiceFunnelMetrics(
+  service: Exclude<KpiService, "Overall">,
+  key: "currentValue" | "targetValue",
+  groupedKpis: Map<string, KpiConfiguration[]>,
+  period: KpiPeriodType
+): ServiceFunnelMetrics | null {
+  const visitors = getOverviewKpiValueForService(
+    groupedKpis,
+    "visitors",
+    service,
+    period,
+    key
+  )
+  const signupConversionRate = getOverviewKpiValueForService(
+    groupedKpis,
+    "signup-conversion-rate",
+    service,
+    period,
+    key
+  )
+
+  if (visitors === null || signupConversionRate === null) {
+    return null
+  }
+
+  const activationRate =
+    getOverviewKpiValueForService(
+      groupedKpis,
+      "activation-rate",
+      service,
+      period,
+      key
+    ) ?? 0
+  const paidConversionRate =
+    getOverviewKpiValueForService(
+      groupedKpis,
+      "paid-conversion-rate",
+      service,
+      period,
+      key
+    ) ?? 0
+  const retentionRate =
+    getOverviewKpiValueForService(
+      groupedKpis,
+      "d30-retention",
+      service,
+      period,
+      key
+    ) ?? 0
+  const churnRate =
+    getOverviewKpiValueForService(
+      groupedKpis,
+      "churn-rate",
+      service,
+      period,
+      key
+    ) ?? 0
+  const signups = visitors * (signupConversionRate / 100)
+  const activatedUsers = signups * (activationRate / 100)
+  const paidUsers = signups * (paidConversionRate / 100)
+  const retainedUsers = activatedUsers * (retentionRate / 100)
+  const churnedUsers = paidUsers * (churnRate / 100)
+
+  return {
+    activatedUsers,
+    churnedUsers,
+    paidUsers,
+    retainedUsers,
+    service,
+    signups,
+    visitors,
+  }
+}
+
+function getOverviewKpiValueForService(
+  groupedKpis: Map<string, KpiConfiguration[]>,
+  normalizedName: string,
+  service: Exclude<KpiService, "Overall">,
+  period: KpiPeriodType,
+  key: "currentValue" | "targetValue"
+) {
+  const group = groupedKpis.get(normalizedName)
+
+  if (!group) {
+    return null
+  }
+
+  const sourceKpi = pickServiceKpiForOverall(group, service, period)
+
+  if (!sourceKpi) {
+    return null
+  }
+
+  const kpi =
+    sourceKpi.periodType === period
+      ? sourceKpi
+      : adaptKpiToOverviewFilter(sourceKpi, sourceKpi.service, period)
+
+  return kpi[key]
+}
+
+function percentFromTotals(
+  metrics: ServiceFunnelMetrics[],
+  numeratorKey: ServiceFunnelMetricKey,
+  denominatorKey: ServiceFunnelMetricKey,
+  precision: number
+) {
+  const numerator = metrics.reduce(
+    (total, metric) => total + metric[numeratorKey],
+    0
+  )
+  const denominator = metrics.reduce(
+    (total, metric) => total + metric[denominatorKey],
+    0
+  )
+
+  if (!denominator) {
+    return null
+  }
+
+  return roundToPrecision((numerator / denominator) * 100, precision)
 }
 
 function aggregateTrend(kpis: KpiConfiguration[]) {

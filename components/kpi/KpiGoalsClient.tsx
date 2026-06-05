@@ -68,6 +68,8 @@ type KpiForm = Pick<
 
 type ArchiveFilter = "active" | "all" | "archived"
 
+type KpiServiceFilter = "all" | "VPICK" | "Yettey"
+
 const contractStatuses: EnterpriseContractStatus[] = ["Active", "Expired", "Pending"]
 
 const kpiCalculationTypes: Array<{ label: string; value: KpiCalculationType }> = [
@@ -88,6 +90,15 @@ const kpiFormats: Array<{ label: string; value: KpiFormat }> = [
 ]
 
 const kpiTones: KpiTone[] = ["violet", "sky", "emerald", "amber", "rose"]
+
+const kpiServiceFilterOptions: Array<{
+  label: string
+  value: KpiServiceFilter
+}> = [
+  { label: "All Services", value: "all" },
+  { label: "Yettey", value: "Yettey" },
+  { label: "VPICK", value: "VPICK" },
+]
 
 const emptyContractForm: ContractForm = {
   companyName: "New Enterprise Account",
@@ -131,6 +142,8 @@ export default function KpiGoalsClient() {
     useState<ArchiveFilter>("active")
   const [contractSearch, setContractSearch] = useState("")
   const [kpiArchiveFilter, setKpiArchiveFilter] = useState<ArchiveFilter>("active")
+  const [kpiServiceFilter, setKpiServiceFilter] =
+    useState<KpiServiceFilter>("all")
   const [kpiForm, setKpiForm] = useState<KpiForm>(() => ({
     ...emptyKpiForm,
     displayOrder: getNextKpiOrder(initialKpiConfigurations),
@@ -144,6 +157,9 @@ export default function KpiGoalsClient() {
     () =>
       kpis
         .filter((kpi) => kpi.service !== "Overall")
+        .filter(
+          (kpi) => kpiServiceFilter === "all" || kpi.service === kpiServiceFilter
+        )
         .filter((kpi) => matchesArchiveFilter(kpi.archived, kpiArchiveFilter))
         .filter((kpi) =>
           matchesSearch(kpiSearch, [
@@ -155,7 +171,7 @@ export default function KpiGoalsClient() {
           ])
         )
         .sort((a, b) => a.displayOrder - b.displayOrder),
-    [kpiArchiveFilter, kpiSearch, kpis]
+    [kpiArchiveFilter, kpiSearch, kpiServiceFilter, kpis]
   )
   const filteredContracts = useMemo(
     () =>
@@ -304,7 +320,9 @@ export default function KpiGoalsClient() {
             setFeedback(`${kpi.name} restored to active KPI list`)
           }}
           onSearchChange={setKpiSearch}
+          onServiceFilterChange={setKpiServiceFilter}
           search={kpiSearch}
+          serviceFilter={kpiServiceFilter}
           totals={{
             active: activeKpiCount,
             archived: archivedKpiCount,
@@ -365,7 +383,9 @@ function KpiListTable({
   onFilterChange,
   onRestore,
   onSearchChange,
+  onServiceFilterChange,
   search,
+  serviceFilter,
   totals,
 }: {
   archiveFilter: ArchiveFilter
@@ -375,7 +395,9 @@ function KpiListTable({
   onFilterChange: (filter: ArchiveFilter) => void
   onRestore: (kpi: KpiConfiguration) => void
   onSearchChange: (value: string) => void
+  onServiceFilterChange: (filter: KpiServiceFilter) => void
   search: string
+  serviceFilter: KpiServiceFilter
   totals: Record<ArchiveFilter, number>
 }) {
   return (
@@ -394,6 +416,10 @@ function KpiListTable({
             onChange={onSearchChange}
             placeholder="Search KPIs"
             value={search}
+          />
+          <ServiceFilterControl
+            onChange={onServiceFilterChange}
+            value={serviceFilter}
           />
           <ArchiveFilterControl
             activeFilter={archiveFilter}
@@ -1079,6 +1105,33 @@ function SearchField({
         type="search"
         value={value}
       />
+    </label>
+  )
+}
+
+function ServiceFilterControl({
+  onChange,
+  value,
+}: {
+  onChange: (filter: KpiServiceFilter) => void
+  value: KpiServiceFilter
+}) {
+  return (
+    <label className="block w-full sm:w-40">
+      <span className="sr-only">Service filter</span>
+      <select
+        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
+        onChange={(event) =>
+          onChange(event.target.value as KpiServiceFilter)
+        }
+        value={value}
+      >
+        {kpiServiceFilterOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     </label>
   )
 }
