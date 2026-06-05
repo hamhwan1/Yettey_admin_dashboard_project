@@ -5,7 +5,6 @@ import { useMemo, useState, type ReactNode } from "react"
 import {
   Archive,
   Building2,
-  CalendarRange,
   Eye,
   Pencil,
   Plus,
@@ -426,10 +425,6 @@ function KpiListTable({
             onChange={onFilterChange}
             totals={totals}
           />
-          <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-600">
-            <CalendarRange className="size-4 text-violet-600" />
-            Monthly / Quarterly / Yearly
-          </div>
         </div>
       </div>
 
