@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import {
   ArrowDownRight,
   ArrowUpRight,
-  Save,
+  FileSpreadsheet,
   Target,
   X,
 } from "lucide-react"
@@ -21,11 +21,15 @@ import {
 import PageHeader from "@/components/admin/PageHeader"
 import StatusBadge from "@/components/admin/StatusBadge"
 import DashboardLayout from "@/components/layout/DashboardLayout"
+import {
+  downloadXlsxReport,
+  type ExportReportPayload,
+  type ExportRow,
+} from "@/lib/export-files"
 import { useKpiManagementStore } from "@/lib/kpi-management-store"
 import { cn } from "@/lib/utils"
 import KpiTrendCharts from "./KpiTrendCharts"
 import {
-  formatEditableNumber,
   formatKpiTarget,
   formatKpiValue,
   formatTrend,
@@ -36,7 +40,6 @@ import {
   isTrendHealthy,
   kpiOverviewServices,
   kpiPeriodTypes,
-  parseEditableNumber,
   type EnterpriseContract,
   type KpiConfiguration,
   type KpiFormat,
@@ -89,8 +92,6 @@ type KpiDetailRow = {
   values: Record<string, number>
 }
 
-type KpiDetailRowsState = Record<string, KpiDetailRow[]>
-
 type KpiDetailType =
   | "activation"
   | "churn"
@@ -113,6 +114,15 @@ type KpiCardContextItem = {
   label: string
   value: string
 }
+
+type KpiDetailReportPeriod = KpiPeriodType | "Custom Range"
+
+const kpiDetailReportPeriods: KpiDetailReportPeriod[] = [
+  "Monthly",
+  "Quarterly",
+  "Yearly",
+  "Custom Range",
+]
 
 const overviewServiceProfiles: Record<KpiService, OverviewServiceProfile> = {
   Overall: {
@@ -194,8 +204,6 @@ const managedOverviewServices: Array<Exclude<KpiService, "Overall">> = [
 export default function KpiOverviewClient() {
   const { contracts, kpis } = useKpiManagementStore()
   const [detailMetric, setDetailMetric] = useState<KpiConfiguration | null>(null)
-  const [kpiDetailRows, setKpiDetailRows] =
-    useState<KpiDetailRowsState>({})
   const [selectedService, setSelectedService] = useState<KpiService>("Overall")
   const [selectedPeriod, setSelectedPeriod] = useState<KpiPeriodType>("Monthly")
   const overviewContracts = useMemo(
@@ -245,8 +253,7 @@ export default function KpiOverviewClient() {
               contracts={overviewContracts}
               detailRows={getKpiDetailRows(
                 metric,
-                overviewContracts,
-                kpiDetailRows
+                overviewContracts
               )}
               metric={metric}
               onOpen={() => setDetailMetric(metric)}
@@ -354,21 +361,12 @@ export default function KpiOverviewClient() {
       {detailMetric ? (
         <KpiDetailModal
           key={getKpiSeriesKey(detailMetric)}
-          contracts={overviewContracts}
           detailRows={getKpiDetailRows(
             detailMetric,
-            overviewContracts,
-            kpiDetailRows
+            overviewContracts
           )}
           metric={detailMetric}
           onClose={() => setDetailMetric(null)}
-          onSave={(nextValues) => {
-            setKpiDetailRows((current) => ({
-              ...current,
-              [getKpiSeriesKey(detailMetric)]: nextValues,
-            }))
-            setDetailMetric(null)
-          }}
         />
       ) : null}
     </DashboardLayout>
@@ -474,21 +472,42 @@ function KpiDetailModal({
   detailRows,
   metric,
   onClose,
-  onSave,
 }: {
-  contracts: EnterpriseContract[]
   detailRows: KpiDetailRow[]
   metric: KpiConfiguration
   onClose: () => void
-  onSave: (values: KpiDetailRow[]) => void
 }) {
-  const [draftRows, setDraftRows] = useState(detailRows)
+  const [reportPeriod, setReportPeriod] =
+    useState<KpiDetailReportPeriod>(metric.periodType)
+  const [isExporting, setIsExporting] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
-  const model = buildKpiDetailModel(metric, draftRows)
-  const chartRows = draftRows.map((row) => ({
+  const reportRows = useMemo(
+    () => buildKpiDetailReportRows(detailRows, reportPeriod, metric),
+    [detailRows, metric, reportPeriod]
+  )
+  const model = useMemo(
+    () => buildKpiDetailModel(metric, reportRows),
+    [metric, reportRows]
+  )
+  const chartRows = reportRows.map((row) => ({
     month: row.month,
     ...row.values,
   }))
+  const reportPeriodLabel = getKpiDetailReportPeriodLabel(
+    reportRows,
+    reportPeriod
+  )
+  const exportPayload = useMemo(
+    () =>
+      buildKpiDetailExportPayload({
+        metric,
+        model,
+        reportPeriod,
+        reportPeriodLabel,
+        rows: reportRows,
+      }),
+    [metric, model, reportPeriod, reportPeriodLabel, reportRows]
+  )
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setIsMounted(true))
@@ -496,27 +515,13 @@ function KpiDetailModal({
     return () => cancelAnimationFrame(frame)
   }, [])
 
-  const updateDraftValue = (
-    index: number,
-    field: KpiDetailField,
-    value: number
-  ) => {
-    setDraftRows((current) =>
-      current.map((row, rowIndex) =>
-        rowIndex === index
-          ? normalizeKpiDetailRow(
-              {
-                ...row,
-                values: {
-                  ...row.values,
-                  [field.key]: normalizeDetailFieldValue(value, field),
-                },
-              },
-              metric
-            )
-          : row
-      )
-    )
+  const exportExcel = () => {
+    setIsExporting(true)
+    try {
+      downloadXlsxReport(exportPayload)
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   return (
@@ -535,7 +540,7 @@ function KpiDetailModal({
               {metric.name}
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              {metric.service} / {metric.periodType} monthly mock history and edit view.
+              {metric.service} / {metric.periodType} KPI analysis and reporting view.
             </p>
           </div>
           <button
@@ -564,17 +569,35 @@ function KpiDetailModal({
         </section>
 
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <SegmentedFilter
+              label="Period Selector"
+              onChange={setReportPeriod}
+              options={kpiDetailReportPeriods}
+              value={reportPeriod}
+            />
+            <div className="text-sm text-slate-500 lg:max-w-sm lg:text-right">
+              Export uses {metric.service} data with the selected{" "}
+              <span className="font-semibold text-slate-700">
+                {reportPeriodLabel}
+              </span>{" "}
+              report period.
+            </div>
+          </div>
+        </section>
+
+        <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
           <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h3 className="text-lg font-semibold tracking-tight text-slate-950">
                 Trend Chart
               </h3>
               <p className="mt-1 text-sm text-slate-500">
-                Monthly trend data showing how this KPI has moved over time.
+                Source trend data showing how this KPI has moved over time.
               </p>
             </div>
             <span className="inline-flex w-fit items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
-              Jan - Jun
+              {reportPeriodLabel}
             </span>
           </div>
           <KpiDetailChartLegend fields={model.chartFields} />
@@ -631,11 +654,25 @@ function KpiDetailModal({
           </div>
         </section>
 
-        <section className="mb-6 overflow-hidden rounded-2xl border border-slate-200">
-          <div className="border-b border-slate-100 bg-white px-5 py-4">
-            <h3 className="text-lg font-semibold tracking-tight text-slate-950">
-              Monthly Data Table
-            </h3>
+        <section className="overflow-hidden rounded-2xl border border-slate-200">
+          <div className="flex flex-col gap-3 border-b border-slate-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold tracking-tight text-slate-950">
+                Data Table
+              </h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Table data follows the selected modal report period.
+              </p>
+            </div>
+            <button
+              className="inline-flex h-10 w-fit items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isExporting}
+              onClick={exportExcel}
+              type="button"
+            >
+              <FileSpreadsheet className="size-4 text-violet-600" />
+              {isExporting ? "Exporting..." : "Export Excel"}
+            </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-sm">
@@ -650,7 +687,7 @@ function KpiDetailModal({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {draftRows.map((row) => (
+                {reportRows.map((row) => (
                 <tr key={row.month}>
                   <td className="whitespace-nowrap px-5 py-4 font-bold text-slate-950">
                     {row.month}
@@ -667,76 +704,6 @@ function KpiDetailModal({
                 ))}
               </tbody>
             </table>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold tracking-tight text-slate-950">
-              Edit KPI Data
-            </h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Edit monthly mock values for the selected KPI.
-            </p>
-          </div>
-          <div className="space-y-4">
-            {draftRows.map((row, rowIndex) => (
-              <div
-                className="rounded-xl border border-slate-200 bg-white p-4"
-                key={row.month}
-              >
-                <p className="mb-3 text-sm font-bold text-slate-950">
-                  {row.month}
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {model.editFields.map((field) => (
-                    <label key={field.key} className="block">
-                      <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                        {field.label}
-                      </span>
-                      <div className="mt-2 flex h-11 overflow-hidden rounded-xl border border-slate-200 bg-white focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-500/10">
-                        <input
-                          className="min-w-0 flex-1 px-3 text-sm font-semibold text-slate-950 outline-none"
-                          inputMode="decimal"
-                          onChange={(event) =>
-                            updateDraftValue(
-                              rowIndex,
-                              field,
-                              parseEditableNumber(event.target.value)
-                            )
-                          }
-                          type="text"
-                          value={formatEditableNumber(row.values[field.key] ?? 0)}
-                        />
-                        {field.format === "percentage" ? (
-                          <span className="flex items-center border-l border-slate-100 bg-slate-50 px-3 text-sm font-bold text-slate-500">
-                            %
-                          </span>
-                        ) : null}
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button
-              className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-950"
-              onClick={onClose}
-              type="button"
-            >
-              Cancel
-            </button>
-            <button
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white shadow-sm shadow-violet-600/20 transition hover:bg-violet-700"
-              onClick={() => onSave(draftRows)}
-              type="button"
-            >
-              <Save className="size-4" />
-              Save
-            </button>
           </div>
         </section>
       </div>
@@ -904,13 +871,9 @@ const detailChartColors = [
 
 function getKpiDetailRows(
   metric: KpiConfiguration,
-  contracts: EnterpriseContract[],
-  rowsState: KpiDetailRowsState
+  contracts: EnterpriseContract[]
 ) {
-  return (
-    rowsState[getKpiSeriesKey(metric)] ??
-    createMockKpiDetailRows(metric, contracts)
-  )
+  return createMockKpiDetailRows(metric, contracts)
 }
 
 function getKpiSeriesKey(metric: KpiConfiguration) {
@@ -1009,6 +972,158 @@ function getKpiCardContextItems(
   }
 
   return []
+}
+
+function buildKpiDetailReportRows(
+  rows: KpiDetailRow[],
+  reportPeriod: KpiDetailReportPeriod,
+  metric: KpiConfiguration
+) {
+  if (reportPeriod === "Monthly") {
+    return rows
+  }
+
+  if (reportPeriod === "Custom Range") {
+    return rows.slice(Math.max(0, rows.length - 4))
+  }
+
+  if (reportPeriod === "Quarterly") {
+    return [
+      aggregateKpiDetailRows("Q1", rows.slice(0, 3), metric),
+      aggregateKpiDetailRows("Q2", rows.slice(3, 6), metric),
+    ].filter((row) => Object.keys(row.values).length)
+  }
+
+  return [aggregateKpiDetailRows("2026", rows, metric)].filter((row) =>
+    Object.keys(row.values).length
+  )
+}
+
+function aggregateKpiDetailRows(
+  label: string,
+  rows: KpiDetailRow[],
+  metric: KpiConfiguration
+): KpiDetailRow {
+  if (!rows.length) {
+    return { month: label, values: {} }
+  }
+
+  const fieldModel = getKpiDetailFieldModel(metric)
+  const fieldsByKey = new Map(
+    [...fieldModel.editFields, ...fieldModel.chartFields, ...fieldModel.tableFields].map(
+      (field) => [field.key, field]
+    )
+  )
+  const keys = new Set(rows.flatMap((row) => Object.keys(row.values)))
+  const values: Record<string, number> = {}
+
+  keys.forEach((key) => {
+    const field = fieldsByKey.get(key)
+    const rowValues = rows.map((row) => row.values[key] ?? 0)
+    const shouldAverage =
+      getKpiDetailType(metric) === "generic" || field?.format === "percentage"
+
+    values[key] = shouldAverage
+      ? rowValues.reduce((total, value) => total + value, 0) / rowValues.length
+      : rowValues.reduce((total, value) => total + value, 0)
+  })
+
+  return normalizeKpiDetailRow({ month: label, values }, metric)
+}
+
+function getKpiDetailReportPeriodLabel(
+  rows: KpiDetailRow[],
+  reportPeriod: KpiDetailReportPeriod
+) {
+  if (!rows.length) {
+    return reportPeriod
+  }
+
+  if (reportPeriod === "Quarterly") {
+    return rows.map((row) => row.month).join(" / ")
+  }
+
+  if (reportPeriod === "Yearly") {
+    return rows[0]?.month ?? "2026"
+  }
+
+  const first = rows[0]?.month
+  const last = rows.at(-1)?.month
+
+  return first && last && first !== last ? `${first} - ${last}` : first ?? reportPeriod
+}
+
+function buildKpiDetailExportPayload({
+  metric,
+  model,
+  reportPeriod,
+  reportPeriodLabel,
+  rows,
+}: {
+  metric: KpiConfiguration
+  model: KpiDetailModel
+  reportPeriod: KpiDetailReportPeriod
+  reportPeriodLabel: string
+  rows: KpiDetailRow[]
+}): ExportReportPayload {
+  return {
+    datasets: [
+      {
+        name: "Chart Source Data",
+        rows: toKpiDetailExportRows(rows, model.chartFields),
+      },
+      {
+        name: "Data Table",
+        rows: toKpiDetailExportRows(rows, model.tableFields),
+      },
+    ],
+    filename: [
+      "kpi-detail",
+      normalizeKpiKey(metric.name),
+      normalizeKpiKey(metric.service),
+      normalizeKpiKey(reportPeriod),
+    ].join("-"),
+    filters: {
+      KPI: metric.name,
+      "Selected Service": metric.service,
+      "Overview Period": metric.periodType,
+      "Detail Period": reportPeriod,
+      "Report Range": reportPeriodLabel,
+    },
+    kpis: model.summaryItems.map((item) => ({
+      label: item.label,
+      value: item.value,
+    })),
+    subtitle:
+      "Mock KPI analysis export including chart source data, table data, selected service, and selected period.",
+    title: `${metric.name} KPI Detail`,
+  }
+}
+
+function toKpiDetailExportRows(
+  rows: KpiDetailRow[],
+  fields: KpiDetailField[]
+): ExportRow[] {
+  return rows.map((row) => {
+    const exportRow: ExportRow = { Period: row.month }
+
+    fields.forEach((field) => {
+      exportRow[field.label] = normalizeExportFieldValue(
+        row.values[field.key] ?? 0,
+        field
+      )
+    })
+
+    return exportRow
+  })
+}
+
+function normalizeExportFieldValue(value: number, field: KpiDetailField) {
+  if (field.format === "percentage") {
+    return roundToPrecision(value, field.precision ?? 1)
+  }
+
+  return Math.round(value)
 }
 
 function createMockKpiDetailRows(
