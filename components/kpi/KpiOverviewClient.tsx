@@ -22,8 +22,8 @@ import {
   getKpiProgress,
   getKpiStatus,
   isTrendHealthy,
+  kpiOverviewServices,
   kpiPeriodTypes,
-  kpiServices,
   type EnterpriseContract,
   type KpiConfiguration,
   type KpiPeriodType,
@@ -120,6 +120,11 @@ const periodRevenueKpiKeys = new Set([
   "mrr",
   "total-revenue",
 ])
+
+const managedOverviewServices: Array<Exclude<KpiService, "Overall">> = [
+  "Yettey",
+  "VPICK",
+]
 
 export default function KpiOverviewClient() {
   const { contracts, kpis } = useKpiManagementStore()
@@ -358,7 +363,7 @@ function KpiOverviewFilterPanel({
         <SegmentedFilter
           label="Service"
           onChange={onServiceChange}
-          options={kpiServices}
+          options={kpiOverviewServices}
           value={service}
         />
         <SegmentedFilter
@@ -459,6 +464,10 @@ function buildOverviewKpis(
     })
 
   return Array.from(groupedKpis.values()).map((group) => {
+    if (service === "Overall") {
+      return aggregateOverviewKpiGroup(group, period)
+    }
+
     const sourceKpi = pickOverviewSourceKpi(group, service, period)
 
     if (sourceKpi.service === service && sourceKpi.periodType === period) {
@@ -483,6 +492,110 @@ function pickOverviewSourceKpi(
     kpis.find((kpi) => kpi.service === "Overall" && kpi.periodType === period) ??
     kpis.find((kpi) => kpi.service === "Overall") ??
     kpis[0]
+  )
+}
+
+function aggregateOverviewKpiGroup(
+  group: KpiConfiguration[],
+  period: KpiPeriodType
+) {
+  const serviceKpis = managedOverviewServices
+    .map((service) => pickServiceKpiForOverall(group, service, period))
+    .filter((kpi): kpi is KpiConfiguration => Boolean(kpi))
+    .map((kpi) =>
+      kpi.periodType === period
+        ? {
+            ...kpi,
+            periodLabel: kpi.periodLabel || overviewPeriodProfiles[period].label,
+          }
+        : adaptKpiToOverviewFilter(kpi, kpi.service, period)
+    )
+
+  if (!serviceKpis.length) {
+    return adaptKpiToOverviewFilter(group[0], "Overall", period)
+  }
+
+  const baseKpi = serviceKpis[0]
+  const key = normalizeKpiKey(baseKpi.name)
+
+  return {
+    ...baseKpi,
+    currentValue: aggregateKpiValues(serviceKpis, "currentValue", key),
+    id: `overall-${key}-${period.toLowerCase()}`,
+    periodLabel: overviewPeriodProfiles[period].label,
+    periodType: period,
+    service: "Overall" as KpiService,
+    targetValue: aggregateKpiValues(serviceKpis, "targetValue", key),
+    trend: aggregateTrend(serviceKpis),
+  }
+}
+
+function pickServiceKpiForOverall(
+  group: KpiConfiguration[],
+  service: Exclude<KpiService, "Overall">,
+  period: KpiPeriodType
+) {
+  return (
+    group.find((kpi) => kpi.service === service && kpi.periodType === period) ??
+    group.find((kpi) => kpi.service === service) ??
+    null
+  )
+}
+
+function aggregateKpiValues(
+  kpis: KpiConfiguration[],
+  key: "currentValue" | "targetValue",
+  normalizedName: string
+) {
+  const sample = kpis[0]
+
+  if (sample.format === "number" || periodRevenueKpiKeys.has(normalizedName)) {
+    return Math.round(kpis.reduce((total, kpi) => total + kpi[key], 0))
+  }
+
+  return roundToPrecision(
+    weightedAverage(kpis.map((kpi) => ({ service: kpi.service, value: kpi[key] }))),
+    sample.precision ?? 0
+  )
+}
+
+function aggregateTrend(kpis: KpiConfiguration[]) {
+  const sample = kpis[0]
+  const averageTrend = weightedAverage(
+    kpis.map((kpi) => ({ service: kpi.service, value: kpi.trend.value }))
+  )
+
+  return {
+    ...sample.trend,
+    direction: averageTrend >= sample.trend.value ? sample.trend.direction : "down",
+    value: roundToPrecision(averageTrend, 1),
+  }
+}
+
+function weightedAverage(
+  values: Array<{ service: KpiService; value: number }>
+) {
+  const weightedValues = values.map(({ service, value }) => {
+    const weight =
+      service === "Yettey"
+        ? overviewServiceProfiles.Yettey.countScale
+        : service === "VPICK"
+          ? overviewServiceProfiles.VPICK.countScale
+          : 1
+
+    return { value, weight }
+  })
+  const totalWeight = weightedValues.reduce((total, item) => total + item.weight, 0)
+
+  if (!totalWeight) {
+    return 0
+  }
+
+  return (
+    weightedValues.reduce(
+      (total, item) => total + item.value * item.weight,
+      0
+    ) / totalWeight
   )
 }
 
@@ -543,10 +656,15 @@ function adaptKpiNumericValue(
 ) {
   const key = normalizeKpiKey(kpi.name)
   const serviceProfile = overviewServiceProfiles[service]
+  const sourceServiceProfile = overviewServiceProfiles[kpi.service]
   const periodProfile = overviewPeriodProfiles[period]
 
   if (kpi.format === "number") {
-    return Math.round(value * serviceProfile.countScale * periodProfile.countScale)
+    return Math.round(
+      value *
+        (serviceProfile.countScale / sourceServiceProfile.countScale) *
+        periodProfile.countScale
+    )
   }
 
   if (kpi.format === "currency") {
@@ -555,17 +673,19 @@ function adaptKpiNumericValue(
       : periodProfile.unitRevenueScale
     const serviceScale =
       key === "cac"
-        ? serviceProfile.cacScale
+        ? serviceProfile.cacScale / sourceServiceProfile.cacScale
         : key === "ltv"
-          ? serviceProfile.ltvScale
+          ? serviceProfile.ltvScale / sourceServiceProfile.ltvScale
           : periodRevenueKpiKeys.has(key)
-            ? serviceProfile.revenueScale
-            : serviceProfile.unitRevenueScale
+            ? serviceProfile.revenueScale / sourceServiceProfile.revenueScale
+            : serviceProfile.unitRevenueScale / sourceServiceProfile.unitRevenueScale
 
     return Math.round(value * serviceScale * periodScale)
   }
 
-  const serviceShift = serviceProfile.percentageShifts[key] ?? 0
+  const serviceShift =
+    (serviceProfile.percentageShifts[key] ?? 0) -
+    (sourceServiceProfile.percentageShifts[key] ?? 0)
   const periodShift =
     kpi.direction === "lower"
       ? -periodProfile.percentageShift

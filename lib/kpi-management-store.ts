@@ -323,7 +323,9 @@ function normalizeKpi(kpi: KpiConfiguration): KpiConfiguration {
 }
 
 function mergeKpisWithInitialDefaults(kpis: KpiConfiguration[]) {
-  const normalizedKpis = kpis.map(normalizeKpi)
+  const normalizedKpis = kpis
+    .map(normalizeKpi)
+    .filter((kpi) => kpi.service !== "Overall")
   const adoptUpdatedDefaultOrder = usesLegacyDefaultKpiOrder(normalizedKpis)
   const usedKpiIds = new Set<string>()
 
@@ -331,7 +333,8 @@ function mergeKpisWithInitialDefaults(kpis: KpiConfiguration[]) {
     const existingKpi = normalizedKpis.find(
       (kpi) =>
         kpi.id === defaultKpi.id ||
-        normalizeKpiName(kpi.name) === normalizeKpiName(defaultKpi.name)
+        (normalizeKpiName(kpi.name) === normalizeKpiName(defaultKpi.name) &&
+          kpi.service === defaultKpi.service)
     )
 
     if (!existingKpi) {

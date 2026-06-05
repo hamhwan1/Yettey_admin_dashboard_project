@@ -108,7 +108,7 @@ const emptyKpiForm: KpiForm = {
   periodType: "Monthly",
   pinned: false,
   representative: false,
-  service: "Overall",
+  service: "Yettey",
   showOnOverview: false,
   targetValue: 0,
 }
@@ -143,6 +143,7 @@ export default function KpiGoalsClient() {
   const filteredKpis = useMemo(
     () =>
       kpis
+        .filter((kpi) => kpi.service !== "Overall")
         .filter((kpi) => matchesArchiveFilter(kpi.archived, kpiArchiveFilter))
         .filter((kpi) =>
           matchesSearch(kpiSearch, [
@@ -175,8 +176,9 @@ export default function KpiGoalsClient() {
     [contractArchiveFilter, contractSearch, contracts]
   )
   const activeEnterpriseRevenue = getActiveEnterpriseRevenue(contracts)
-  const activeKpiCount = kpis.filter((kpi) => !kpi.archived).length
-  const archivedKpiCount = kpis.filter((kpi) => kpi.archived).length
+  const managedKpis = kpis.filter((kpi) => kpi.service !== "Overall")
+  const activeKpiCount = managedKpis.filter((kpi) => !kpi.archived).length
+  const archivedKpiCount = managedKpis.filter((kpi) => kpi.archived).length
   const activeContractCount = contracts.filter((contract) => !contract.archived).length
   const archivedContractCount = contracts.filter((contract) => contract.archived).length
 
@@ -306,7 +308,7 @@ export default function KpiGoalsClient() {
           totals={{
             active: activeKpiCount,
             archived: archivedKpiCount,
-            all: kpis.length,
+            all: managedKpis.length,
           }}
         />
 

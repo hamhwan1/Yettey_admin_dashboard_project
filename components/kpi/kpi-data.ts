@@ -10,6 +10,8 @@ export type KpiPeriodType = "Monthly" | "Quarterly" | "Yearly"
 
 export type KpiService = "Overall" | "VPICK" | "Yettey"
 
+export type KpiManagedService = Exclude<KpiService, "Overall">
+
 export type KpiTone = "amber" | "emerald" | "rose" | "sky" | "violet"
 
 export type KpiTrend = {
@@ -92,7 +94,9 @@ export const kpiNameOptions = [
 
 export const kpiPeriodTypes: KpiPeriodType[] = ["Monthly", "Quarterly", "Yearly"]
 
-export const kpiServices: KpiService[] = ["Overall", "Yettey", "VPICK"]
+export const kpiOverviewServices: KpiService[] = ["Overall", "Yettey", "VPICK"]
+
+export const kpiServices: KpiManagedService[] = ["Yettey", "VPICK"]
 
 const changedBy = "Ham Hwan"
 
@@ -159,7 +163,7 @@ export const initialEnterpriseContracts: EnterpriseContract[] = [
   },
 ]
 
-export const initialKpiConfigurations: KpiConfiguration[] = [
+const baseKpiConfigurations: KpiConfiguration[] = [
   {
     calculationType: "manual",
     currentValue: 235869,
@@ -504,6 +508,144 @@ export const initialKpiConfigurations: KpiConfiguration[] = [
     trend: { direction: "down", unit: "%", value: 4.1 },
   },
 ]
+
+const serviceKpiProfiles: Record<
+  KpiManagedService,
+  {
+    countScale: number
+    currentPercentageShift: Partial<Record<string, number>>
+    revenueScale: number
+    targetOverrides: Partial<Record<string, number>>
+    unitCurrencyScale: number
+  }
+> = {
+  Yettey: {
+    countScale: 0.62,
+    currentPercentageShift: {
+      "activation-rate": 6,
+      "churn-rate": -0.2,
+      "d30-retention": 2.5,
+      "paid-conversion-rate": -0.8,
+      "signup-conversion-rate": 0.4,
+    },
+    revenueScale: 0.64,
+    targetOverrides: {
+      "activation-rate": 70,
+      "churn-rate": 3,
+      "d30-retention": 62,
+      "paid-conversion-rate": 23,
+      "signup-conversion-rate": 8,
+    },
+    unitCurrencyScale: 1.04,
+  },
+  VPICK: {
+    countScale: 0.38,
+    currentPercentageShift: {
+      "activation-rate": -3,
+      "churn-rate": 0.3,
+      "d30-retention": -1.5,
+      "paid-conversion-rate": 1.4,
+      "signup-conversion-rate": 0.1,
+    },
+    revenueScale: 0.36,
+    targetOverrides: {
+      "activation-rate": 64,
+      "churn-rate": 3.2,
+      "d30-retention": 56,
+      "paid-conversion-rate": 25,
+      "signup-conversion-rate": 5,
+    },
+    unitCurrencyScale: 1.12,
+  },
+}
+
+const serviceRevenueKpiIds = new Set(["enterprise-revenue", "mrr"])
+
+function createServiceLevelKpis(kpis: KpiConfiguration[]) {
+  return kpiServices.flatMap((service) =>
+    kpis.map((kpi) => createServiceLevelKpi(kpi, service))
+  )
+}
+
+function createServiceLevelKpi(
+  kpi: KpiConfiguration,
+  service: KpiManagedService
+): KpiConfiguration {
+  const profile = serviceKpiProfiles[service]
+  const key = normalizeKpiKey(kpi.name)
+  const targetOverride = profile.targetOverrides[key]
+
+  return {
+    ...kpi,
+    currentValue: scaleServiceKpiValue(kpi.currentValue, kpi, service, "current"),
+    history: (kpi.history ?? []).map((record) => ({
+      ...record,
+      id: `${record.id}-${service.toLowerCase()}`,
+      reason: `${service} ${record.reason}`,
+    })),
+    id: `${kpi.id}-${service.toLowerCase()}`,
+    service,
+    targetValue:
+      targetOverride ??
+      scaleServiceKpiValue(kpi.targetValue, kpi, service, "target"),
+    trend: {
+      ...kpi.trend,
+      value: roundToPrecision(
+        kpi.trend.value * (service === "Yettey" ? 1.05 : 0.92),
+        1
+      ),
+    },
+  }
+}
+
+function scaleServiceKpiValue(
+  value: number,
+  kpi: KpiConfiguration,
+  service: KpiManagedService,
+  valueType: "current" | "target"
+) {
+  const profile = serviceKpiProfiles[service]
+  const key = normalizeKpiKey(kpi.name)
+
+  if (kpi.format === "number") {
+    return Math.round(value * profile.countScale)
+  }
+
+  if (kpi.format === "currency") {
+    const scale = serviceRevenueKpiIds.has(kpi.id)
+      ? profile.revenueScale
+      : profile.unitCurrencyScale
+
+    return Math.round(value * scale)
+  }
+
+  const shift =
+    valueType === "target"
+      ? (profile.currentPercentageShift[key] ?? 0) * 0.25
+      : profile.currentPercentageShift[key] ?? 0
+
+  return roundToPrecision(
+    Math.min(Math.max(value + shift, 0), 100),
+    kpi.precision ?? 0
+  )
+}
+
+function normalizeKpiKey(name: string) {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+}
+
+function roundToPrecision(value: number, precision: number) {
+  const multiplier = 10 ** precision
+
+  return Math.round(value * multiplier) / multiplier
+}
+
+export const initialKpiConfigurations: KpiConfiguration[] =
+  createServiceLevelKpis(baseKpiConfigurations)
 
 export function createKpiId(name: string) {
   return `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${Date.now()}`
