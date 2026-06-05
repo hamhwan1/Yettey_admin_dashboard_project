@@ -11,6 +11,7 @@ import StatusBadge from "@/components/admin/StatusBadge"
 import DashboardLayout from "@/components/layout/DashboardLayout"
 import { useKpiManagementStore } from "@/lib/kpi-management-store"
 import { cn } from "@/lib/utils"
+import KpiTrendCharts from "./KpiTrendCharts"
 import {
   formatKpiTarget,
   formatKpiValue,
@@ -59,6 +60,8 @@ export default function KpiOverviewClient() {
           <EmptyPanel message="No representative KPIs are configured for the top area." />
         )}
       </section>
+
+      <KpiTrendCharts />
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.06)]">
         <div className="flex flex-col gap-3 border-b border-slate-100 p-6 sm:flex-row sm:items-center sm:justify-between">
