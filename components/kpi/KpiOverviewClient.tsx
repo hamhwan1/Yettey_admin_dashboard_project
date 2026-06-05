@@ -1,11 +1,22 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   ArrowDownRight,
   ArrowUpRight,
+  Save,
   Target,
+  X,
 } from "lucide-react"
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts"
 
 import PageHeader from "@/components/admin/PageHeader"
 import StatusBadge from "@/components/admin/StatusBadge"
@@ -14,6 +25,7 @@ import { useKpiManagementStore } from "@/lib/kpi-management-store"
 import { cn } from "@/lib/utils"
 import KpiTrendCharts from "./KpiTrendCharts"
 import {
+  formatEditableNumber,
   formatKpiTarget,
   formatKpiValue,
   formatTrend,
@@ -24,6 +36,7 @@ import {
   isTrendHealthy,
   kpiOverviewServices,
   kpiPeriodTypes,
+  parseEditableNumber,
   type EnterpriseContract,
   type KpiConfiguration,
   type KpiPeriodType,
@@ -60,6 +73,13 @@ type ServiceFunnelMetrics = {
 }
 
 type ServiceFunnelMetricKey = Exclude<keyof ServiceFunnelMetrics, "service">
+
+type MonthlyKpiPoint = {
+  month: string
+  value: number
+}
+
+type MonthlyKpiSeriesState = Record<string, MonthlyKpiPoint[]>
 
 const overviewServiceProfiles: Record<KpiService, OverviewServiceProfile> = {
   Overall: {
@@ -140,6 +160,9 @@ const managedOverviewServices: Array<Exclude<KpiService, "Overall">> = [
 
 export default function KpiOverviewClient() {
   const { contracts, kpis } = useKpiManagementStore()
+  const [detailMetric, setDetailMetric] = useState<KpiConfiguration | null>(null)
+  const [monthlyKpiSeries, setMonthlyKpiSeries] =
+    useState<MonthlyKpiSeriesState>({})
   const [selectedService, setSelectedService] = useState<KpiService>("Overall")
   const [selectedPeriod, setSelectedPeriod] = useState<KpiPeriodType>("Monthly")
   const overviewContracts = useMemo(
@@ -188,6 +211,12 @@ export default function KpiOverviewClient() {
               key={`${metric.id}-${selectedService}-${selectedPeriod}`}
               contracts={overviewContracts}
               metric={metric}
+              monthlyValues={getMonthlyKpiSeries(
+                metric,
+                overviewContracts,
+                monthlyKpiSeries
+              )}
+              onOpen={() => setDetailMetric(metric)}
             />
           ))
         ) : (
@@ -288,6 +317,27 @@ export default function KpiOverviewClient() {
           </div>
         )}
       </section>
+
+      {detailMetric ? (
+        <KpiDetailModal
+          key={getKpiSeriesKey(detailMetric)}
+          contracts={overviewContracts}
+          metric={detailMetric}
+          monthlyValues={getMonthlyKpiSeries(
+            detailMetric,
+            overviewContracts,
+            monthlyKpiSeries
+          )}
+          onClose={() => setDetailMetric(null)}
+          onSave={(nextValues) => {
+            setMonthlyKpiSeries((current) => ({
+              ...current,
+              [getKpiSeriesKey(detailMetric)]: nextValues,
+            }))
+            setDetailMetric(null)
+          }}
+        />
+      ) : null}
     </DashboardLayout>
   )
 }
@@ -295,12 +345,16 @@ export default function KpiOverviewClient() {
 function KpiSummaryCard({
   contracts,
   metric,
+  monthlyValues,
+  onOpen,
 }: {
   contracts: EnterpriseContract[]
   metric: KpiConfiguration
+  monthlyValues: MonthlyKpiPoint[]
+  onOpen: () => void
 }) {
-  const currentValue = getKpiCurrentValue(metric, contracts)
-  const progress = getKpiProgress(metric, contracts)
+  const currentValue = getLatestMonthlyValue(monthlyValues)
+  const progress = getKpiProgressFromValue(metric, currentValue)
   const formattedCurrentValue = formatKpiValue(
     currentValue,
     metric.format,
@@ -308,7 +362,12 @@ function KpiSummaryCard({
   )
 
   return (
-    <article className="flex min-h-56 min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-[0_2px_4px_rgba(15,23,42,0.08),0_16px_32px_rgba(15,23,42,0.08)] min-[1180px]:p-4">
+    <button
+      aria-label={`Open ${metric.name} KPI detail`}
+      className="flex min-h-56 w-full min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-[0_2px_4px_rgba(15,23,42,0.08),0_16px_32px_rgba(15,23,42,0.08)] focus:outline-none focus:ring-4 focus:ring-violet-500/15 min-[1180px]:p-4"
+      onClick={onOpen}
+      type="button"
+    >
       <div className="min-w-0">
         <p className="text-xs font-semibold leading-4 text-slate-500">
           {metric.name}
@@ -352,7 +411,252 @@ function KpiSummaryCard({
       <p className="mt-5 text-xs leading-5 text-slate-500">
         {metric.description}
       </p>
-    </article>
+    </button>
+  )
+}
+
+function KpiDetailModal({
+  metric,
+  monthlyValues,
+  onClose,
+  onSave,
+}: {
+  contracts: EnterpriseContract[]
+  metric: KpiConfiguration
+  monthlyValues: MonthlyKpiPoint[]
+  onClose: () => void
+  onSave: (values: MonthlyKpiPoint[]) => void
+}) {
+  const [draftValues, setDraftValues] = useState(monthlyValues)
+  const [isMounted, setIsMounted] = useState(false)
+  const currentValue = getLatestMonthlyValue(draftValues)
+  const achievement = getKpiProgressFromValue(metric, currentValue)
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setIsMounted(true))
+
+    return () => cancelAnimationFrame(frame)
+  }, [])
+
+  const updateDraftValue = (index: number, value: number) => {
+    setDraftValues((current) =>
+      current.map((point, pointIndex) =>
+        pointIndex === index
+          ? { ...point, value: normalizeMonthlyKpiValue(value, metric) }
+          : point
+      )
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4 backdrop-blur-sm">
+      <div
+        aria-modal="true"
+        className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+        role="dialog"
+      >
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-violet-600">
+              KPI Detail
+            </p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
+              {metric.name}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {metric.service} / {metric.periodType} monthly mock history and edit view.
+            </p>
+          </div>
+          <button
+            aria-label="Close KPI detail"
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+            onClick={onClose}
+            type="button"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <section className="mb-6">
+          <h3 className="text-lg font-semibold tracking-tight text-slate-950">
+            KPI Summary
+          </h3>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <KpiDetailSummaryCard
+              label="Current"
+              value={formatKpiValue(currentValue, metric.format, metric.precision)}
+            />
+            <KpiDetailSummaryCard label="Target" value={formatKpiTarget(metric)} />
+            <KpiDetailSummaryCard label="Achievement" value={`${achievement}%`} />
+          </div>
+        </section>
+
+        <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold tracking-tight text-slate-950">
+                Trend Chart
+              </h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Monthly trend data showing how this KPI has moved over time.
+              </p>
+            </div>
+            <span className="inline-flex w-fit items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+              Jan - Jun
+            </span>
+          </div>
+          <div className="h-80">
+            {isMounted ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={draftValues} margin={{ left: 4, right: 16, top: 8 }}>
+                  <CartesianGrid stroke="#eef2f7" vertical={false} />
+                  <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                  <YAxis
+                    tickFormatter={(value) => formatKpiChartValue(value, metric)}
+                    tickLine={false}
+                    axisLine={false}
+                    width={metric.format === "currency" ? 104 : 64}
+                  />
+                  <Tooltip
+                    formatter={(value) => formatKpiChartValue(value, metric)}
+                    labelFormatter={(label) => `${label}`}
+                  />
+                  <Line
+                    dataKey="value"
+                    dot={{ r: 4 }}
+                    name={metric.name}
+                    stroke="#7c3aed"
+                    strokeWidth={2.8}
+                    type="monotone"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full rounded-xl bg-slate-100" />
+            )}
+          </div>
+        </section>
+
+        <section className="mb-6 overflow-hidden rounded-2xl border border-slate-200">
+          <div className="border-b border-slate-100 bg-white px-5 py-4">
+            <h3 className="text-lg font-semibold tracking-tight text-slate-950">
+              Monthly Data Table
+            </h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-5 py-3">KPI</th>
+                  {draftValues.map((point) => (
+                    <th key={point.month} className="px-5 py-3 text-right">
+                      {point.month}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-t border-slate-100">
+                  <td className="whitespace-nowrap px-5 py-4 font-bold text-slate-950">
+                    {metric.name}
+                  </td>
+                  {draftValues.map((point) => (
+                    <td
+                      key={point.month}
+                      className="whitespace-nowrap px-5 py-4 text-right font-semibold text-slate-700"
+                    >
+                      {formatKpiValue(point.value, metric.format, metric.precision)}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold tracking-tight text-slate-950">
+              Edit KPI Data
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Edit monthly mock values for the selected KPI.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {draftValues.map((point, index) => (
+              <label key={point.month} className="block">
+                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  {point.month}
+                </span>
+                <div className="mt-2 flex h-11 overflow-hidden rounded-xl border border-slate-200 bg-white focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-500/10">
+                  <input
+                    className="min-w-0 flex-1 px-3 text-sm font-semibold text-slate-950 outline-none"
+                    inputMode="decimal"
+                    onChange={(event) =>
+                      updateDraftValue(
+                        index,
+                        parseEditableNumber(event.target.value)
+                      )
+                    }
+                    type="text"
+                    value={formatEditableNumber(point.value)}
+                  />
+                  {metric.format === "percentage" ? (
+                    <span className="flex items-center border-l border-slate-100 bg-slate-50 px-3 text-sm font-bold text-slate-500">
+                      %
+                    </span>
+                  ) : null}
+                </div>
+              </label>
+            ))}
+          </div>
+
+          <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-950"
+              onClick={onClose}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white shadow-sm shadow-violet-600/20 transition hover:bg-violet-700"
+              onClick={() => onSave(draftValues)}
+              type="button"
+            >
+              <Save className="size-4" />
+              Save
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
+  )
+}
+
+function KpiDetailSummaryCard({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p
+        className={cn(
+          "mt-2 max-w-full whitespace-nowrap font-bold leading-tight tracking-tight text-slate-950 tabular-nums",
+          valueSizeClass(value)
+        )}
+        title={value}
+      >
+        {value}
+      </p>
+    </div>
   )
 }
 
@@ -457,6 +761,155 @@ function normalizedDisplayOrder(kpi: KpiConfiguration) {
   return Number.isFinite(kpi.displayOrder)
     ? kpi.displayOrder
     : Number.MAX_SAFE_INTEGER
+}
+
+const monthlyKpiMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+
+function getMonthlyKpiSeries(
+  metric: KpiConfiguration,
+  contracts: EnterpriseContract[],
+  seriesState: MonthlyKpiSeriesState
+) {
+  return (
+    seriesState[getKpiSeriesKey(metric)] ??
+    createMockMonthlyKpiSeries(metric, contracts)
+  )
+}
+
+function getKpiSeriesKey(metric: KpiConfiguration) {
+  return `${metric.service}-${metric.periodType}-${normalizeKpiKey(metric.name)}`
+}
+
+function createMockMonthlyKpiSeries(
+  metric: KpiConfiguration,
+  contracts: EnterpriseContract[]
+): MonthlyKpiPoint[] {
+  const normalizedName = normalizeKpiKey(metric.name)
+  const currentValue = getKpiCurrentValue(metric, contracts)
+  const finalValue =
+    currentValue > 0
+      ? currentValue
+      : getFallbackCurrentKpiValue(normalizedName, metric)
+  const ratios = getMonthlyKpiRatios(normalizedName, metric)
+
+  return monthlyKpiMonths.map((month, index) => ({
+    month,
+    value: normalizeMonthlyKpiValue(finalValue * ratios[index], metric),
+  }))
+}
+
+function getFallbackCurrentKpiValue(
+  normalizedName: string,
+  metric: KpiConfiguration
+) {
+  if (normalizedName === "visitors") {
+    return 235869
+  }
+
+  if (normalizedName === "signup-conversion-rate") {
+    return 5.7
+  }
+
+  if (normalizedName === "activation-rate") {
+    return 54
+  }
+
+  if (normalizedName === "d7-retention") {
+    return 42
+  }
+
+  if (normalizedName === "d14-retention") {
+    return 48
+  }
+
+  if (normalizedName === "d30-retention" || normalizedName.endsWith("retention")) {
+    return 47
+  }
+
+  if (normalizedName === "churn-rate") {
+    return 2.1
+  }
+
+  if (normalizedName === "paid-conversion-rate") {
+    return 18.4
+  }
+
+  if (normalizedName === "enterprise-revenue") {
+    return 170000000
+  }
+
+  if (
+    normalizedName === "mrr" ||
+    normalizedName === "revenue" ||
+    normalizedName === "total-revenue"
+  ) {
+    return 545000000
+  }
+
+  if (metric.targetValue) {
+    return metric.direction === "lower"
+      ? metric.targetValue * 0.9
+      : metric.targetValue * 0.75
+  }
+
+  return metric.format === "percentage" ? 50 : 100
+}
+
+function getMonthlyKpiRatios(
+  normalizedName: string,
+  metric: KpiConfiguration
+) {
+  if (metric.direction === "lower" || normalizedName === "churn-rate") {
+    return [1.43, 1.33, 1.24, 1.15, 1.07, 1]
+  }
+
+  if (metric.format === "percentage") {
+    return [0.73, 0.78, 0.84, 0.9, 0.95, 1]
+  }
+
+  if (metric.format === "currency") {
+    return [0.56, 0.64, 0.72, 0.81, 0.91, 1]
+  }
+
+  return [0.51, 0.55, 0.62, 0.7, 0.82, 1]
+}
+
+function normalizeMonthlyKpiValue(value: number, metric: KpiConfiguration) {
+  if (!Number.isFinite(value)) {
+    return 0
+  }
+
+  if (metric.format === "percentage") {
+    return roundToPrecision(clamp(value, 0, 100), metric.precision ?? 1)
+  }
+
+  return Math.max(0, Math.round(value))
+}
+
+function getLatestMonthlyValue(values: MonthlyKpiPoint[]) {
+  return values.at(-1)?.value ?? 0
+}
+
+function getKpiProgressFromValue(metric: KpiConfiguration, currentValue: number) {
+  if (!metric.targetValue || !currentValue) {
+    return 0
+  }
+
+  if (metric.direction === "lower") {
+    return Math.min(100, Math.round((metric.targetValue / currentValue) * 100))
+  }
+
+  return Math.min(100, Math.round((currentValue / metric.targetValue) * 100))
+}
+
+function formatKpiChartValue(value: unknown, metric: KpiConfiguration) {
+  const numericValue = Number(value)
+
+  return formatKpiValue(
+    Number.isFinite(numericValue) ? numericValue : 0,
+    metric.format,
+    metric.precision
+  )
 }
 
 function buildOverviewKpis(
