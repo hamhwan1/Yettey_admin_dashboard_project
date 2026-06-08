@@ -26,8 +26,6 @@ type ContentSection =
   | "blog"
   | "guides-faq"
   | "popups-banners"
-  | "seo"
-  | "media-library"
   | "navigation"
 
 type BlogPost = {
@@ -120,15 +118,6 @@ type BlogImportForm = {
 }
 
 type ThumbnailInputMode = "file" | "url"
-
-type MediaAsset = {
-  name: string
-  size: string
-  tags: string[]
-  type: "Image" | "Video" | "Thumbnail"
-  updatedDate: string
-  url: string
-}
 
 type NavigationVisibility = "Hidden" | "Visible"
 
@@ -399,33 +388,6 @@ const popupBannerItems: PopupBannerItem[] = [
   },
 ]
 
-const mediaAssets: MediaAsset[] = [
-  {
-    name: "homepage-hero-v2.png",
-    size: "1.8 MB",
-    tags: ["landing", "hero"],
-    type: "Image",
-    updatedDate: "May 28, 2026",
-    url: "https://cdn.yettey.com/homepage-hero-v2.png",
-  },
-  {
-    name: "vpick-shortform-demo.mp4",
-    size: "42 MB",
-    tags: ["video", "vpick"],
-    type: "Video",
-    updatedDate: "May 26, 2026",
-    url: "https://cdn.yettey.com/vpick-shortform-demo.mp4",
-  },
-  {
-    name: "blog-thumbnail-ai-workflow.jpg",
-    size: "820 KB",
-    tags: ["blog", "thumbnail"],
-    type: "Thumbnail",
-    updatedDate: "May 24, 2026",
-    url: "https://cdn.yettey.com/blog-thumbnail-ai-workflow.jpg",
-  },
-]
-
 const initialNavigationTree: NavigationGroup[] = [
   {
     children: [
@@ -584,12 +546,6 @@ const pageCopy: Record<
       "Manage marketing landing pages with block-based content editing, localization, and publishing state.",
     title: "Landing Pages",
   },
-  "media-library": {
-    action: "Upload Asset",
-    description:
-      "Organize reusable images, videos, thumbnails, blog media, and campaign assets in one shared library.",
-    title: "Media Library",
-  },
   navigation: {
     action: "Manage Navigation",
     description:
@@ -601,12 +557,6 @@ const pageCopy: Record<
     description:
       "Schedule event banners, maintenance notices, promotional popups, and campaign announcements.",
     title: "Popups & Banners",
-  },
-  seo: {
-    action: "Update SEO",
-    description:
-      "Manage meta titles, descriptions, OG images, sitemap controls, robots settings, and SEO previews.",
-    title: "SEO",
   },
 }
 
@@ -633,12 +583,7 @@ export default function ContentCmsClient({ section }: { section: ContentSection 
                 Import URL
               </AdminButton>
             </>
-          ) : section === "landing-pages" || section === "navigation" || section === "popups-banners" ? undefined : (
-            section === "guides-faq" ? undefined : <AdminButton variant="primary">
-              <Plus className="size-4" />
-              {copy.action}
-            </AdminButton>
-          )
+          ) : undefined
         }
       />
 
@@ -656,8 +601,6 @@ export default function ContentCmsClient({ section }: { section: ContentSection 
         ) : null}
         {section === "guides-faq" ? <GuidesFaqFoundation /> : null}
         {section === "popups-banners" ? <PopupsBannersFoundation /> : null}
-        {section === "seo" ? <SeoFoundation /> : null}
-        {section === "media-library" ? <MediaLibraryFoundation /> : null}
         {section === "navigation" ? <NavigationFoundation /> : null}
       </div>
     </DashboardLayout>
@@ -679,14 +622,6 @@ function ContentSummary({ section }: { section: ContentSection }) {
         { detail: "1 draft, 1 review", label: "Posts", value: "3" },
         { detail: "1 hidden category", label: "Categories", value: "4" },
         { detail: "URL import enabled", label: "Import", value: "Ready" },
-      ]
-    }
-
-    if (section === "media-library") {
-      return [
-        { detail: "Images, videos, thumbnails", label: "Assets", value: "3" },
-        { detail: "Mock CDN paths", label: "Storage", value: "44.6 MB" },
-        { detail: "Copy URL supported", label: "Actions", value: "4" },
       ]
     }
 
@@ -3032,87 +2967,6 @@ function formatCampaignDate(value: string) {
   })
 }
 
-function SeoFoundation() {
-  return (
-    <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <SectionTitle title="SEO Metadata" description="Edit page-level metadata and OG assets." />
-        <div className="mt-5 grid gap-4">
-          <ContentInput label="Meta Title" value="Yettey - AI media workflow platform" />
-          <ContentTextArea
-            label="Meta Description"
-            value="Create, manage, and publish AI-powered media workflows for modern teams."
-          />
-          <ContentInput label="OG Image" value="https://cdn.yettey.com/og/homepage.png" />
-          <ContentInput label="Canonical URL" value="https://yettey.com" />
-        </div>
-      </section>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <SectionTitle title="SEO Preview" description="Search and social preview foundation." />
-        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-sm font-bold text-blue-700">Yettey - AI media workflow platform</p>
-          <p className="mt-1 text-xs text-emerald-700">https://yettey.com</p>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Create, manage, and publish AI-powered media workflows for modern teams.
-          </p>
-        </div>
-        <div className="mt-5 grid gap-3">
-          <ToggleRow label="Sitemap enabled" value="Enabled" />
-          <ToggleRow label="Robots indexing" value="Allowed" />
-          <ToggleRow label="OG image validation" value="Ready" />
-        </div>
-      </section>
-    </div>
-  )
-}
-
-function MediaLibraryFoundation() {
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <SectionTitle title="Shared Assets" description="Search, tag, preview, copy URL, or replace assets." />
-        <div className="flex flex-wrap gap-2">
-          <AdminButton>
-            <Search className="size-4" />
-            Filter
-          </AdminButton>
-          <AdminButton variant="primary">
-            <Upload className="size-4" />
-            Upload
-          </AdminButton>
-        </div>
-      </div>
-      <div className="mt-6 grid gap-4 md:grid-cols-3">
-        {mediaAssets.map((asset) => (
-          <div key={asset.name} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="flex h-32 items-center justify-center rounded-xl bg-white ring-1 ring-slate-100">
-              <ImageIcon className="size-8 text-violet-600" />
-            </div>
-            <p className="mt-4 text-sm font-bold text-slate-950">{asset.name}</p>
-            <p className="mt-1 text-xs font-semibold text-slate-500">
-              {asset.type} / {asset.size} / {asset.updatedDate}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {asset.tags.map((tag) => (
-                <span key={tag} className="rounded-full bg-white px-2 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">
-                  {tag}
-                </span>
-              ))}
-            </div>
-            <div className="mt-4 flex gap-2">
-              <AdminButton className="h-9 px-3">
-                <Copy className="size-4" />
-                Copy URL
-              </AdminButton>
-              <AdminButton className="h-9 px-3">Replace</AdminButton>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
 function NavigationFoundation() {
   const [navigationTree, setNavigationTree] = useState(initialNavigationTree)
   const [selectedId, setSelectedId] = useState(initialNavigationTree[0].id)
@@ -4152,15 +4006,6 @@ function ContentTextArea({
         value={onChange ? value : undefined}
       />
     </label>
-  )
-}
-
-function ToggleRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-4">
-      <span className="text-sm font-semibold text-slate-700">{label}</span>
-      <StatusPill status={value} />
-    </div>
   )
 }
 

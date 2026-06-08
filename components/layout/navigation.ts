@@ -1,18 +1,15 @@
 import type { LucideIcon } from "lucide-react"
 import {
-  BarChart3,
   BookOpen,
   CreditCard,
   FileQuestion,
   Files,
   Flag,
-  Image,
   LayoutDashboard,
   ListChecks,
   Megaphone,
   ReceiptText,
   TrendingUp,
-  Search,
   Settings,
   Sparkles,
   Target,
@@ -24,7 +21,6 @@ export type TopMenuKey =
   | "dashboards"
   | "users"
   | "content"
-  | "analytics"
   | "billing"
   | "settings"
 
@@ -60,12 +56,6 @@ export const topNavigation: TopMenuItem[] = [
     title: "Content",
     href: "/content/landing-pages",
     icon: Files,
-  },
-  {
-    key: "analytics",
-    title: "Analytics",
-    href: "/analytics",
-    icon: BarChart3,
   },
   {
     key: "billing",
@@ -147,23 +137,6 @@ export const sidebarNavigation: Record<TopMenuKey, SidebarItem[]> = {
       href: "/content/popups-banners",
       icon: Megaphone,
     },
-    {
-      title: "SEO",
-      href: "/content/seo",
-      icon: Search,
-    },
-    {
-      title: "Media Library",
-      href: "/content/media-library",
-      icon: Image,
-    },
-  ],
-  analytics: [
-    {
-      title: "Overview",
-      href: "/analytics",
-      icon: BarChart3,
-    },
   ],
   billing: [
     {
@@ -225,16 +198,12 @@ export function getActiveTopMenu(pathname: string): TopMenuItem {
     return topNavigation[2]
   }
 
-  if (pathname.startsWith("/analytics")) {
+  if (pathname.startsWith("/billing")) {
     return topNavigation[3]
   }
 
-  if (pathname.startsWith("/billing")) {
-    return topNavigation[4]
-  }
-
   if (pathname.startsWith("/settings")) {
-    return topNavigation[5]
+    return topNavigation[4]
   }
 
   return topNavigation[0]
