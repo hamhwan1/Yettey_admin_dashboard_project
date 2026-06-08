@@ -1,5 +1,3 @@
-import { notFound } from "next/navigation"
-
 import BillingPlanDetailClient from "@/components/billing/BillingPlanDetailClient"
 import {
   getBillingPlanBySlug,
@@ -20,9 +18,12 @@ export default async function VpickPlanDetailPage({
   const { planSlug } = await params
   const plan = getBillingPlanBySlug("Vpick", planSlug)
 
-  if (!plan) {
-    notFound()
-  }
-
-  return <BillingPlanDetailClient mode="edit" plan={plan} service="Vpick" />
+  return (
+    <BillingPlanDetailClient
+      mode="edit"
+      plan={plan}
+      planSlug={planSlug}
+      service="Vpick"
+    />
+  )
 }

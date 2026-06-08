@@ -15,12 +15,12 @@ import {
   billingPlanStatuses,
   billingPlanTypes,
   formatNumber,
-  getBillingPlansByService,
   getPlanCreditsLabel,
   getPlanLimits,
   getServicePath,
   getStatusTone,
 } from "@/lib/billing-plan-catalog"
+import { useBillingPlanStore } from "@/lib/billing-plan-store"
 import { formatKrw } from "@/lib/pricing-plans"
 import { cn } from "@/lib/utils"
 
@@ -30,7 +30,11 @@ export default function BillingPlansClient({
   product: BillingPlanService
 }) {
   const router = useRouter()
-  const plans = useMemo(() => getBillingPlansByService(product), [product])
+  const { plans: allPlans } = useBillingPlanStore()
+  const plans = useMemo(
+    () => allPlans.filter((plan) => plan.service === product),
+    [allPlans, product]
+  )
   const [status, setStatus] = useState<"All" | BillingPlan["status"]>("All")
   const [planType, setPlanType] = useState<"All" | BillingPlan["type"]>("All")
   const [page, setPage] = useState(1)

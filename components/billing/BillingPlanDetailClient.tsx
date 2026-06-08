@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react"
 import { useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import {
   Bot,
   Calendar,
@@ -43,14 +44,24 @@ import {
   formatNumber,
   getPlanCreditsLabel,
   getPlanLimits,
+  getServicePath,
   getStatusTone,
 } from "@/lib/billing-plan-catalog"
+import {
+  billingPlanOperator,
+  createUniqueBillingPlanCopyName,
+  createUniqueBillingPlanSlug,
+  formatBillingPlanDate,
+  formatBillingPlanTimestamp,
+  useBillingPlanStore,
+} from "@/lib/billing-plan-store"
 import { formatKrw } from "@/lib/pricing-plans"
 import { cn } from "@/lib/utils"
 
 type BillingPlanDetailClientProps = {
   mode: "create" | "edit"
   plan?: BillingPlan
+  planSlug?: string
   service: BillingPlanService
 }
 
@@ -162,12 +173,29 @@ const saveReasonExamples = [
 export default function BillingPlanDetailClient({
   mode,
   plan,
+  planSlug,
   service,
 }: BillingPlanDetailClientProps) {
-  const initialPlan = useMemo(
-    () => plan ?? createBlankBillingPlan(service),
-    [plan, service]
+  const router = useRouter()
+  const productPath = getServicePath(service)
+  const { hydrated, plans, upsertPlan } = useBillingPlanStore()
+  const storedPlan = useMemo(
+    () =>
+      planSlug
+        ? plans.find(
+            (item) => item.service === service && item.slug === planSlug
+          )
+        : undefined,
+    [planSlug, plans, service]
   )
+  const resolvedPlan = storedPlan ?? plan
+  const initialPlan = useMemo(() => {
+    if (mode === "edit" && resolvedPlan) {
+      return resolvedPlan
+    }
+
+    return createBlankBillingPlan(service)
+  }, [mode, resolvedPlan, service])
   const [workingMode, setWorkingMode] = useState<"create" | "edit">(mode)
   const [activeTab, setActiveTab] = useState<PlanTab>("basic")
   const [baseline, setBaseline] = useState<BillingPlan>(initialPlan)
@@ -179,6 +207,11 @@ export default function BillingPlanDetailClient({
   const [saveReason, setSaveReason] = useState("")
   const [savedMessage, setSavedMessage] = useState("")
   const [duplicateMessage, setDuplicateMessage] = useState("")
+  const initialPlanSignature = useMemo(
+    () => getPlanSignature(initialPlan),
+    [initialPlan]
+  )
+  const [loadedSignature, setLoadedSignature] = useState(initialPlanSignature)
   const pendingChanges = useMemo(
     () =>
       workingMode === "edit"
@@ -190,6 +223,14 @@ export default function BillingPlanDetailClient({
     workingMode === "create" ? "Create New Plan" : "Edit Plan"
   const hasPendingChanges =
     workingMode === "create" || pendingChanges.length > 0
+
+  if (loadedSignature !== initialPlanSignature) {
+    setLoadedSignature(initialPlanSignature)
+    setWorkingMode(mode)
+    setBaseline(initialPlan)
+    setForm(initialPlan)
+    setHistory(initialPlan.changeHistory)
+  }
 
   function updateField<K extends keyof BillingPlan>(
     field: K,
@@ -212,7 +253,9 @@ export default function BillingPlanDetailClient({
       return
     }
 
-    const savedAt = formatHistoryDate(new Date())
+    const now = new Date()
+    const savedAt = formatBillingPlanTimestamp(now)
+    const currentPlans = plans
     const newRows =
       workingMode === "create"
         ? [
@@ -220,7 +263,7 @@ export default function BillingPlanDetailClient({
               after: form.name,
               before: "-",
               changedAt: savedAt,
-              changedBy: "Sarah Mitchell",
+              changedBy: billingPlanOperator,
               field: "Plan",
               reason,
             },
@@ -228,47 +271,112 @@ export default function BillingPlanDetailClient({
         : buildPendingHistoryRows(baseline, form, reason).map((row) => ({
             ...row,
             changedAt: savedAt,
-            changedBy: "Sarah Mitchell",
+            changedBy: billingPlanOperator,
           }))
-
-    if (newRows.length > 0) {
-      setHistory((current) => [...newRows, ...current])
+    const savedPlan: BillingPlan = {
+      ...form,
+      changeHistory: [...newRows, ...history],
+      createdAt:
+        workingMode === "create" ? formatBillingPlanDate(now) : form.createdAt,
+      service,
+      slug:
+        workingMode === "create"
+          ? createUniqueBillingPlanSlug({
+              name: form.name,
+              plans: currentPlans,
+              service,
+            })
+          : form.slug,
+      stoppedAt: getSavedStoppedAt(baseline, form, now),
     }
 
-    setBaseline(form)
+    const persistedPlan = upsertPlan(savedPlan)
+    const persistedSignature = getPlanSignature(persistedPlan)
+
+    setLoadedSignature(persistedSignature)
+    setBaseline(persistedPlan)
+    setForm(persistedPlan)
+    setHistory(persistedPlan.changeHistory)
     setWorkingMode("edit")
     setSaveDialogOpen(false)
-    setSavedMessage("Plan changes have been saved to the mock workspace.")
+    setSavedMessage("Plan changes have been saved.")
+
+    if (workingMode === "create") {
+      router.replace(`/billing/plans/${productPath}/${persistedPlan.slug}`)
+    }
   }
 
   function duplicatePlan() {
+    const now = new Date()
+    const copyName = createUniqueBillingPlanCopyName({
+      name: form.name,
+      plans,
+      service,
+    })
     const duplicate: BillingPlan = {
       ...form,
       changeHistory: [
         {
-          after: `${form.name} Copy`,
+          after: copyName,
           before: form.name,
-          changedAt: formatHistoryDate(new Date()),
-          changedBy: "Sarah Mitchell",
+          changedAt: formatBillingPlanTimestamp(now),
+          changedBy: billingPlanOperator,
           field: "Plan",
           reason: "Plan duplicated for new product setup",
         },
       ],
-      createdAt: "2026-06-08",
-      name: `${form.name} Copy`,
+      createdAt: formatBillingPlanDate(now),
+      name: copyName,
       recommended: false,
-      slug: `${form.slug}-copy`,
+      service,
+      slug: createUniqueBillingPlanSlug({
+        name: copyName,
+        plans,
+        service,
+      }),
       status: "Draft",
       stoppedAt: "-",
     }
+    const persistedPlan = upsertPlan(duplicate)
 
-    setWorkingMode("create")
-    setActiveTab("basic")
-    setBaseline(duplicate)
-    setForm(duplicate)
-    setHistory(duplicate.changeHistory)
-    setDuplicateMessage(`${form.name} was duplicated as ${duplicate.name}.`)
-    setSavedMessage("")
+    router.push(`/billing/plans/${productPath}/${persistedPlan.slug}`)
+  }
+
+  if (mode === "edit" && !resolvedPlan && !hydrated) {
+    return (
+      <DashboardLayout>
+        <PageHeader
+          title="Loading Plan"
+          description="Loading the saved plan data from this browser."
+          breadcrumbs={[
+            { label: "Billing" },
+            { label: "Plans" },
+            { label: service },
+          ]}
+        />
+      </DashboardLayout>
+    )
+  }
+
+  if (mode === "edit" && !resolvedPlan && hydrated) {
+    return (
+      <DashboardLayout>
+        <PageHeader
+          title="Plan Not Found"
+          description="This plan is not available in the saved plan catalog."
+          breadcrumbs={[
+            { label: "Billing" },
+            { label: "Plans" },
+            { label: service },
+          ]}
+          actions={
+            <AdminButton onClick={() => router.push(`/billing/plans/${productPath}`)}>
+              Back to Plans
+            </AdminButton>
+          }
+        />
+      </DashboardLayout>
+    )
   }
 
   return (
@@ -1573,14 +1681,24 @@ function yesNo(value: boolean) {
   return value ? "Enabled" : "Disabled"
 }
 
-function formatHistoryDate(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
-  const hours = String(date.getHours()).padStart(2, "0")
-  const minutes = String(date.getMinutes()).padStart(2, "0")
+function getPlanSignature(plan: BillingPlan) {
+  return JSON.stringify(plan)
+}
 
-  return `${year}-${month}-${day} ${hours}:${minutes}`
+function getSavedStoppedAt(
+  before: BillingPlan,
+  after: BillingPlan,
+  savedAt: Date
+) {
+  if (after.status !== "Inactive") {
+    return "-"
+  }
+
+  if (before.status === "Inactive" && before.stoppedAt !== "-") {
+    return before.stoppedAt
+  }
+
+  return formatBillingPlanDate(savedAt)
 }
 
 const inputClass =

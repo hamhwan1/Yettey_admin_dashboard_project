@@ -403,16 +403,7 @@ export function createBlankBillingPlan(service: BillingPlanService): BillingPlan
     allowCancellation: true,
     applyMode: "Immediately",
     autoRenewal: true,
-    changeHistory: [
-      {
-        after: "Created",
-        before: "-",
-        changedAt: "2026-06-08 10:22",
-        changedBy: "Sarah Mitchell",
-        field: "Plan",
-        reason: "Draft plan created",
-      },
-    ],
+    changeHistory: [],
     createdAt: "2026-06-08",
     creditExpirationDays: 90,
     credits: 0,
