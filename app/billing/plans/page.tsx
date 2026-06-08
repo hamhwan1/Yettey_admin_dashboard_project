@@ -14,7 +14,7 @@ export default function BillingPlansPage() {
         },
         {
           label: "Published Plans",
-          value: "6",
+          value: "5",
           detail: "Mock pricing records",
         },
         {
