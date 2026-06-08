@@ -4,6 +4,7 @@ export type BillingPlanService = "Yettey" | "Vpick"
 export type BillingPlanStatus = "Draft" | "Active" | "Inactive"
 export type BillingPlanType = "Subscription" | "Credit Pack"
 export type BillingPlanEffectiveMode = "Immediately" | "Scheduled"
+export type BillingPlanLanguage = "ko" | "en"
 
 export type BillingPlanFeature =
   | "AI Image Generation"
@@ -27,6 +28,14 @@ export type PlanChangeHistory = {
   reason: string
 }
 
+export type BillingPlanLanguageData = Record<
+  BillingPlanLanguage,
+  {
+    description: string
+    name: string
+  }
+>
+
 export type BillingPlan = {
   accessAfterCancellation: string
   annualPrice: number
@@ -45,6 +54,8 @@ export type BillingPlan = {
   expireRemainingCreditsAfterPartialUse: boolean
   features: BillingPlanFeature[]
   freeTrialDays: number
+  id: string
+  languageData: BillingPlanLanguageData
   monthlyPrice: number
   name: string
   projects: number
@@ -128,6 +139,11 @@ export const billingPlans: BillingPlan[] = [
       "Upload Limit",
     ],
     freeTrialDays: 7,
+    id: "plan_yettey_starter",
+    languageData: createLanguageData(
+      "Starter",
+      "Entry subscription plan for small creator teams."
+    ),
     monthlyPrice: 49000,
     name: "Starter",
     projects: 4,
@@ -190,6 +206,11 @@ export const billingPlans: BillingPlan[] = [
       "AI Assistant",
     ],
     freeTrialDays: 14,
+    id: "plan_yettey_growth",
+    languageData: createLanguageData(
+      "Growth",
+      "Growth plan for teams scaling content operations."
+    ),
     monthlyPrice: 99000,
     name: "Growth",
     projects: 10,
@@ -255,6 +276,11 @@ export const billingPlans: BillingPlan[] = [
       "Shortform Automation",
     ],
     freeTrialDays: 14,
+    id: "plan_yettey_pro",
+    languageData: createLanguageData(
+      "Pro",
+      "Advanced subscription plan for high-volume teams."
+    ),
     monthlyPrice: 249000,
     name: "Pro",
     projects: 999,
@@ -314,6 +340,11 @@ export const billingPlans: BillingPlan[] = [
       "Upload Limit",
     ],
     freeTrialDays: 0,
+    id: "plan_vpick_basic",
+    languageData: createLanguageData(
+      "Basic",
+      "Base VPICK plan for shortform video production."
+    ),
     monthlyPrice: 20000,
     name: "Basic",
     projects: 10,
@@ -376,6 +407,11 @@ export const billingPlans: BillingPlan[] = [
       "Shortform Automation",
     ],
     freeTrialDays: 0,
+    id: "plan_vpick_professional",
+    languageData: createLanguageData(
+      "Professional",
+      "Professional VPICK plan for teams with recurring video volume."
+    ),
     monthlyPrice: 40000,
     name: "Professional",
     projects: 30,
@@ -397,6 +433,11 @@ export const billingPlans: BillingPlan[] = [
 ]
 
 export function createBlankBillingPlan(service: BillingPlanService): BillingPlan {
+  const description =
+    service === "Yettey"
+      ? "Plan for teams that want to grow content production sustainably."
+      : "Plan for teams that want to create and manage shortform videos."
+
   return {
     accessAfterCancellation: "Until End of Period",
     annualPrice: 0,
@@ -407,10 +448,7 @@ export function createBlankBillingPlan(service: BillingPlanService): BillingPlan
     createdAt: "2026-06-08",
     creditExpirationDays: 90,
     credits: 0,
-    description:
-      service === "Yettey"
-        ? "Plan for teams that want to grow content production sustainably."
-        : "Plan for teams that want to create and manage shortform videos.",
+    description,
     displayOrder: 1,
     downloadTraffic: 0,
     effectiveDate: "2026-06-08 10:22",
@@ -418,6 +456,8 @@ export function createBlankBillingPlan(service: BillingPlanService): BillingPlan
     expireRemainingCreditsAfterPartialUse: true,
     features: ["AI Image Generation"],
     freeTrialDays: service === "Yettey" ? 7 : 0,
+    id: `draft_${service.toLowerCase()}_new_plan`,
+    languageData: createLanguageData("New Plan", description),
     monthlyPrice: 0,
     name: "New Plan",
     projects: 0,
@@ -435,6 +475,22 @@ export function createBlankBillingPlan(service: BillingPlanService): BillingPlan
     type: "Subscription",
     uploadMinutes: 0,
     users: service === "Yettey" ? 1 : 0,
+  }
+}
+
+export function createLanguageData(
+  name: string,
+  description: string
+): BillingPlanLanguageData {
+  return {
+    en: {
+      description,
+      name,
+    },
+    ko: {
+      description,
+      name,
+    },
   }
 }
 

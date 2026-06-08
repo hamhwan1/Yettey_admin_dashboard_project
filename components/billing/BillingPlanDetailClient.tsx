@@ -34,6 +34,7 @@ import {
   type BillingPlan,
   type BillingPlanEffectiveMode,
   type BillingPlanFeature,
+  type BillingPlanLanguage,
   type BillingPlanService,
   type BillingPlanStatus,
   type PlanChangeHistory,
@@ -49,6 +50,7 @@ import {
 } from "@/lib/billing-plan-catalog"
 import {
   billingPlanOperator,
+  createBillingPlanId,
   createUniqueBillingPlanCopyName,
   createUniqueBillingPlanSlug,
   formatBillingPlanDate,
@@ -278,6 +280,7 @@ export default function BillingPlanDetailClient({
       changeHistory: [...newRows, ...history],
       createdAt:
         workingMode === "create" ? formatBillingPlanDate(now) : form.createdAt,
+      id: workingMode === "create" ? createBillingPlanId(service) : form.id,
       service,
       slug:
         workingMode === "create"
@@ -326,6 +329,17 @@ export default function BillingPlanDetailClient({
         },
       ],
       createdAt: formatBillingPlanDate(now),
+      id: createBillingPlanId(service),
+      languageData: {
+        en: {
+          ...form.languageData.en,
+          name: copyName,
+        },
+        ko: {
+          ...form.languageData.ko,
+          name: copyName,
+        },
+      },
       name: copyName,
       recommended: false,
       service,
@@ -536,6 +550,28 @@ function BasicInfoTab({
   ) => void
 }) {
   const isCreditPack = form.type === "Credit Pack"
+  const [activeLanguage, setActiveLanguage] =
+    useState<BillingPlanLanguage>("ko")
+  const localized = form.languageData[activeLanguage]
+
+  function updateLocalizedField(
+    field: "description" | "name",
+    value: string
+  ) {
+    const nextLanguageData = {
+      ...form.languageData,
+      [activeLanguage]: {
+        ...form.languageData[activeLanguage],
+        [field]: value,
+      },
+    }
+
+    updateField("languageData", nextLanguageData)
+
+    if (activeLanguage === "ko") {
+      updateField(field, value)
+    }
+  }
 
   return (
     <SectionPanel>
@@ -563,10 +599,18 @@ function BasicInfoTab({
         Manage localized content shown to customers.
       </p>
       <div className="mt-4 inline-flex overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <button className="h-11 bg-violet-50 px-5 text-sm font-bold text-violet-600">
+        <button
+          className={languageTabClass(activeLanguage === "ko")}
+          onClick={() => setActiveLanguage("ko")}
+          type="button"
+        >
           Korean (default)
         </button>
-        <button className="h-11 border-l border-slate-200 px-5 text-sm font-semibold text-slate-500">
+        <button
+          className={languageTabClass(activeLanguage === "en")}
+          onClick={() => setActiveLanguage("en")}
+          type="button"
+        >
           English
         </button>
       </div>
@@ -575,19 +619,23 @@ function BasicInfoTab({
         <FieldLabel label="Plan Name">
           <input
             className={inputClass}
-            value={form.name}
-            onChange={(event) => updateField("name", event.target.value)}
+            value={localized.name}
+            onChange={(event) =>
+              updateLocalizedField("name", event.target.value)
+            }
           />
         </FieldLabel>
         <FieldLabel label="Description">
           <textarea
             className={cn(inputClass, "h-28 resize-none py-3 leading-6")}
             maxLength={200}
-            value={form.description}
-            onChange={(event) => updateField("description", event.target.value)}
+            value={localized.description}
+            onChange={(event) =>
+              updateLocalizedField("description", event.target.value)
+            }
           />
           <p className="mt-1 text-right text-xs font-medium text-slate-400">
-            {form.description.length}/200
+            {localized.description.length}/200
           </p>
         </FieldLabel>
         <NumberField
@@ -1054,6 +1102,8 @@ function PlanPreview({ plan }: { plan: BillingPlan }) {
   const [device, setDevice] = useState<PreviewDevice>("Desktop")
   const [language, setLanguage] = useState<PreviewLanguage>("Korean")
   const isCreditPack = plan.type === "Credit Pack"
+  const previewLanguage = language === "Korean" ? "ko" : "en"
+  const localized = plan.languageData[previewLanguage]
   const benefits = isCreditPack
     ? [
         `${formatNumber(plan.credits)} credits instantly granted`,
@@ -1121,7 +1171,7 @@ function PlanPreview({ plan }: { plan: BillingPlan }) {
           <p className="text-center text-sm font-semibold text-slate-300">
             {isCreditPack ? "Credit Pack" : plan.service}
           </p>
-          <h3 className="mt-4 text-center text-2xl font-bold">{plan.name}</h3>
+          <h3 className="mt-4 text-center text-2xl font-bold">{localized.name}</h3>
           <div className="mt-5 flex items-end justify-center gap-2">
             <span className="text-4xl font-black">
               {formatKrw(plan.monthlyPrice)}
@@ -1131,7 +1181,7 @@ function PlanPreview({ plan }: { plan: BillingPlan }) {
             </span>
           </div>
           <p className="mx-auto mt-5 max-w-64 text-center text-sm leading-6 text-slate-400">
-            {plan.description}
+            {localized.description}
           </p>
           <div className="mt-8 space-y-4">
             {benefits.slice(0, 6).map((benefit, index) => (
@@ -1547,7 +1597,7 @@ function buildPendingHistoryRows(
     ["Description", before.description, after.description],
     ["Plan Type", before.type, after.type],
     ["Status", before.status, after.status],
-    ["Monthly Price", formatKrw(before.monthlyPrice), formatKrw(after.monthlyPrice)],
+    ["Price", formatKrw(before.monthlyPrice), formatKrw(after.monthlyPrice)],
     ["Annual Price", formatKrw(before.annualPrice), formatKrw(after.annualPrice)],
     ["Free Trial", `${before.freeTrialDays} days`, `${after.freeTrialDays} days`],
     ["Auto Renewal", yesNo(before.autoRenewal), yesNo(after.autoRenewal)],
@@ -1585,6 +1635,11 @@ function buildPendingHistoryRows(
       before.features.join(", ") || "-",
       after.features.join(", ") || "-",
     ],
+    [
+      "Language Data",
+      summarizeLanguageData(before),
+      summarizeLanguageData(after),
+    ],
   ]
 
   changes.forEach(([field, beforeValue, afterValue]) => {
@@ -1621,6 +1676,10 @@ function getFeatureLimitValue(plan: BillingPlan, policy: FeaturePolicy) {
   }
 
   return policy.key === "AI Image Generation" ? plan.credits : 0
+}
+
+function summarizeLanguageData(plan: BillingPlan) {
+  return `EN: ${plan.languageData.en.name} / ${plan.languageData.en.description}`
 }
 
 function updateFeatureLimit(
@@ -1674,6 +1733,15 @@ function previewToggleClass(active: boolean) {
     active
       ? "bg-violet-50 text-violet-600 ring-1 ring-violet-100"
       : "bg-slate-50 text-slate-400 hover:text-slate-700"
+  )
+}
+
+function languageTabClass(active: boolean) {
+  return cn(
+    "h-11 border-l border-slate-200 px-5 text-sm font-semibold transition first:border-l-0",
+    active
+      ? "bg-violet-50 text-violet-600"
+      : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
   )
 }
 

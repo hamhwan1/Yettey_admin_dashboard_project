@@ -6,6 +6,7 @@ import {
   type BillingPlan,
   type BillingPlanService,
   billingPlans,
+  createLanguageData,
 } from "@/lib/billing-plan-catalog"
 
 const STORAGE_KEY = "yettey.billing-plans.v1"
@@ -36,7 +37,9 @@ export function useBillingPlanStore() {
   const upsertPlan = useCallback((plan: BillingPlan) => {
     const current = readStoredBillingPlans()
     const index = current.findIndex(
-      (item) => item.service === plan.service && item.slug === plan.slug
+      (item) =>
+        item.id === plan.id ||
+        (item.service === plan.service && item.slug === plan.slug)
     )
     const next =
       index >= 0
@@ -129,6 +132,12 @@ export function createUniqueBillingPlanSlug({
   return candidate
 }
 
+export function createBillingPlanId(service: BillingPlanService) {
+  return `plan_${service.toLowerCase()}_${Date.now()}_${Math.random()
+    .toString(36)
+    .slice(2, 8)}`
+}
+
 export function createUniqueBillingPlanCopyName({
   name,
   plans,
@@ -207,15 +216,19 @@ function writeStoredBillingPlans(plans: BillingPlan[]) {
 }
 
 function mergeCatalogWithStoredPlans(storedPlans: BillingPlan[]) {
-  const storedByKey = new Map(
-    storedPlans.map((plan) => [getPlanKey(plan), normalizePlan(plan)])
-  )
+  const storedByKey = new Map<string, BillingPlan>()
+  storedPlans.forEach((plan) => {
+    const normalized = normalizePlan(plan)
+    storedByKey.set(getPlanKey(normalized), normalized)
+    storedByKey.set(`${normalized.service}:${normalized.slug}`, normalized)
+  })
   const merged = billingPlans.map((plan) => storedByKey.get(getPlanKey(plan)) ?? plan)
   const storedOnly = storedPlans.filter(
     (plan) =>
       !billingPlans.some(
         (catalogPlan) =>
-          catalogPlan.service === plan.service && catalogPlan.slug === plan.slug
+          catalogPlan.id === plan.id ||
+          (catalogPlan.service === plan.service && catalogPlan.slug === plan.slug)
       )
   )
 
@@ -224,21 +237,29 @@ function mergeCatalogWithStoredPlans(storedPlans: BillingPlan[]) {
 
 function normalizePlan(plan: BillingPlan): BillingPlan {
   const catalogPlan = billingPlans.find(
-    (item) => item.service === plan.service && item.slug === plan.slug
+    (item) =>
+      item.id === plan.id ||
+      (item.service === plan.service && item.slug === plan.slug)
   )
+  const fallback = catalogPlan ?? billingPlans[0]
 
   return {
-    ...(catalogPlan ?? billingPlans[0]),
+    ...fallback,
     ...plan,
     changeHistory: Array.isArray(plan.changeHistory)
       ? plan.changeHistory
-      : catalogPlan?.changeHistory ?? [],
-    features: Array.isArray(plan.features) ? plan.features : catalogPlan?.features ?? [],
+      : fallback.changeHistory,
+    features: Array.isArray(plan.features) ? plan.features : fallback.features,
+    id: plan.id ?? fallback.id ?? createBillingPlanId(plan.service),
+    languageData:
+      plan.languageData ??
+      fallback.languageData ??
+      createLanguageData(plan.name, plan.description),
   }
 }
 
 function getPlanKey(plan: BillingPlan) {
-  return `${plan.service}:${plan.slug}`
+  return plan.id ?? `${plan.service}:${plan.slug}`
 }
 
 function slugifyPlanName(name: string) {
