@@ -73,6 +73,7 @@ export type BillingPlan = {
   type: BillingPlanType
   uploadMinutes: number
   users: number
+  updatedAt: string
 }
 
 export const billingPlanFeatures: BillingPlanFeature[] = [
@@ -161,6 +162,7 @@ export const billingPlans: BillingPlan[] = [
     type: "Subscription",
     uploadMinutes: 0,
     users: 2,
+    updatedAt: "2026-06-08 10:22",
   },
   {
     accessAfterCancellation: "Until End of Period",
@@ -228,6 +230,7 @@ export const billingPlans: BillingPlan[] = [
     type: "Subscription",
     uploadMinutes: 0,
     users: 3,
+    updatedAt: "2026-06-08 10:22",
   },
   {
     accessAfterCancellation: "Until End of Period",
@@ -298,6 +301,7 @@ export const billingPlans: BillingPlan[] = [
     type: "Subscription",
     uploadMinutes: 0,
     users: 10,
+    updatedAt: "2026-06-03 13:10",
   },
   {
     accessAfterCancellation: "Until End of Period",
@@ -362,6 +366,7 @@ export const billingPlans: BillingPlan[] = [
     type: "Subscription",
     uploadMinutes: 60,
     users: 0,
+    updatedAt: "2026-06-01 09:20",
   },
   {
     accessAfterCancellation: "Until End of Period",
@@ -429,6 +434,7 @@ export const billingPlans: BillingPlan[] = [
     type: "Subscription",
     uploadMinutes: 150,
     users: 0,
+    updatedAt: "2026-06-08 10:22",
   },
 ]
 
@@ -475,6 +481,7 @@ export function createBlankBillingPlan(service: BillingPlanService): BillingPlan
     type: "Subscription",
     uploadMinutes: 0,
     users: service === "Yettey" ? 1 : 0,
+    updatedAt: "2026-06-08 10:22",
   }
 }
 

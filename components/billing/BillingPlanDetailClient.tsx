@@ -55,6 +55,7 @@ import {
   formatBillingPlanTimestamp,
   useBillingPlanStore,
 } from "@/lib/billing-plan-store"
+import { type BillingPlanValidationError } from "@/lib/billing-plan-validation"
 import { formatKrw } from "@/lib/pricing-plans"
 import { cn } from "@/lib/utils"
 
@@ -178,7 +179,7 @@ export default function BillingPlanDetailClient({
 }: BillingPlanDetailClientProps) {
   const router = useRouter()
   const productPath = getServicePath(service)
-  const { hydrated, plans, upsertPlan } = useBillingPlanStore()
+  const { hydrated, plans, savePlan } = useBillingPlanStore()
   const storedPlan = useMemo(
     () =>
       planSlug
@@ -205,8 +206,13 @@ export default function BillingPlanDetailClient({
   )
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [saveReason, setSaveReason] = useState("")
+  const [saving, setSaving] = useState(false)
   const [savedMessage, setSavedMessage] = useState("")
+  const [saveErrorMessage, setSaveErrorMessage] = useState("")
   const [duplicateMessage, setDuplicateMessage] = useState("")
+  const [validationErrors, setValidationErrors] = useState<
+    BillingPlanValidationError[]
+  >([])
   const initialPlanSignature = useMemo(
     () => getPlanSignature(initialPlan),
     [initialPlan]
@@ -238,7 +244,9 @@ export default function BillingPlanDetailClient({
   ) {
     setForm((current) => ({ ...current, [field]: value }))
     setSavedMessage("")
+    setSaveErrorMessage("")
     setDuplicateMessage("")
+    setValidationErrors([])
   }
 
   function openSaveDialog() {
@@ -246,12 +254,16 @@ export default function BillingPlanDetailClient({
     setSaveDialogOpen(true)
   }
 
-  function confirmSave() {
+  async function confirmSave() {
     const reason = saveReason.trim()
 
     if (!reason) {
       return
     }
+
+    setSaving(true)
+    setSaveErrorMessage("")
+    setValidationErrors([])
 
     const now = new Date()
     const savedAt = formatBillingPlanTimestamp(now)
@@ -289,9 +301,24 @@ export default function BillingPlanDetailClient({
             })
           : form.slug,
       stoppedAt: getSavedStoppedAt(baseline, form, now),
+      updatedAt: savedAt,
     }
 
-    const persistedPlan = upsertPlan(savedPlan)
+    const result = await savePlan(
+      savedPlan,
+      workingMode === "create" ? "create" : "update"
+    )
+
+    setSaving(false)
+
+    if (!result.ok) {
+      setSaveErrorMessage(result.message)
+      setValidationErrors(result.errors)
+      window.alert("플랜 저장에 실패했습니다. 다시 시도해주세요.")
+      return
+    }
+
+    const persistedPlan = result.plan
     const persistedSignature = getPlanSignature(persistedPlan)
 
     setLoadedSignature(persistedSignature)
@@ -300,15 +327,24 @@ export default function BillingPlanDetailClient({
     setHistory(persistedPlan.changeHistory)
     setWorkingMode("edit")
     setSaveDialogOpen(false)
-    setSavedMessage("Plan changes have been saved.")
+    setSavedMessage("플랜이 저장되었습니다.")
+    setSaveErrorMessage("")
+    window.alert("플랜이 저장되었습니다.")
 
     if (workingMode === "create") {
       router.replace(`/billing/plans/${productPath}/${persistedPlan.slug}`)
     }
   }
 
-  function duplicatePlan() {
+  async function duplicatePlan() {
+    setSaving(true)
+    setSavedMessage("")
+    setSaveErrorMessage("")
+    setDuplicateMessage("")
+    setValidationErrors([])
+
     const now = new Date()
+    const savedAt = formatBillingPlanTimestamp(now)
     const copyName = createUniqueBillingPlanCopyName({
       name: form.name,
       plans,
@@ -320,7 +356,7 @@ export default function BillingPlanDetailClient({
         {
           after: copyName,
           before: form.name,
-          changedAt: formatBillingPlanTimestamp(now),
+          changedAt: savedAt,
           changedBy: billingPlanOperator,
           field: "Plan",
           reason: "Plan duplicated for new product setup",
@@ -348,10 +384,22 @@ export default function BillingPlanDetailClient({
       }),
       status: "Draft",
       stoppedAt: "-",
+      updatedAt: savedAt,
     }
-    const persistedPlan = upsertPlan(duplicate)
 
-    router.push(`/billing/plans/${productPath}/${persistedPlan.slug}`)
+    const result = await savePlan(duplicate, "duplicate")
+
+    setSaving(false)
+
+    if (!result.ok) {
+      setSaveErrorMessage(result.message)
+      setValidationErrors(result.errors)
+      window.alert("플랜 저장에 실패했습니다. 다시 시도해주세요.")
+      return
+    }
+
+    window.alert("플랜이 저장되었습니다.")
+    router.push(`/billing/plans/${productPath}/${result.plan.slug}`)
   }
 
   if (mode === "edit" && !resolvedPlan && !hydrated) {
@@ -426,18 +474,18 @@ export default function BillingPlanDetailClient({
               </select>
             </label>
             {workingMode === "edit" ? (
-              <AdminButton onClick={duplicatePlan}>
+              <AdminButton disabled={saving} onClick={duplicatePlan}>
                 <Copy className="size-4" />
                 Duplicate
               </AdminButton>
             ) : null}
             <AdminButton
               variant="primary"
-              disabled={!hasPendingChanges}
+              disabled={!hasPendingChanges || saving}
               onClick={openSaveDialog}
             >
               <Save className="size-4" />
-              Save Plan
+              {saving ? "Saving..." : "Save Plan"}
             </AdminButton>
           </div>
         }
@@ -448,6 +496,25 @@ export default function BillingPlanDetailClient({
       ) : null}
       {duplicateMessage ? (
         <Notice tone="info">{duplicateMessage}</Notice>
+      ) : null}
+      {saveErrorMessage || validationErrors.length ? (
+        <Notice tone="danger">
+          <div>
+            <p>
+              {saveErrorMessage ||
+                "Plan save failed. Please review the fields below."}
+            </p>
+            {validationErrors.length ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {validationErrors.map((error) => (
+                  <li key={`${error.field}-${error.message}`}>
+                    {error.message}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        </Notice>
       ) : null}
 
       <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_448px]">
@@ -479,6 +546,7 @@ export default function BillingPlanDetailClient({
           onCancel={() => setSaveDialogOpen(false)}
           onConfirm={confirmSave}
           reason={saveReason}
+          saving={saving}
           setReason={setSaveReason}
         />
       ) : null}
@@ -1208,11 +1276,13 @@ function SaveReasonModal({
   onCancel,
   onConfirm,
   reason,
+  saving,
   setReason,
 }: {
   onCancel: () => void
   onConfirm: () => void
   reason: string
+  saving: boolean
   setReason: (reason: string) => void
 }) {
   return (
@@ -1241,13 +1311,13 @@ function SaveReasonModal({
           onChange={(event) => setReason(event.target.value)}
         />
         <div className="mt-6 flex justify-end gap-2">
-          <AdminButton onClick={onCancel}>Cancel</AdminButton>
+          <AdminButton disabled={saving} onClick={onCancel}>Cancel</AdminButton>
           <AdminButton
             variant="primary"
-            disabled={!reason.trim()}
+            disabled={!reason.trim() || saving}
             onClick={onConfirm}
           >
-            Save Plan
+            {saving ? "Saving..." : "Save Plan"}
           </AdminButton>
         </div>
       </div>
@@ -1509,7 +1579,7 @@ function Notice({
   tone,
 }: {
   children: ReactNode
-  tone: "info" | "success"
+  tone: "danger" | "info" | "success"
 }) {
   return (
     <div
@@ -1517,7 +1587,8 @@ function Notice({
         "my-6 rounded-xl border px-4 py-3 text-sm font-semibold",
         tone === "info" && "border-violet-100 bg-violet-50 text-violet-600",
         tone === "success" &&
-          "border-emerald-100 bg-emerald-50 text-emerald-700"
+          "border-emerald-100 bg-emerald-50 text-emerald-700",
+        tone === "danger" && "border-rose-100 bg-rose-50 text-rose-700"
       )}
     >
       {children}

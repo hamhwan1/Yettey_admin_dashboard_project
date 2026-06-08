@@ -8,6 +8,10 @@ import {
   billingPlans,
   createLanguageData,
 } from "@/lib/billing-plan-catalog"
+import {
+  type BillingPlanSaveMode,
+  type BillingPlanValidationError,
+} from "@/lib/billing-plan-validation"
 
 const STORAGE_KEY = "yettey.billing-plans.v1"
 const STORE_EVENT = "billing-plans:updated"
@@ -18,6 +22,17 @@ type StoredPlanPayload = {
   plans: BillingPlan[]
   version: 1
 }
+
+type SaveBillingPlanResult =
+  | {
+      ok: true
+      plan: BillingPlan
+    }
+  | {
+      errors: BillingPlanValidationError[]
+      message: string
+      ok: false
+    }
 
 let cachedSnapshot: BillingPlan[] | undefined
 let cachedSnapshotText = ""
@@ -34,24 +49,65 @@ export function useBillingPlanStore() {
     getHydratedServerSnapshot
   )
 
-  const upsertPlan = useCallback((plan: BillingPlan) => {
-    const current = readStoredBillingPlans()
-    const index = current.findIndex(
-      (item) =>
-        item.id === plan.id ||
-        (item.service === plan.service && item.slug === plan.slug)
-    )
-    const next =
-      index >= 0
-        ? current.map((item, itemIndex) => (itemIndex === index ? plan : item))
-        : [...current, plan]
+  const upsertPlan = useCallback(
+    (plan: BillingPlan) => upsertStoredBillingPlan(plan),
+    []
+  )
+  const savePlan = useCallback(
+    (plan: BillingPlan, mode: BillingPlanSaveMode) =>
+      saveBillingPlan(plan, mode),
+    []
+  )
 
-    writeStoredBillingPlans(next)
+  return { hydrated, plans, savePlan, upsertPlan }
+}
 
-    return clonePlan(plan)
-  }, [])
+export async function saveBillingPlan(
+  plan: BillingPlan,
+  mode: BillingPlanSaveMode
+): Promise<SaveBillingPlanResult> {
+  try {
+    const response = await fetch("/api/billing/plans", {
+      body: JSON.stringify({ mode, plan }),
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: mode === "update" ? "PUT" : "POST",
+    })
+    const payload = (await parseJsonResponse(response)) as {
+      errors?: BillingPlanValidationError[]
+      message?: string
+      plan?: BillingPlan
+    }
 
-  return { hydrated, plans, upsertPlan }
+    if (!response.ok) {
+      return {
+        errors: payload.errors ?? [],
+        message: payload.message ?? "Plan save failed.",
+        ok: false,
+      }
+    }
+
+    if (!payload.plan) {
+      return {
+        errors: [],
+        message: "Plan save response did not include a plan.",
+        ok: false,
+      }
+    }
+
+    return {
+      ok: true,
+      plan: upsertStoredBillingPlan(payload.plan),
+    }
+  } catch {
+    return {
+      errors: [],
+      message: "Network error while saving plan.",
+      ok: false,
+    }
+  }
 }
 
 function subscribeToBillingPlanStore(callback: () => void) {
@@ -215,6 +271,23 @@ function writeStoredBillingPlans(plans: BillingPlan[]) {
   window.dispatchEvent(new Event(STORE_EVENT))
 }
 
+function upsertStoredBillingPlan(plan: BillingPlan) {
+  const current = readStoredBillingPlans()
+  const index = current.findIndex(
+    (item) =>
+      item.id === plan.id ||
+      (item.service === plan.service && item.slug === plan.slug)
+  )
+  const next =
+    index >= 0
+      ? current.map((item, itemIndex) => (itemIndex === index ? plan : item))
+      : [...current, plan]
+
+  writeStoredBillingPlans(next)
+
+  return clonePlan(plan)
+}
+
 function mergeCatalogWithStoredPlans(storedPlans: BillingPlan[]) {
   const storedByKey = new Map<string, BillingPlan>()
   storedPlans.forEach((plan) => {
@@ -255,6 +328,15 @@ function normalizePlan(plan: BillingPlan): BillingPlan {
       plan.languageData ??
       fallback.languageData ??
       createLanguageData(plan.name, plan.description),
+    updatedAt: plan.updatedAt ?? fallback.updatedAt ?? plan.createdAt,
+  }
+}
+
+async function parseJsonResponse(response: Response) {
+  try {
+    return await response.json()
+  } catch {
+    return {}
   }
 }
 
