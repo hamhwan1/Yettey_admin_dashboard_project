@@ -289,14 +289,16 @@ function upsertStoredBillingPlan(plan: BillingPlan) {
 }
 
 function mergeCatalogWithStoredPlans(storedPlans: BillingPlan[]) {
+  const normalizedStoredPlans = dedupeStoredPlans(
+    storedPlans.map((plan) => normalizePlan(plan))
+  )
   const storedByKey = new Map<string, BillingPlan>()
-  storedPlans.forEach((plan) => {
-    const normalized = normalizePlan(plan)
+  normalizedStoredPlans.forEach((normalized) => {
     storedByKey.set(getPlanKey(normalized), normalized)
     storedByKey.set(`${normalized.service}:${normalized.slug}`, normalized)
   })
   const merged = billingPlans.map((plan) => storedByKey.get(getPlanKey(plan)) ?? plan)
-  const storedOnly = storedPlans.filter(
+  const storedOnly = normalizedStoredPlans.filter(
     (plan) =>
       !billingPlans.some(
         (catalogPlan) =>
@@ -315,6 +317,8 @@ function normalizePlan(plan: BillingPlan): BillingPlan {
       (item.service === plan.service && item.slug === plan.slug)
   )
   const fallback = catalogPlan ?? billingPlans[0]
+  const normalizedName = plan.name ?? fallback.name
+  const normalizedDescription = plan.description ?? fallback.description
 
   return {
     ...fallback,
@@ -324,11 +328,109 @@ function normalizePlan(plan: BillingPlan): BillingPlan {
       : fallback.changeHistory,
     features: Array.isArray(plan.features) ? plan.features : fallback.features,
     id: plan.id ?? fallback.id ?? createBillingPlanId(plan.service),
-    languageData:
-      plan.languageData ??
-      fallback.languageData ??
-      createLanguageData(plan.name, plan.description),
+    languageData: normalizeLanguageData({
+      catalogPlan,
+      description: normalizedDescription,
+      fallback,
+      languageData: plan.languageData,
+      name: normalizedName,
+    }),
     updatedAt: plan.updatedAt ?? fallback.updatedAt ?? plan.createdAt,
+  }
+}
+
+function dedupeStoredPlans(plans: BillingPlan[]) {
+  const latestBySlug = new Map<
+    string,
+    {
+      index: number
+      plan: BillingPlan
+    }
+  >()
+
+  plans.forEach((plan, index) => {
+    const slugKey = `${plan.service}:${plan.slug}`
+    const existing = latestBySlug.get(slugKey)
+
+    if (
+      !existing ||
+      isPlanNewer({ index, plan }, existing)
+    ) {
+      latestBySlug.set(slugKey, { index, plan })
+    }
+  })
+
+  return Array.from(latestBySlug.values()).map(({ plan }) => plan)
+}
+
+function isPlanNewer(
+  candidate: { index: number; plan: BillingPlan },
+  current: { index: number; plan: BillingPlan }
+) {
+  const candidateTime = getPlanTime(candidate.plan)
+  const currentTime = getPlanTime(current.plan)
+
+  if (candidateTime !== currentTime) {
+    return candidateTime > currentTime
+  }
+
+  return candidate.index > current.index
+}
+
+function getPlanTime(plan: BillingPlan) {
+  const timeSource =
+    plan.updatedAt || plan.changeHistory?.[0]?.changedAt || plan.createdAt
+  const parsed = Date.parse(timeSource.replace(" ", "T"))
+
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function normalizeLanguageData({
+  catalogPlan,
+  description,
+  fallback,
+  languageData,
+  name,
+}: {
+  catalogPlan: BillingPlan | undefined
+  description: string
+  fallback: BillingPlan
+  languageData: BillingPlan["languageData"] | undefined
+  name: string
+}) {
+  if (catalogPlan) {
+    return languageData ?? fallback.languageData ?? createLanguageData(name, description)
+  }
+
+  const generated = createLanguageData(name, description)
+  const fallbackLanguageData =
+    languageData ?? generated
+
+  return {
+    en: {
+      description:
+        fallbackLanguageData.en?.description &&
+        fallbackLanguageData.en.description !== fallback.languageData.en.description
+          ? fallbackLanguageData.en.description
+          : generated.en.description,
+      name:
+        fallbackLanguageData.en?.name &&
+        fallbackLanguageData.en.name !== fallback.languageData.en.name
+          ? fallbackLanguageData.en.name
+          : generated.en.name,
+    },
+    ko: {
+      description:
+        fallbackLanguageData.ko?.description &&
+        fallbackLanguageData.ko.description !== fallback.languageData.ko.description
+          ? fallbackLanguageData.ko.description
+          : generated.ko.description,
+      name:
+        fallbackLanguageData.ko?.name &&
+        fallbackLanguageData.ko.name !== fallback.languageData.ko.name
+          ? fallbackLanguageData.ko.name
+          : generated.ko.name,
+    },
   }
 }
 
