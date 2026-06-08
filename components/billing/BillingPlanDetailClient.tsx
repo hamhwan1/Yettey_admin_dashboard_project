@@ -3,12 +3,26 @@
 import type { ReactNode } from "react"
 import { useMemo, useState } from "react"
 import {
+  Bot,
+  Calendar,
   Check,
+  Clapperboard,
+  Clock,
+  Copy,
+  Download,
+  Image as ImageIcon,
+  Info,
+  MessageCircle,
   Monitor,
   PauseCircle,
+  Play,
   PlayCircle,
   Save,
+  Scissors,
   Smartphone,
+  UploadCloud,
+  Video,
+  Wand2,
 } from "lucide-react"
 
 import AdminButton from "@/components/admin/AdminButton"
@@ -17,6 +31,7 @@ import StatusBadge from "@/components/admin/StatusBadge"
 import DashboardLayout from "@/components/layout/DashboardLayout"
 import {
   type BillingPlan,
+  type BillingPlanEffectiveMode,
   type BillingPlanFeature,
   type BillingPlanService,
   type BillingPlanStatus,
@@ -39,8 +54,110 @@ type BillingPlanDetailClientProps = {
   service: BillingPlanService
 }
 
+type PlanTab = "basic" | "configuration" | "advanced" | "history"
 type PreviewDevice = "Desktop" | "Mobile"
 type PreviewLanguage = "Korean" | "English"
+
+type FeaturePolicy = {
+  description: string
+  icon: ReactNode
+  key: BillingPlanFeature
+  limitLabel: string
+  unit: string
+}
+
+const tabs: Array<{ id: PlanTab; label: string }> = [
+  { id: "basic", label: "Basic Info" },
+  { id: "configuration", label: "Configuration" },
+  { id: "advanced", label: "Advanced Settings" },
+  { id: "history", label: "Change History" },
+]
+
+const featurePolicies: FeaturePolicy[] = [
+  {
+    description: "Generate images with AI",
+    icon: <ImageIcon className="size-5" />,
+    key: "AI Image Generation",
+    limitLabel: "Monthly Limit",
+    unit: "credits",
+  },
+  {
+    description: "Generate videos with AI",
+    icon: <Play className="size-5" />,
+    key: "AI Video Generation",
+    limitLabel: "Monthly Limit",
+    unit: "credits",
+  },
+  {
+    description: "Create shortform videos",
+    icon: <Clapperboard className="size-5" />,
+    key: "Video Analysis",
+    limitLabel: "Monthly Limit",
+    unit: "mins",
+  },
+  {
+    description: "Max video length for upload",
+    icon: <UploadCloud className="size-5" />,
+    key: "Max Video Length",
+    limitLabel: "Max Duration",
+    unit: "mins",
+  },
+  {
+    description: "Max total download per month",
+    icon: <Download className="size-5" />,
+    key: "Download Limit",
+    limitLabel: "Monthly Limit",
+    unit: "GB",
+  },
+  {
+    description: "Max total upload per month",
+    icon: <UploadCloud className="size-5" />,
+    key: "Upload Limit",
+    limitLabel: "Monthly Limit",
+    unit: "GB",
+  },
+  {
+    description: "Monthly bandwidth limit",
+    icon: <Wand2 className="size-5" />,
+    key: "Traffic (Bandwidth)",
+    limitLabel: "Monthly Limit",
+    unit: "GB",
+  },
+  {
+    description: "AI chat and assistant",
+    icon: <Bot className="size-5" />,
+    key: "AI Assistant",
+    limitLabel: "Monthly Limit",
+    unit: "credits",
+  },
+  {
+    description: "Content transformation features",
+    icon: <MessageCircle className="size-5" />,
+    key: "Content Transformation",
+    limitLabel: "Monthly Limit",
+    unit: "credits",
+  },
+  {
+    description: "Advanced video features",
+    icon: <Video className="size-5" />,
+    key: "Video Editing Tools",
+    limitLabel: "Monthly Limit",
+    unit: "credits",
+  },
+  {
+    description: "Shortform editing and automation",
+    icon: <Scissors className="size-5" />,
+    key: "Shortform Automation",
+    limitLabel: "Monthly Limit",
+    unit: "credits",
+  },
+]
+
+const saveReasonExamples = [
+  "Pricing policy update",
+  "Free trial period added",
+  "Credits increased",
+]
 
 export default function BillingPlanDetailClient({
   mode,
@@ -51,23 +168,28 @@ export default function BillingPlanDetailClient({
     () => plan ?? createBlankBillingPlan(service),
     [plan, service]
   )
+  const [workingMode, setWorkingMode] = useState<"create" | "edit">(mode)
+  const [activeTab, setActiveTab] = useState<PlanTab>("basic")
+  const [baseline, setBaseline] = useState<BillingPlan>(initialPlan)
   const [form, setForm] = useState<BillingPlan>(initialPlan)
-  const [changeReason, setChangeReason] = useState(
-    mode === "create" ? "Draft plan created" : "Policy update"
+  const [history, setHistory] = useState<PlanChangeHistory[]>(
+    initialPlan.changeHistory
   )
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [saveReason, setSaveReason] = useState("")
   const [savedMessage, setSavedMessage] = useState("")
+  const [duplicateMessage, setDuplicateMessage] = useState("")
   const pendingChanges = useMemo(
     () =>
-      mode === "edit"
-        ? buildPendingHistoryRows(initialPlan, form, changeReason)
+      workingMode === "edit"
+        ? buildPendingHistoryRows(baseline, form, "Pending save")
         : [],
-    [changeReason, form, initialPlan, mode]
+    [baseline, form, workingMode]
   )
-  const historyRows =
-    mode === "create"
-      ? form.changeHistory
-      : [...pendingChanges, ...form.changeHistory]
-  const pageTitle = mode === "create" ? "Create New Plan" : form.name
+  const pageTitle =
+    workingMode === "create" ? "Create New Plan" : "Edit Plan"
+  const hasPendingChanges =
+    workingMode === "create" || pendingChanges.length > 0
 
   function updateField<K extends keyof BillingPlan>(
     field: K,
@@ -75,37 +197,131 @@ export default function BillingPlanDetailClient({
   ) {
     setForm((current) => ({ ...current, [field]: value }))
     setSavedMessage("")
+    setDuplicateMessage("")
   }
 
-  function savePlan() {
-    setSavedMessage(
-      mode === "create"
-        ? "Draft plan has been saved in the mock workspace."
-        : "Plan changes have been saved in the mock workspace."
-    )
+  function openSaveDialog() {
+    setSaveReason("")
+    setSaveDialogOpen(true)
+  }
+
+  function confirmSave() {
+    const reason = saveReason.trim()
+
+    if (!reason) {
+      return
+    }
+
+    const savedAt = formatHistoryDate(new Date())
+    const newRows =
+      workingMode === "create"
+        ? [
+            {
+              after: form.name,
+              before: "-",
+              changedAt: savedAt,
+              changedBy: "Sarah Mitchell",
+              field: "Plan",
+              reason,
+            },
+          ]
+        : buildPendingHistoryRows(baseline, form, reason).map((row) => ({
+            ...row,
+            changedAt: savedAt,
+            changedBy: "Sarah Mitchell",
+          }))
+
+    if (newRows.length > 0) {
+      setHistory((current) => [...newRows, ...current])
+    }
+
+    setBaseline(form)
+    setWorkingMode("edit")
+    setSaveDialogOpen(false)
+    setSavedMessage("Plan changes have been saved to the mock workspace.")
+  }
+
+  function duplicatePlan() {
+    const duplicate: BillingPlan = {
+      ...form,
+      changeHistory: [
+        {
+          after: `${form.name} Copy`,
+          before: form.name,
+          changedAt: formatHistoryDate(new Date()),
+          changedBy: "Sarah Mitchell",
+          field: "Plan",
+          reason: "Plan duplicated for new product setup",
+        },
+      ],
+      createdAt: "2026-06-08",
+      name: `${form.name} Copy`,
+      recommended: false,
+      slug: `${form.slug}-copy`,
+      status: "Draft",
+      stoppedAt: "-",
+    }
+
+    setWorkingMode("create")
+    setActiveTab("basic")
+    setBaseline(duplicate)
+    setForm(duplicate)
+    setHistory(duplicate.changeHistory)
+    setDuplicateMessage(`${form.name} was duplicated as ${duplicate.name}.`)
+    setSavedMessage("")
   }
 
   return (
     <DashboardLayout>
       <PageHeader
         title={pageTitle}
-        description="Manage product package information, pricing, benefit limits, feature access, and lifecycle status."
+        description="Manage sellable plan products, entitlement policy, lifecycle status, and policy change history."
+        eyebrow={
+          workingMode === "create"
+            ? `${service} / Create Plan`
+            : `${service} / ${form.name}`
+        }
         breadcrumbs={[
           { label: "Billing" },
           { label: "Plans" },
           { label: service },
-          { label: mode === "create" ? "Create Plan" : form.name },
+          { label: workingMode === "create" ? "Create Plan" : form.name },
         ]}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge tone={getStatusTone(form.status)}>{form.status}</StatusBadge>
-            <AdminButton onClick={savePlan}>
-              <Save className="size-4" />
-              Save
-            </AdminButton>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="min-w-52">
+              <span className="mb-2 block text-sm font-bold text-slate-950">
+                Status
+              </span>
+              <select
+                className={inputClass}
+                value={form.status}
+                onChange={(event) =>
+                  updateField("status", event.target.value as BillingPlanStatus)
+                }
+              >
+                {billingPlanStatuses.map((status) => (
+                  <option key={status}>{status}</option>
+                ))}
+              </select>
+            </label>
+            {workingMode === "edit" ? (
+              <AdminButton onClick={duplicatePlan}>
+                <Copy className="size-4" />
+                Duplicate
+              </AdminButton>
+            ) : null}
             <AdminButton
               variant="primary"
+              disabled={!hasPendingChanges}
+              onClick={openSaveDialog}
+            >
+              <Save className="size-4" />
+              Save Plan
+            </AdminButton>
+            <AdminButton
               onClick={() => updateField("status", "Active")}
+              disabled={form.status === "Active"}
             >
               <PlayCircle className="size-4" />
               Activate
@@ -122,278 +338,785 @@ export default function BillingPlanDetailClient({
       />
 
       {savedMessage ? (
-        <div className="mb-6 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-          {savedMessage}
-        </div>
+        <Notice tone="success">{savedMessage}</Notice>
+      ) : null}
+      {duplicateMessage ? (
+        <Notice tone="info">{duplicateMessage}</Notice>
       ) : null}
 
       <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_448px]">
         <div className="space-y-6">
-          <StepRail />
-          <SectionPanel
-            eyebrow="Basic Information"
-            title="Product identity"
-            description="Core plan fields shared by Create Plan and Edit Plan."
-          >
-            <div className="grid gap-5 md:grid-cols-2">
-              <FieldLabel label="Service">
-                <select
-                  className={inputClass}
-                  disabled
-                  value={form.service}
-                  onChange={(event) =>
-                    updateField("service", event.target.value as BillingPlanService)
-                  }
-                >
-                  <option>Yettey</option>
-                  <option>Vpick</option>
-                </select>
-              </FieldLabel>
-              <FieldLabel label="Plan Name">
-                <input
-                  className={inputClass}
-                  value={form.name}
-                  onChange={(event) => updateField("name", event.target.value)}
-                />
-              </FieldLabel>
-              <FieldLabel className="md:col-span-2" label="Description">
-                <textarea
-                  className={cn(inputClass, "h-28 resize-none py-3 leading-6")}
-                  value={form.description}
-                  onChange={(event) =>
-                    updateField("description", event.target.value)
-                  }
-                />
-              </FieldLabel>
-            </div>
-
-            <div className="mt-6 grid gap-5 lg:grid-cols-2">
-              <OptionGroup label="Plan Type">
-                {billingPlanTypes.map((type) => (
-                  <RadioCard
-                    key={type}
-                    active={form.type === type}
-                    description={
-                      type === "Subscription"
-                        ? "Recurring billing product."
-                        : "One-time credit purchase product."
-                    }
-                    label={type}
-                    onClick={() => updateField("type", type)}
-                  />
-                ))}
-              </OptionGroup>
-              <OptionGroup label="Status">
-                {billingPlanStatuses.map((status) => (
-                  <RadioCard
-                    key={status}
-                    active={form.status === status}
-                    description={getStatusDescription(status)}
-                    label={status}
-                    onClick={() => updateField("status", status)}
-                  />
-                ))}
-              </OptionGroup>
-            </div>
-          </SectionPanel>
-
-          <SectionPanel
-            eyebrow="Pricing"
-            title="Commercial settings"
-            description="Monthly, annual, trial, and renewal rules."
-          >
-            <div className="grid gap-5 md:grid-cols-2">
-              <NumberField
-                label="Monthly Price"
-                prefix="KRW"
-                value={form.monthlyPrice}
-                onChange={(value) => updateField("monthlyPrice", value)}
-              />
-              <NumberField
-                label="Annual Price"
-                prefix="KRW"
-                value={form.annualPrice}
-                onChange={(value) => updateField("annualPrice", value)}
-              />
-              <NumberField
-                label="Free Trial"
-                suffix="days"
-                value={form.freeTrialDays}
-                onChange={(value) => updateField("freeTrialDays", value)}
-              />
-              <label className="flex min-h-20 items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
-                <span>
-                  <span className="block text-sm font-bold text-slate-950">
-                    Auto Renewal
-                  </span>
-                  <span className="mt-1 block text-sm text-slate-500">
-                    Renew paid subscriptions automatically.
-                  </span>
-                </span>
-                <input
-                  checked={form.autoRenewal}
-                  className="size-5 accent-violet-600"
-                  type="checkbox"
-                  onChange={(event) =>
-                    updateField("autoRenewal", event.target.checked)
-                  }
-                />
-              </label>
-            </div>
-          </SectionPanel>
-
-          <SectionPanel
-            eyebrow="Benefits / Limits"
-            title={`${service} allowances`}
-            description="Operational product limits shown to customers and support teams."
-          >
-            {service === "Yettey" ? (
-              <div className="grid gap-5 md:grid-cols-3">
-                <NumberField
-                  label="Credits"
-                  value={form.credits}
-                  onChange={(value) => updateField("credits", value)}
-                />
-                <NumberField
-                  label="Projects"
-                  value={form.projects}
-                  onChange={(value) => updateField("projects", value)}
-                />
-                <NumberField
-                  label="Users"
-                  value={form.users}
-                  onChange={(value) => updateField("users", value)}
-                />
-              </div>
-            ) : (
-              <div className="grid gap-5 md:grid-cols-2">
-                <NumberField
-                  label="Upload Minutes"
-                  suffix="min"
-                  value={form.uploadMinutes}
-                  onChange={(value) => updateField("uploadMinutes", value)}
-                />
-                <NumberField
-                  label="Shortform Generation"
-                  suffix="min"
-                  value={form.shortformGeneration}
-                  onChange={(value) => updateField("shortformGeneration", value)}
-                />
-                <NumberField
-                  label="Storage"
-                  suffix="GB"
-                  value={form.storage}
-                  onChange={(value) => updateField("storage", value)}
-                />
-                <NumberField
-                  label="Download Traffic"
-                  suffix="GB"
-                  value={form.downloadTraffic}
-                  onChange={(value) => updateField("downloadTraffic", value)}
-                />
-                <NumberField
-                  label="Projects"
-                  value={form.projects}
-                  onChange={(value) => updateField("projects", value)}
-                />
-              </div>
-            )}
-          </SectionPanel>
-
-          <SectionPanel
-            eyebrow="Features"
-            title="Entitlement rules"
-            description="Feature access managed as product policy, not sales performance."
-          >
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {billingPlanFeatures.map((feature) => (
-                <FeatureCheckbox
-                  key={feature}
-                  checked={form.features.includes(feature)}
-                  label={feature}
-                  onChange={(checked) =>
-                    updateField(
-                      "features",
-                      toggleFeature(form.features, feature, checked)
-                    )
-                  }
-                />
-              ))}
-            </div>
-          </SectionPanel>
-
-          <SectionPanel
-            eyebrow="Change History"
-            title="Plan policy audit"
-            description="Creation and modification history is kept in latest-first order."
-          >
-            <FieldLabel label="Change Reason">
-              <input
-                className={inputClass}
-                value={changeReason}
-                onChange={(event) => setChangeReason(event.target.value)}
-              />
-            </FieldLabel>
-            <ChangeHistoryTable rows={historyRows} />
-          </SectionPanel>
+          <StepTabs activeTab={activeTab} onChange={setActiveTab} />
+          {activeTab === "basic" ? (
+            <BasicInfoTab form={form} updateField={updateField} />
+          ) : null}
+          {activeTab === "configuration" ? (
+            <ConfigurationTab form={form} updateField={updateField} />
+          ) : null}
+          {activeTab === "advanced" ? (
+            <AdvancedSettingsTab form={form} updateField={updateField} />
+          ) : null}
+          {activeTab === "history" ? (
+            <ChangeHistoryTab
+              history={history}
+              pendingChanges={pendingChanges}
+              workingMode={workingMode}
+            />
+          ) : null}
         </div>
 
         <PlanPreview plan={form} />
       </div>
+
+      {saveDialogOpen ? (
+        <SaveReasonModal
+          onCancel={() => setSaveDialogOpen(false)}
+          onConfirm={confirmSave}
+          reason={saveReason}
+          setReason={setSaveReason}
+        />
+      ) : null}
     </DashboardLayout>
   )
 }
 
-function StepRail() {
+function StepTabs({
+  activeTab,
+  onChange,
+}: {
+  activeTab: PlanTab
+  onChange: (tab: PlanTab) => void
+}) {
   return (
-    <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-500 shadow-sm sm:grid-cols-3">
-      {["Basic Information", "Benefits & Limits", "Change History"].map(
-        (step, index) => (
-          <div
-            key={step}
+    <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-500 shadow-sm sm:grid-cols-4">
+      {tabs.map((tab, index) => (
+        <button
+          key={tab.id}
+          className={cn(
+            "flex items-center gap-3 border-slate-100 px-5 py-4 text-left transition sm:border-r",
+            activeTab === tab.id && "text-violet-600",
+            index === tabs.length - 1 && "sm:border-r-0"
+          )}
+          onClick={() => onChange(tab.id)}
+          type="button"
+        >
+          <span
             className={cn(
-              "flex items-center gap-3 border-slate-100 px-5 py-4 sm:border-r",
-              index === 0 && "text-violet-600",
-              index === 2 && "sm:border-r-0"
+              "inline-flex size-7 shrink-0 items-center justify-center rounded-full border text-xs",
+              activeTab === tab.id
+                ? "border-violet-600 bg-violet-600 text-white"
+                : "border-slate-300 text-slate-500"
             )}
           >
-            <span
-              className={cn(
-                "inline-flex size-7 items-center justify-center rounded-full border text-xs",
-                index === 0
-                  ? "border-violet-600 bg-violet-600 text-white"
-                  : "border-slate-300 text-slate-500"
-              )}
-            >
-              {index + 1}
-            </span>
-            {step}
-          </div>
-        )
-      )}
+            {index + 1}
+          </span>
+          <span className="truncate">{tab.label}</span>
+        </button>
+      ))}
     </div>
   )
 }
 
-function SectionPanel({
-  children,
-  description,
-  eyebrow,
-  title,
+function BasicInfoTab({
+  form,
+  updateField,
 }: {
-  children: ReactNode
-  description: string
-  eyebrow: string
-  title: string
+  form: BillingPlan
+  updateField: <K extends keyof BillingPlan>(
+    field: K,
+    value: BillingPlan[K]
+  ) => void
+}) {
+  const isCreditPack = form.type === "Credit Pack"
+
+  return (
+    <SectionPanel>
+      <h2 className="text-lg font-bold text-slate-950">Plan Type</h2>
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        {billingPlanTypes.map((type) => (
+          <RadioCard
+            key={type}
+            active={form.type === type}
+            description={
+              type === "Subscription"
+                ? "A recurring subscription-based plan."
+                : "A one-time credit purchase product."
+            }
+            label={type}
+            onClick={() => updateField("type", type)}
+          />
+        ))}
+      </div>
+
+      <Divider />
+
+      <h2 className="text-lg font-bold text-slate-950">Language Settings</h2>
+      <p className="mt-1 text-sm text-slate-500">
+        Manage localized content shown to customers.
+      </p>
+      <div className="mt-4 inline-flex overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <button className="h-11 bg-violet-50 px-5 text-sm font-bold text-violet-600">
+          Korean (default)
+        </button>
+        <button className="h-11 border-l border-slate-200 px-5 text-sm font-semibold text-slate-500">
+          English
+        </button>
+      </div>
+
+      <div className="mt-6 grid gap-5">
+        <FieldLabel label="Plan Name">
+          <input
+            className={inputClass}
+            value={form.name}
+            onChange={(event) => updateField("name", event.target.value)}
+          />
+        </FieldLabel>
+        <FieldLabel label="Description">
+          <textarea
+            className={cn(inputClass, "h-28 resize-none py-3 leading-6")}
+            maxLength={200}
+            value={form.description}
+            onChange={(event) => updateField("description", event.target.value)}
+          />
+          <p className="mt-1 text-right text-xs font-medium text-slate-400">
+            {form.description.length}/200
+          </p>
+        </FieldLabel>
+        <NumberField
+          label="Price"
+          prefix="KRW"
+          suffix={isCreditPack ? undefined : "/ mo"}
+          value={form.monthlyPrice}
+          onChange={(value) => updateField("monthlyPrice", value)}
+        />
+      </div>
+
+      {isCreditPack ? (
+        <div className="mt-6 grid gap-4">
+          <h2 className="text-lg font-bold text-slate-950">
+            Credit Expiration Period
+          </h2>
+          <p className="text-sm text-slate-500">
+            Purchased credits expire according to the policy below.
+          </p>
+          <InfoBox
+            icon={<Clock className="size-5" />}
+            title={`Automatically expires ${form.creditExpirationDays} days after purchase`}
+            description="Unused credits are reset after the configured expiration period."
+          />
+          <InfoBox
+            icon={<Calendar className="size-5" />}
+            title="Reset Policy"
+            description="Each credit purchase has its own expiration date and is managed separately."
+          />
+        </div>
+      ) : null}
+    </SectionPanel>
+  )
+}
+
+function ConfigurationTab({
+  form,
+  updateField,
+}: {
+  form: BillingPlan
+  updateField: <K extends keyof BillingPlan>(
+    field: K,
+    value: BillingPlan[K]
+  ) => void
+}) {
+  if (form.type === "Credit Pack") {
+    return (
+      <SectionPanel>
+        <h2 className="text-lg font-bold text-slate-950">Configuration</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Set the amount of credits provided with this product.
+        </p>
+        <div className="mt-8 grid gap-5 md:grid-cols-[1fr_260px] md:items-center">
+          <div>
+            <h3 className="text-sm font-bold text-slate-950">Provided Credits</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Set the number of credits granted upon purchase.
+            </p>
+          </div>
+          <NumberField
+            label="Credits"
+            suffix="credits"
+            value={form.credits}
+            onChange={(value) => updateField("credits", value)}
+          />
+        </div>
+        <p className="mt-2 text-right text-xs font-medium text-slate-400">
+          A minimum of 100 credits is required.
+        </p>
+      </SectionPanel>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <SectionPanel>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-lg font-bold text-slate-950">Limit Settings</h2>
+          <span className="inline-flex items-center gap-1 text-sm font-semibold text-slate-400">
+            <Info className="size-4" />
+            Core benefits displayed at the top for customers
+          </span>
+        </div>
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <LimitCard
+            icon={<Wand2 className="size-4" />}
+            label="Credits"
+            suffix="credits"
+            value={form.credits}
+            onChange={(value) => updateField("credits", value)}
+          />
+          <LimitCard
+            icon={<Copy className="size-4" />}
+            label="Projects"
+            suffix="projects"
+            value={form.projects}
+            onChange={(value) => updateField("projects", value)}
+          />
+          <LimitCard
+            icon={<MessageCircle className="size-4" />}
+            label="Users"
+            suffix="users"
+            value={form.users}
+            onChange={(value) => updateField("users", value)}
+          />
+          <LimitCard
+            icon={<UploadCloud className="size-4" />}
+            label="Storage"
+            suffix="GB"
+            value={form.storage}
+            onChange={(value) => updateField("storage", value)}
+          />
+        </div>
+      </SectionPanel>
+
+      <SectionPanel>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-slate-950">Feature Settings</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Choose additional features from all feature policies.
+            </p>
+          </div>
+          <div className="rounded-xl border border-violet-100 bg-white px-5 py-2 text-sm font-bold text-violet-600">
+            {form.features.length}/{billingPlanFeatures.length}
+          </div>
+        </div>
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="h-11 min-w-64 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-400">
+            <span className="flex h-full items-center">Search features</span>
+          </div>
+          <label className="inline-flex items-center gap-3 text-sm font-bold text-slate-700">
+            <input className="size-5 accent-violet-600" type="checkbox" defaultChecked />
+            Show All Features
+          </label>
+        </div>
+        <div className="mt-6 divide-y divide-slate-100">
+          {featurePolicies.map((policy) => (
+            <FeaturePolicyRow
+              key={policy.key}
+              checked={form.features.includes(policy.key)}
+              policy={policy}
+              value={getFeatureLimitValue(form, policy)}
+              onCheckedChange={(checked) =>
+                updateField(
+                  "features",
+                  toggleFeature(form.features, policy.key, checked)
+                )
+              }
+              onLimitChange={(value) =>
+                updateFeatureLimit(policy, value, updateField)
+              }
+            />
+          ))}
+        </div>
+      </SectionPanel>
+
+      <Notice tone="info">
+        Advanced feature policies are managed separately in Billing Rules.
+      </Notice>
+    </div>
+  )
+}
+
+function AdvancedSettingsTab({
+  form,
+  updateField,
+}: {
+  form: BillingPlan
+  updateField: <K extends keyof BillingPlan>(
+    field: K,
+    value: BillingPlan[K]
+  ) => void
+}) {
+  if (form.type === "Credit Pack") {
+    return (
+      <SectionPanel>
+        <AdvancedSalesPeriod form={form} updateField={updateField} />
+        <Divider />
+        <h2 className="text-xl font-bold text-slate-950">Purchase Conditions</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Set the conditions required to purchase this product.
+        </p>
+        <Notice tone="info">
+          Recurring purchase credit packs can only be purchased by monthly subscription users.
+        </Notice>
+        <div className="mt-6">
+          <p className="mb-3 text-sm font-bold text-slate-950">Eligible Users</p>
+          <RadioCard
+            active={form.eligibleUsers === "Monthly Subscription Users Only"}
+            description="Only users with an active monthly subscription can purchase this product."
+            label="Monthly Subscription Users Only"
+            onClick={() =>
+              updateField("eligibleUsers", "Monthly Subscription Users Only")
+            }
+          />
+        </div>
+        <Divider />
+        <h2 className="text-xl font-bold text-slate-950">Credit Policy</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Set the credit expiration period and reset policy.
+        </p>
+        <div className="mt-6 grid gap-5 md:grid-cols-[1fr_180px] md:items-center">
+          <div>
+            <h3 className="text-sm font-bold text-slate-950">
+              Credit Expiration Period
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Credits automatically expire after purchase.
+            </p>
+          </div>
+          <NumberField
+            label="Days"
+            suffix="days"
+            value={form.creditExpirationDays}
+            onChange={(value) => updateField("creditExpirationDays", value)}
+          />
+        </div>
+        <InfoBox
+          icon={<Clock className="size-5" />}
+          title="Automatic Reset Policy"
+          description="For multiple purchases, expiration dates are applied separately to each purchase."
+        />
+        <div className="mt-6 flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-bold text-slate-950">
+              Expire Remaining Credits After Partial Use
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Unused credits are automatically removed upon expiration.
+            </p>
+          </div>
+          <input
+            checked={form.expireRemainingCreditsAfterPartialUse}
+            className="size-5 accent-violet-600"
+            type="checkbox"
+            onChange={(event) =>
+              updateField(
+                "expireRemainingCreditsAfterPartialUse",
+                event.target.checked
+              )
+            }
+          />
+        </div>
+        <Divider />
+        <EffectiveDateFields form={form} updateField={updateField} />
+      </SectionPanel>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <SectionPanel>
+        <h2 className="text-xl font-bold text-slate-950">Plan Settings</h2>
+        <div className="mt-6 grid gap-6 md:grid-cols-2">
+          <NumberField
+            label="Display Order"
+            value={form.displayOrder}
+            onChange={(value) => updateField("displayOrder", value)}
+          />
+          <ToggleRow
+            checked={form.showInComparison}
+            description="Show this plan in pricing comparison."
+            label="Show in Comparison Table"
+            onChange={(checked) => updateField("showInComparison", checked)}
+          />
+          <ToggleRow
+            checked={form.recommended}
+            description="Highlight this plan in pricing."
+            label="Recommended Plan"
+            onChange={(checked) => updateField("recommended", checked)}
+          />
+          <div className="grid gap-2">
+            <ToggleRow
+              checked={form.freeTrialDays > 0}
+              description="Enable or disable trial period."
+              label="Free Trial Period"
+              onChange={(checked) =>
+                updateField("freeTrialDays", checked ? 14 : 0)
+              }
+            />
+            <NumberField
+              label="Trial Length"
+              suffix="days"
+              value={form.freeTrialDays}
+              onChange={(value) => updateField("freeTrialDays", value)}
+            />
+          </div>
+        </div>
+      </SectionPanel>
+
+      <SectionPanel>
+        <AdvancedSalesPeriod form={form} updateField={updateField} />
+      </SectionPanel>
+
+      <SectionPanel>
+        <h2 className="text-xl font-bold text-slate-950">
+          Subscription & Cancellation
+        </h2>
+        <div className="mt-6 grid gap-6 md:grid-cols-2">
+          <ToggleRow
+            checked={form.autoRenewal}
+            description="Automatically renews after the subscription period ends."
+            label="Auto-renewal"
+            onChange={(checked) => updateField("autoRenewal", checked)}
+          />
+          <ToggleRow
+            checked={form.allowCancellation}
+            description="Users can cancel their subscription at any time."
+            label="Allow Cancellation"
+            onChange={(checked) => updateField("allowCancellation", checked)}
+          />
+          <FieldLabel label="Access Period After Cancellation">
+            <select
+              className={inputClass}
+              value={form.accessAfterCancellation}
+              onChange={(event) =>
+                updateField("accessAfterCancellation", event.target.value)
+              }
+            >
+              <option>Until End of Period</option>
+              <option>Immediately</option>
+            </select>
+          </FieldLabel>
+          <FieldLabel label="Refund Policy">
+            <select
+              className={inputClass}
+              value={form.refundPolicy}
+              onChange={(event) => updateField("refundPolicy", event.target.value)}
+            >
+              <option>Non-refundable</option>
+              <option>Prorated refund</option>
+              <option>Full refund within 7 days</option>
+            </select>
+          </FieldLabel>
+        </div>
+      </SectionPanel>
+
+      <SectionPanel>
+        <EffectiveDateFields form={form} updateField={updateField} />
+      </SectionPanel>
+
+      <Notice tone="info">
+        Advanced feature policies are managed separately in Billing Rules.
+      </Notice>
+    </div>
+  )
+}
+
+function ChangeHistoryTab({
+  history,
+  pendingChanges,
+  workingMode,
+}: {
+  history: PlanChangeHistory[]
+  pendingChanges: PlanChangeHistory[]
+  workingMode: "create" | "edit"
+}) {
+  const rows =
+    workingMode === "edit" ? [...pendingChanges, ...history] : history
+
+  return (
+    <SectionPanel>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-950">Change History</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Creation and modification history is immutable and sorted latest first.
+          </p>
+        </div>
+        <StatusBadge tone="neutral">{`${rows.length} records`}</StatusBadge>
+      </div>
+      {pendingChanges.length > 0 ? (
+        <Notice tone="info">
+          Unsaved field changes are previewed at the top. Save Plan records only changed fields.
+        </Notice>
+      ) : null}
+      <ChangeHistoryTable rows={rows} />
+    </SectionPanel>
+  )
+}
+
+function AdvancedSalesPeriod({
+  form,
+  updateField,
+}: {
+  form: BillingPlan
+  updateField: <K extends keyof BillingPlan>(
+    field: K,
+    value: BillingPlan[K]
+  ) => void
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-      <p className="text-xs font-bold uppercase tracking-wide text-violet-600">
-        {eyebrow}
+    <div>
+      <h2 className="text-xl font-bold text-slate-950">Sales Period Settings</h2>
+      <p className="mt-1 text-sm text-slate-500">
+        Set the sales start and end dates for this product.
       </p>
-      <h2 className="mt-2 text-lg font-bold text-slate-950">{title}</h2>
-      <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>
-      <div className="mt-6">{children}</div>
+      <div className="mt-6 grid gap-5 md:grid-cols-2">
+        <FieldLabel label="Sales Start Date">
+          <input
+            className={inputClass}
+            value={form.salesStartAt}
+            onChange={(event) => updateField("salesStartAt", event.target.value)}
+          />
+        </FieldLabel>
+        <FieldLabel label="Sales End Date">
+          <input
+            className={inputClass}
+            value={form.salesEndAt}
+            onChange={(event) => updateField("salesEndAt", event.target.value)}
+          />
+        </FieldLabel>
+      </div>
+      <Notice tone="info">
+        If the end date is set to 2999-01-01, the product will be available indefinitely.
+      </Notice>
+    </div>
+  )
+}
+
+function EffectiveDateFields({
+  form,
+  updateField,
+}: {
+  form: BillingPlan
+  updateField: <K extends keyof BillingPlan>(
+    field: K,
+    value: BillingPlan[K]
+  ) => void
+}) {
+  return (
+    <div>
+      <h2 className="text-xl font-bold text-slate-950">Effective Date</h2>
+      <p className="mt-1 text-sm text-slate-500">
+        Apply changes immediately or schedule them for a future policy update.
+      </p>
+      <div className="mt-6 grid gap-5 md:grid-cols-2">
+        <FieldLabel label="Apply Mode">
+          <select
+            className={inputClass}
+            value={form.applyMode}
+            onChange={(event) =>
+              updateField("applyMode", event.target.value as BillingPlanEffectiveMode)
+            }
+          >
+            <option>Immediately</option>
+            <option>Scheduled</option>
+          </select>
+        </FieldLabel>
+        <FieldLabel label="Effective Date">
+          <input
+            className={inputClass}
+            value={form.effectiveDate}
+            onChange={(event) => updateField("effectiveDate", event.target.value)}
+          />
+        </FieldLabel>
+      </div>
+    </div>
+  )
+}
+
+function PlanPreview({ plan }: { plan: BillingPlan }) {
+  const [device, setDevice] = useState<PreviewDevice>("Desktop")
+  const [language, setLanguage] = useState<PreviewLanguage>("Korean")
+  const isCreditPack = plan.type === "Credit Pack"
+  const benefits = isCreditPack
+    ? [
+        `${formatNumber(plan.credits)} credits instantly granted`,
+        `Expires ${formatNumber(plan.creditExpirationDays)} days after purchase`,
+        "Multiple purchases are tracked separately",
+        "Available to monthly subscription users",
+      ]
+    : [getPlanCreditsLabel(plan), ...getPlanLimits(plan)]
+
+  return (
+    <aside className="xl:sticky xl:top-24 xl:self-start">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-950">Live Preview</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              This is how it will appear to customers.
+            </p>
+          </div>
+          <StatusBadge tone={getStatusTone(plan.status)}>{plan.status}</StatusBadge>
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          {(["Desktop", "Mobile"] as PreviewDevice[]).map((item) => (
+            <button
+              key={item}
+              className={previewToggleClass(device === item)}
+              onClick={() => setDevice(item)}
+              type="button"
+            >
+              {item === "Desktop" ? (
+                <Monitor className="size-4" />
+              ) : (
+                <Smartphone className="size-4" />
+              )}
+              {item}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-6 flex gap-6 border-b border-slate-100 text-sm font-bold">
+          {(["Korean", "English"] as PreviewLanguage[]).map((item) => (
+            <button
+              key={item}
+              className={cn(
+                "border-b-2 px-1 pb-3 transition",
+                language === item
+                  ? "border-violet-600 text-violet-600"
+                  : "border-transparent text-slate-400 hover:text-slate-700"
+              )}
+              onClick={() => setLanguage(item)}
+              type="button"
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+
+        <div
+          className={cn(
+            "mx-auto mt-6 rounded-[28px] bg-slate-950 p-8 text-white shadow-2xl shadow-slate-900/20",
+            device === "Mobile" ? "max-w-72" : "max-w-sm"
+          )}
+        >
+          <p className="text-center text-sm font-semibold text-slate-300">
+            {isCreditPack ? "Credit Pack" : plan.service}
+          </p>
+          <h3 className="mt-4 text-center text-2xl font-bold">{plan.name}</h3>
+          <div className="mt-5 flex items-end justify-center gap-2">
+            <span className="text-4xl font-black">
+              {formatKrw(plan.monthlyPrice)}
+            </span>
+            <span className="pb-1 text-sm font-semibold text-slate-400">
+              {isCreditPack ? "" : "/ mo"}
+            </span>
+          </div>
+          <p className="mx-auto mt-5 max-w-64 text-center text-sm leading-6 text-slate-400">
+            {plan.description}
+          </p>
+          <div className="mt-8 space-y-4">
+            {benefits.slice(0, 6).map((benefit, index) => (
+              <div
+                key={`${benefit}-${index}`}
+                className={cn(
+                  "flex items-center gap-3 text-sm font-semibold",
+                  isCreditPack && index === 0 && "rounded-2xl bg-slate-800 p-4"
+                )}
+              >
+                <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-violet-500">
+                  <Check className="size-3" />
+                </span>
+                {benefit}
+              </div>
+            ))}
+          </div>
+          <button
+            className="mt-8 h-14 w-full rounded-2xl bg-violet-600 text-base font-bold text-white transition hover:bg-violet-500"
+            type="button"
+          >
+            {isCreditPack ? "Start Free" : "Start Now"}
+          </button>
+          {isCreditPack ? (
+            <div className="mt-8 border-t border-slate-800 pt-6 text-xs leading-5 text-slate-400">
+              Credit expiration notice: purchased credits expire according to each purchase date.
+            </div>
+          ) : null}
+        </div>
+
+        <p className="mt-6 text-center text-xs font-medium text-slate-400">
+          Preview may differ from the actual result.
+        </p>
+      </div>
+    </aside>
+  )
+}
+
+function SaveReasonModal({
+  onCancel,
+  onConfirm,
+  reason,
+  setReason,
+}: {
+  onCancel: () => void
+  onConfirm: () => void
+  reason: string
+  setReason: (reason: string) => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+        <h2 className="text-xl font-bold text-slate-950">Save Change Reason</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-500">
+          Enter the reason for this product policy change. The reason is recorded in Change History.
+        </p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {saveReasonExamples.map((example) => (
+            <button
+              key={example}
+              className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-violet-50 hover:text-violet-600"
+              onClick={() => setReason(example)}
+              type="button"
+            >
+              {example}
+            </button>
+          ))}
+        </div>
+        <textarea
+          className={cn(inputClass, "mt-4 h-28 resize-none py-3 leading-6")}
+          placeholder="e.g. Pricing policy update"
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+        />
+        <div className="mt-6 flex justify-end gap-2">
+          <AdminButton onClick={onCancel}>Cancel</AdminButton>
+          <AdminButton
+            variant="primary"
+            disabled={!reason.trim()}
+            onClick={onConfirm}
+          >
+            Save Plan
+          </AdminButton>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SectionPanel({ children }: { children: ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
+      {children}
     </section>
   )
 }
@@ -415,21 +1138,6 @@ function FieldLabel({
   )
 }
 
-function OptionGroup({
-  children,
-  label,
-}: {
-  children: ReactNode
-  label: string
-}) {
-  return (
-    <div>
-      <p className="mb-3 text-sm font-bold text-slate-950">{label}</p>
-      <div className="grid gap-3">{children}</div>
-    </div>
-  )
-}
-
 function RadioCard({
   active,
   description,
@@ -444,7 +1152,7 @@ function RadioCard({
   return (
     <button
       className={cn(
-        "flex min-h-20 items-start gap-3 rounded-xl border p-4 text-left transition",
+        "flex min-h-24 items-start gap-3 rounded-xl border p-4 text-left transition",
         active
           ? "border-violet-500 bg-violet-50 text-violet-700 ring-2 ring-violet-500/10"
           : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
@@ -507,128 +1215,171 @@ function NumberField({
   )
 }
 
-function FeatureCheckbox({
+function LimitCard({
+  icon,
+  label,
+  onChange,
+  suffix,
+  value,
+}: {
+  icon: ReactNode
+  label: string
+  onChange: (value: number) => void
+  suffix: string
+  value: number
+}) {
+  return (
+    <div className="rounded-2xl bg-slate-50 p-4">
+      <div className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-700">
+        <span className="inline-flex size-7 items-center justify-center rounded-lg bg-white text-violet-600 shadow-sm">
+          {icon}
+        </span>
+        {label}
+      </div>
+      <div className="flex overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <input
+          className="h-12 min-w-0 flex-1 px-4 text-lg font-bold text-slate-950 outline-none"
+          inputMode="numeric"
+          value={value}
+          onChange={(event) => onChange(Number(event.target.value) || 0)}
+        />
+        <span className="flex h-12 items-center px-4 text-sm font-semibold text-slate-400">
+          {suffix}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function FeaturePolicyRow({
   checked,
+  onCheckedChange,
+  onLimitChange,
+  policy,
+  value,
+}: {
+  checked: boolean
+  onCheckedChange: (checked: boolean) => void
+  onLimitChange: (value: number) => void
+  policy: FeaturePolicy
+  value: number
+}) {
+  return (
+    <div className="grid gap-4 py-5 lg:grid-cols-[1fr_120px_150px] lg:items-center">
+      <div className="flex gap-4">
+        <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-700">
+          {policy.icon}
+        </span>
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-bold text-slate-950">{policy.key}</h3>
+            <span className="rounded-md bg-violet-50 px-2 py-0.5 text-xs font-bold text-violet-600">
+              AI
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-slate-500">{policy.description}</p>
+        </div>
+      </div>
+      <label className="inline-flex items-center gap-3 text-sm font-bold text-violet-600">
+        <input
+          checked={checked}
+          className="size-5 accent-violet-600"
+          type="checkbox"
+          onChange={(event) => onCheckedChange(event.target.checked)}
+        />
+        Enabled
+      </label>
+      <div className="grid gap-1">
+        <span className="text-xs font-bold uppercase text-slate-400">
+          {policy.limitLabel}
+        </span>
+        <div className="flex overflow-hidden rounded-lg border border-slate-200">
+          <input
+            className="h-10 min-w-0 flex-1 px-3 text-sm font-bold text-slate-950 outline-none"
+            inputMode="numeric"
+            value={value}
+            onChange={(event) => onLimitChange(Number(event.target.value) || 0)}
+          />
+          <span className="flex h-10 items-center bg-slate-50 px-3 text-xs font-bold uppercase text-slate-400">
+            {policy.unit}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ToggleRow({
+  checked,
+  description,
   label,
   onChange,
 }: {
   checked: boolean
-  label: BillingPlanFeature
+  description: string
+  label: string
   onChange: (checked: boolean) => void
 }) {
   return (
-    <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-slate-300 hover:bg-slate-50">
+    <label className="flex min-h-20 items-center justify-between gap-4 rounded-xl bg-white py-2">
+      <span>
+        <span className="block text-sm font-bold text-slate-950">{label}</span>
+        <span className="mt-1 block text-sm leading-6 text-slate-500">
+          {description}
+        </span>
+      </span>
       <input
         checked={checked}
         className="size-5 accent-violet-600"
         type="checkbox"
         onChange={(event) => onChange(event.target.checked)}
       />
-      <span className="text-sm font-bold text-slate-800">{label}</span>
     </label>
   )
 }
 
-function PlanPreview({ plan }: { plan: BillingPlan }) {
-  const [device, setDevice] = useState<PreviewDevice>("Desktop")
-  const [language, setLanguage] = useState<PreviewLanguage>("Korean")
-  const benefits = getPlanLimits(plan)
-  const primaryBenefit =
-    plan.service === "Yettey"
-      ? getPlanCreditsLabel(plan)
-      : `${formatNumber(plan.uploadMinutes)} minutes upload and analysis`
-
+function InfoBox({
+  description,
+  icon,
+  title,
+}: {
+  description: string
+  icon: ReactNode
+  title: string
+}) {
   return (
-    <aside className="xl:sticky xl:top-24 xl:self-start">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.06),0_12px_32px_rgba(15,23,42,0.04)]">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-bold text-slate-950">Live Preview</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Customer-facing plan card updates in real time.
-            </p>
-          </div>
-          <StatusBadge tone={getStatusTone(plan.status)}>{plan.status}</StatusBadge>
-        </div>
+    <div className="flex gap-4 rounded-xl bg-slate-50 p-4">
+      <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-violet-600 shadow-sm">
+        {icon}
+      </span>
+      <span>
+        <span className="block text-sm font-bold text-violet-600">{title}</span>
+        <span className="mt-1 block text-sm leading-6 text-slate-500">
+          {description}
+        </span>
+      </span>
+    </div>
+  )
+}
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          {(["Desktop", "Mobile"] as PreviewDevice[]).map((item) => (
-            <button
-              key={item}
-              className={previewToggleClass(device === item)}
-              onClick={() => setDevice(item)}
-              type="button"
-            >
-              {item === "Desktop" ? (
-                <Monitor className="size-4" />
-              ) : (
-                <Smartphone className="size-4" />
-              )}
-              {item}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-6 flex gap-6 border-b border-slate-100 text-sm font-bold">
-          {(["Korean", "English"] as PreviewLanguage[]).map((item) => (
-            <button
-              key={item}
-              className={cn(
-                "border-b-2 px-1 pb-3 transition",
-                language === item
-                  ? "border-violet-600 text-violet-600"
-                  : "border-transparent text-slate-400 hover:text-slate-700"
-              )}
-              onClick={() => setLanguage(item)}
-              type="button"
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-
-        <div
-          className={cn(
-            "mx-auto mt-6 rounded-[28px] bg-slate-950 p-8 text-white shadow-2xl shadow-slate-900/20",
-            device === "Mobile" ? "max-w-72" : "max-w-sm"
-          )}
-        >
-          <p className="text-center text-sm font-semibold text-slate-300">
-            {language === "Korean" ? "새로운 플랜" : plan.service}
-          </p>
-          <h3 className="mt-4 text-center text-2xl font-bold">{plan.name}</h3>
-          <div className="mt-5 flex items-end justify-center gap-2">
-            <span className="text-4xl font-black">
-              {formatKrw(plan.monthlyPrice)}
-            </span>
-            <span className="pb-1 text-sm font-semibold text-slate-400">/ mo</span>
-          </div>
-          <p className="mx-auto mt-5 max-w-64 text-center text-sm leading-6 text-slate-400">
-            {plan.description}
-          </p>
-          <div className="mt-8 space-y-4">
-            {[primaryBenefit, ...benefits].slice(0, 6).map((benefit) => (
-              <div key={benefit} className="flex items-center gap-3 text-sm font-semibold">
-                <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-violet-500">
-                  <Check className="size-3" />
-                </span>
-                {benefit}
-              </div>
-            ))}
-          </div>
-          <button
-            className="mt-8 h-14 w-full rounded-2xl bg-violet-600 text-base font-bold text-white transition hover:bg-violet-500"
-            type="button"
-          >
-            Start Now
-          </button>
-        </div>
-
-        <p className="mt-6 text-center text-xs font-medium text-slate-400">
-          Preview may differ from the actual result.
-        </p>
-      </div>
-    </aside>
+function Notice({
+  children,
+  tone,
+}: {
+  children: ReactNode
+  tone: "info" | "success"
+}) {
+  return (
+    <div
+      className={cn(
+        "my-6 rounded-xl border px-4 py-3 text-sm font-semibold",
+        tone === "info" && "border-violet-100 bg-violet-50 text-violet-600",
+        tone === "success" &&
+          "border-emerald-100 bg-emerald-50 text-emerald-700"
+      )}
+    >
+      {children}
+    </div>
   )
 }
 
@@ -692,9 +1443,15 @@ function buildPendingHistoryRows(
     ["Annual Price", formatKrw(before.annualPrice), formatKrw(after.annualPrice)],
     ["Free Trial", `${before.freeTrialDays} days`, `${after.freeTrialDays} days`],
     ["Auto Renewal", yesNo(before.autoRenewal), yesNo(after.autoRenewal)],
+    ["Allow Cancellation", yesNo(before.allowCancellation), yesNo(after.allowCancellation)],
+    ["Apply Mode", before.applyMode, after.applyMode],
+    ["Effective Date", before.effectiveDate, after.effectiveDate],
+    ["Sales Start Date", before.salesStartAt, after.salesStartAt],
+    ["Sales End Date", before.salesEndAt, after.salesEndAt],
     ["Credits", formatNumber(before.credits), formatNumber(after.credits)],
     ["Projects", formatNumber(before.projects), formatNumber(after.projects)],
     ["Users", formatNumber(before.users), formatNumber(after.users)],
+    ["Storage", `${formatNumber(before.storage)}GB`, `${formatNumber(after.storage)}GB`],
     [
       "Upload Minutes",
       `${formatNumber(before.uploadMinutes)} min`,
@@ -705,11 +1462,15 @@ function buildPendingHistoryRows(
       `${formatNumber(before.shortformGeneration)} min`,
       `${formatNumber(after.shortformGeneration)} min`,
     ],
-    ["Storage", `${formatNumber(before.storage)}GB`, `${formatNumber(after.storage)}GB`],
     [
       "Download Traffic",
       `${formatNumber(before.downloadTraffic)}GB`,
       `${formatNumber(after.downloadTraffic)}GB`,
+    ],
+    [
+      "Credit Expiration",
+      `${formatNumber(before.creditExpirationDays)} days`,
+      `${formatNumber(after.creditExpirationDays)} days`,
     ],
     [
       "Features",
@@ -726,12 +1487,65 @@ function buildPendingHistoryRows(
         changedAt: "Unsaved",
         changedBy: "Sarah Mitchell",
         field,
-        reason: reason || "Policy update",
+        reason,
       })
     }
   })
 
   return rows
+}
+
+function getFeatureLimitValue(plan: BillingPlan, policy: FeaturePolicy) {
+  if (policy.key === "Video Analysis") {
+    return plan.shortformGeneration
+  }
+
+  if (policy.key === "Max Video Length") {
+    return plan.uploadMinutes
+  }
+
+  if (policy.key === "Download Limit") {
+    return plan.downloadTraffic
+  }
+
+  if (policy.key === "Upload Limit" || policy.key === "Traffic (Bandwidth)") {
+    return plan.storage
+  }
+
+  return policy.key === "AI Image Generation" ? plan.credits : 0
+}
+
+function updateFeatureLimit(
+  policy: FeaturePolicy,
+  value: number,
+  updateField: <K extends keyof BillingPlan>(
+    field: K,
+    value: BillingPlan[K]
+  ) => void
+) {
+  if (policy.key === "Video Analysis") {
+    updateField("shortformGeneration", value)
+    return
+  }
+
+  if (policy.key === "Max Video Length") {
+    updateField("uploadMinutes", value)
+    return
+  }
+
+  if (policy.key === "Download Limit") {
+    updateField("downloadTraffic", value)
+    return
+  }
+
+  if (policy.key === "Upload Limit" || policy.key === "Traffic (Bandwidth)") {
+    updateField("storage", value)
+    return
+  }
+
+  if (policy.key === "AI Image Generation") {
+    updateField("credits", value)
+  }
 }
 
 function toggleFeature(
@@ -755,21 +1569,23 @@ function previewToggleClass(active: boolean) {
   )
 }
 
-function getStatusDescription(status: BillingPlanStatus) {
-  if (status === "Active") {
-    return "Visible and available for sale."
-  }
-
-  if (status === "Inactive") {
-    return "Hidden from new purchases."
-  }
-
-  return "Editable internal draft."
-}
-
 function yesNo(value: boolean) {
   return value ? "Enabled" : "Disabled"
 }
 
+function formatHistoryDate(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  const hours = String(date.getHours()).padStart(2, "0")
+  const minutes = String(date.getMinutes()).padStart(2, "0")
+
+  return `${year}-${month}-${day} ${hours}:${minutes}`
+}
+
 const inputClass =
   "h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-950 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10 disabled:bg-slate-50 disabled:text-slate-500"
+
+function Divider() {
+  return <div className="my-8 border-t border-slate-100" />
+}

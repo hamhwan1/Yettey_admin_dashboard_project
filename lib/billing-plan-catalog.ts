@@ -3,14 +3,20 @@ import { formatKrw } from "@/lib/pricing-plans"
 export type BillingPlanService = "Yettey" | "Vpick"
 export type BillingPlanStatus = "Draft" | "Active" | "Inactive"
 export type BillingPlanType = "Subscription" | "Credit Pack"
+export type BillingPlanEffectiveMode = "Immediately" | "Scheduled"
 
 export type BillingPlanFeature =
-  | "AI Generate"
-  | "AI Edit"
-  | "Team Workspace"
-  | "API Access"
-  | "Priority Queue"
-  | "White Label"
+  | "AI Image Generation"
+  | "AI Video Generation"
+  | "Video Analysis"
+  | "Max Video Length"
+  | "Download Limit"
+  | "Upload Limit"
+  | "Traffic (Bandwidth)"
+  | "AI Assistant"
+  | "Content Transformation"
+  | "Video Editing Tools"
+  | "Shortform Automation"
 
 export type PlanChangeHistory = {
   after: string
@@ -22,19 +28,32 @@ export type PlanChangeHistory = {
 }
 
 export type BillingPlan = {
+  accessAfterCancellation: string
   annualPrice: number
+  allowCancellation: boolean
+  applyMode: BillingPlanEffectiveMode
   autoRenewal: boolean
   changeHistory: PlanChangeHistory[]
   createdAt: string
+  creditExpirationDays: number
   credits: number
   description: string
+  displayOrder: number
   downloadTraffic: number
+  effectiveDate: string
+  eligibleUsers: string
+  expireRemainingCreditsAfterPartialUse: boolean
   features: BillingPlanFeature[]
   freeTrialDays: number
   monthlyPrice: number
   name: string
   projects: number
+  recommended: boolean
+  refundPolicy: string
+  salesEndAt: string
+  salesStartAt: string
   service: BillingPlanService
+  showInComparison: boolean
   shortformGeneration: number
   slug: string
   status: BillingPlanStatus
@@ -46,12 +65,17 @@ export type BillingPlan = {
 }
 
 export const billingPlanFeatures: BillingPlanFeature[] = [
-  "AI Generate",
-  "AI Edit",
-  "Team Workspace",
-  "API Access",
-  "Priority Queue",
-  "White Label",
+  "AI Image Generation",
+  "AI Video Generation",
+  "Video Analysis",
+  "Max Video Length",
+  "Download Limit",
+  "Upload Limit",
+  "Traffic (Bandwidth)",
+  "AI Assistant",
+  "Content Transformation",
+  "Video Editing Tools",
+  "Shortform Automation",
 ]
 
 export const billingPlanStatuses: BillingPlanStatus[] = [
@@ -64,7 +88,10 @@ export const billingPlanTypes: BillingPlanType[] = ["Subscription", "Credit Pack
 
 export const billingPlans: BillingPlan[] = [
   {
+    accessAfterCancellation: "Until End of Period",
     annualPrice: 490000,
+    allowCancellation: true,
+    applyMode: "Immediately",
     autoRenewal: true,
     changeHistory: [
       {
@@ -85,15 +112,31 @@ export const billingPlans: BillingPlan[] = [
       },
     ],
     createdAt: "2026-05-27",
+    creditExpirationDays: 90,
     credits: 1800,
     description: "Entry subscription plan for small creator teams.",
+    displayOrder: 1,
     downloadTraffic: 0,
-    features: ["AI Generate", "AI Edit", "Team Workspace"],
+    effectiveDate: "2026-06-08 10:22",
+    eligibleUsers: "All users",
+    expireRemainingCreditsAfterPartialUse: true,
+    features: [
+      "AI Image Generation",
+      "AI Video Generation",
+      "Video Analysis",
+      "Download Limit",
+      "Upload Limit",
+    ],
     freeTrialDays: 7,
     monthlyPrice: 49000,
     name: "Starter",
     projects: 4,
+    recommended: false,
+    refundPolicy: "Non-refundable",
+    salesEndAt: "2999-01-01",
+    salesStartAt: "2026-05-27",
     service: "Yettey",
+    showInComparison: true,
     shortformGeneration: 0,
     slug: "starter",
     status: "Active",
@@ -104,7 +147,10 @@ export const billingPlans: BillingPlan[] = [
     users: 2,
   },
   {
+    accessAfterCancellation: "Until End of Period",
     annualPrice: 990000,
+    allowCancellation: true,
+    applyMode: "Immediately",
     autoRenewal: true,
     changeHistory: [
       {
@@ -125,15 +171,34 @@ export const billingPlans: BillingPlan[] = [
       },
     ],
     createdAt: "2026-05-27",
+    creditExpirationDays: 90,
     credits: 4000,
     description: "Growth plan for teams scaling content operations.",
+    displayOrder: 2,
     downloadTraffic: 0,
-    features: ["AI Generate", "AI Edit", "Team Workspace", "Priority Queue"],
+    effectiveDate: "2026-06-08 10:22",
+    eligibleUsers: "All users",
+    expireRemainingCreditsAfterPartialUse: true,
+    features: [
+      "AI Image Generation",
+      "AI Video Generation",
+      "Video Analysis",
+      "Max Video Length",
+      "Download Limit",
+      "Upload Limit",
+      "Traffic (Bandwidth)",
+      "AI Assistant",
+    ],
     freeTrialDays: 14,
     monthlyPrice: 99000,
     name: "Growth",
     projects: 10,
+    recommended: true,
+    refundPolicy: "Non-refundable",
+    salesEndAt: "2999-01-01",
+    salesStartAt: "2026-05-27",
     service: "Yettey",
+    showInComparison: true,
     shortformGeneration: 0,
     slug: "growth",
     status: "Active",
@@ -144,7 +209,10 @@ export const billingPlans: BillingPlan[] = [
     users: 3,
   },
   {
+    accessAfterCancellation: "Until End of Period",
     annualPrice: 2490000,
+    allowCancellation: true,
+    applyMode: "Immediately",
     autoRenewal: true,
     changeHistory: [
       {
@@ -165,21 +233,37 @@ export const billingPlans: BillingPlan[] = [
       },
     ],
     createdAt: "2026-05-27",
+    creditExpirationDays: 90,
     credits: 11000,
     description: "Advanced subscription plan for high-volume teams.",
+    displayOrder: 3,
     downloadTraffic: 0,
+    effectiveDate: "2026-06-03 13:10",
+    eligibleUsers: "All users",
+    expireRemainingCreditsAfterPartialUse: true,
     features: [
-      "AI Generate",
-      "AI Edit",
-      "Team Workspace",
-      "API Access",
-      "Priority Queue",
+      "AI Image Generation",
+      "AI Video Generation",
+      "Video Analysis",
+      "Max Video Length",
+      "Download Limit",
+      "Upload Limit",
+      "Traffic (Bandwidth)",
+      "AI Assistant",
+      "Content Transformation",
+      "Video Editing Tools",
+      "Shortform Automation",
     ],
     freeTrialDays: 14,
     monthlyPrice: 249000,
     name: "Pro",
     projects: 999,
+    recommended: false,
+    refundPolicy: "Non-refundable",
+    salesEndAt: "2999-01-01",
+    salesStartAt: "2026-05-27",
     service: "Yettey",
+    showInComparison: true,
     shortformGeneration: 0,
     slug: "pro",
     status: "Active",
@@ -190,7 +274,10 @@ export const billingPlans: BillingPlan[] = [
     users: 10,
   },
   {
+    accessAfterCancellation: "Until End of Period",
     annualPrice: 200000,
+    allowCancellation: true,
+    applyMode: "Immediately",
     autoRenewal: true,
     changeHistory: [
       {
@@ -211,15 +298,31 @@ export const billingPlans: BillingPlan[] = [
       },
     ],
     createdAt: "2026-05-27",
+    creditExpirationDays: 90,
     credits: 900,
     description: "Base VPICK plan for shortform video production.",
+    displayOrder: 1,
     downloadTraffic: 10,
-    features: ["AI Generate", "AI Edit"],
+    effectiveDate: "2026-06-01 09:20",
+    eligibleUsers: "All users",
+    expireRemainingCreditsAfterPartialUse: true,
+    features: [
+      "AI Image Generation",
+      "AI Video Generation",
+      "Video Analysis",
+      "Download Limit",
+      "Upload Limit",
+    ],
     freeTrialDays: 0,
     monthlyPrice: 20000,
     name: "Basic",
     projects: 10,
+    recommended: false,
+    refundPolicy: "Non-refundable",
+    salesEndAt: "2999-01-01",
+    salesStartAt: "2026-05-27",
     service: "Vpick",
+    showInComparison: true,
     shortformGeneration: 60,
     slug: "basic",
     status: "Active",
@@ -230,7 +333,10 @@ export const billingPlans: BillingPlan[] = [
     users: 0,
   },
   {
+    accessAfterCancellation: "Until End of Period",
     annualPrice: 400000,
+    allowCancellation: true,
+    applyMode: "Immediately",
     autoRenewal: true,
     changeHistory: [
       {
@@ -251,15 +357,34 @@ export const billingPlans: BillingPlan[] = [
       },
     ],
     createdAt: "2026-05-27",
+    creditExpirationDays: 90,
     credits: 1900,
     description: "Professional VPICK plan for teams with recurring video volume.",
+    displayOrder: 2,
     downloadTraffic: 40,
-    features: ["AI Generate", "AI Edit", "Priority Queue", "White Label"],
+    effectiveDate: "2026-06-08 10:22",
+    eligibleUsers: "All users",
+    expireRemainingCreditsAfterPartialUse: true,
+    features: [
+      "AI Image Generation",
+      "AI Video Generation",
+      "Video Analysis",
+      "Max Video Length",
+      "Download Limit",
+      "Upload Limit",
+      "Traffic (Bandwidth)",
+      "Shortform Automation",
+    ],
     freeTrialDays: 0,
     monthlyPrice: 40000,
     name: "Professional",
     projects: 30,
+    recommended: true,
+    refundPolicy: "Non-refundable",
+    salesEndAt: "2999-01-01",
+    salesStartAt: "2026-05-27",
     service: "Vpick",
+    showInComparison: true,
     shortformGeneration: 150,
     slug: "professional",
     status: "Active",
@@ -273,7 +398,10 @@ export const billingPlans: BillingPlan[] = [
 
 export function createBlankBillingPlan(service: BillingPlanService): BillingPlan {
   return {
+    accessAfterCancellation: "Until End of Period",
     annualPrice: 0,
+    allowCancellation: true,
+    applyMode: "Immediately",
     autoRenewal: true,
     changeHistory: [
       {
@@ -286,18 +414,28 @@ export function createBlankBillingPlan(service: BillingPlanService): BillingPlan
       },
     ],
     createdAt: "2026-06-08",
+    creditExpirationDays: 90,
     credits: 0,
     description:
       service === "Yettey"
         ? "Plan for teams that want to grow content production sustainably."
         : "Plan for teams that want to create and manage shortform videos.",
+    displayOrder: 1,
     downloadTraffic: 0,
-    features: ["AI Generate"],
+    effectiveDate: "2026-06-08 10:22",
+    eligibleUsers: "All users",
+    expireRemainingCreditsAfterPartialUse: true,
+    features: ["AI Image Generation"],
     freeTrialDays: service === "Yettey" ? 7 : 0,
     monthlyPrice: 0,
     name: "New Plan",
     projects: 0,
+    recommended: false,
+    refundPolicy: "Non-refundable",
+    salesEndAt: "2999-01-01",
+    salesStartAt: "2026-06-08",
     service,
+    showInComparison: true,
     shortformGeneration: 0,
     slug: "new-plan",
     status: "Draft",
