@@ -15,9 +15,7 @@ import {
   Info,
   MessageCircle,
   Monitor,
-  PauseCircle,
   Play,
-  PlayCircle,
   Save,
   Scissors,
   Smartphone,
@@ -440,20 +438,6 @@ export default function BillingPlanDetailClient({
             >
               <Save className="size-4" />
               Save Plan
-            </AdminButton>
-            <AdminButton
-              onClick={() => updateField("status", "Active")}
-              disabled={form.status === "Active"}
-            >
-              <PlayCircle className="size-4" />
-              Activate
-            </AdminButton>
-            <AdminButton
-              onClick={() => updateField("status", "Inactive")}
-              disabled={form.status === "Inactive"}
-            >
-              <PauseCircle className="size-4" />
-              Deactivate
             </AdminButton>
           </div>
         }

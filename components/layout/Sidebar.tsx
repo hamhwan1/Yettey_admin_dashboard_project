@@ -70,10 +70,29 @@ function SidebarLink({
           ) : null}
         </div>
       ) : (
-        <div className="flex h-9 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-slate-600">
-          {Icon ? <Icon className="size-4" aria-hidden="true" /> : null}
-          {item.title}
-        </div>
+        <button
+          aria-expanded={hasChildren ? expanded : undefined}
+          className={cn(
+            "flex h-9 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-950",
+            isActive && "bg-slate-200/70 text-slate-950 shadow-inner"
+          )}
+          onClick={() => {
+            if (hasChildren) {
+              setExpandedOverride(!expanded)
+            }
+          }}
+          type="button"
+        >
+          {Icon ? <Icon className="size-4 shrink-0" aria-hidden="true" /> : null}
+          <span className="min-w-0 flex-1 truncate">{item.title}</span>
+          {hasChildren ? (
+            expanded ? (
+              <ChevronDown className="size-4 shrink-0 text-slate-500" aria-hidden="true" />
+            ) : (
+              <ChevronRight className="size-4 shrink-0 text-slate-500" aria-hidden="true" />
+            )
+          ) : null}
+        </button>
       )}
 
       {item.children?.length && expanded ? (
@@ -88,6 +107,10 @@ function SidebarLink({
 }
 
 function isSidebarItemActive(item: SidebarItem, pathname: string) {
+  if (item.children?.some((child) => isSidebarItemActive(child, pathname))) {
+    return true
+  }
+
   if (!item.href) {
     return false
   }

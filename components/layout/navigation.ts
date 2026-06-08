@@ -146,7 +146,6 @@ export const sidebarNavigation: Record<TopMenuKey, SidebarItem[]> = {
     },
     {
       title: "Plans",
-      href: "/billing/plans",
       icon: Sparkles,
       children: [
         {
