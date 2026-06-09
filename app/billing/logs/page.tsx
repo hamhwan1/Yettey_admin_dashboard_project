@@ -1,11 +1,5 @@
-import AdminSectionPage from "@/components/layout/AdminSectionPage"
+import BillingLogsClient from "@/components/billing/BillingLogsClient"
 
 export default function BillingLogsPage() {
-  return (
-    <AdminSectionPage
-      eyebrow="Billing"
-      title="Logs"
-      description="Audit billing events, webhook results, invoice syncs, and entitlement updates."
-    />
-  )
+  return <BillingLogsClient />
 }
