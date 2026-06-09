@@ -1,11 +1,5 @@
-import AdminSectionPage from "@/components/layout/AdminSectionPage"
+import BillingFeaturesClient from "@/components/billing/BillingFeaturesClient"
 
 export default function BillingFeaturesPage() {
-  return (
-    <AdminSectionPage
-      eyebrow="Billing"
-      title="Features"
-      description="Map billable capabilities to product plans and feature entitlement rules."
-    />
-  )
+  return <BillingFeaturesClient />
 }
